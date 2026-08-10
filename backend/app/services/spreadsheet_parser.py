@@ -338,7 +338,7 @@ def _process_qb_vendor_block(
                 vendor_id=v_obj.id,
                 routing_number=v_obj.routing_number,
                 account_number=v_obj.account_number,
-                account_type=v_obj.account_type.value,
+                    account_type=v_obj.account_type.value if hasattr(v_obj.account_type, "value") else str(v_obj.account_type),
             )
         )
 
@@ -395,7 +395,7 @@ def _parse_tabular_excel(
                     vendor_id=v_obj.id if v_obj else None,
                     routing_number=routing_val or (v_obj.routing_number if v_obj else ""),
                     account_number=acct_val or (v_obj.account_number if v_obj else ""),
-                    account_type=v_obj.account_type.value if v_obj else "checking",
+                    account_type=(v_obj.account_type.value if hasattr(v_obj.account_type, "value") else str(v_obj.account_type)) if v_obj else "checking",
                 )
             )
 
@@ -481,7 +481,7 @@ def _parse_csv(
                     vendor_id=v_obj.id if v_obj else None,
                     routing_number=routing_val or (v_obj.routing_number if v_obj else ""),
                     account_number=acct_val or (v_obj.account_number if v_obj else ""),
-                    account_type=v_obj.account_type.value if v_obj else "checking",
+                    account_type=(v_obj.account_type.value if hasattr(v_obj.account_type, "value") else str(v_obj.account_type)) if v_obj else "checking",
                 )
             )
 
