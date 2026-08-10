@@ -20,6 +20,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg2://amipi:amipipass@localhost:5432/amipi_ach"
     )
 
+    # CORS configuration
+    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "*")
+
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "DEVELOPMENT_SECRET_KEY_CHANGE_IN_PROD_123456789")
     ALGORITHM: str = "HS256"
@@ -27,5 +30,16 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(case_sensitive=True)
 
+    def get_async_database_url(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
 
 settings = Settings()
+# Ensure settings.DATABASE_URL uses asyncpg driver
+settings.DATABASE_URL = settings.get_async_database_url()
+

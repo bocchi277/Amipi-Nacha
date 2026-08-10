@@ -6,9 +6,20 @@
  */
 
 const API = (() => {
-  const BASE_URL = '/api/v1';
+  function getApiBaseUrl() {
+    const customUrl = window.AMIPI_API_URL || localStorage.getItem('amipi_api_url');
+    if (customUrl) {
+      // Remove trailing slash if present
+      const clean = customUrl.replace(/\/+$/, '');
+      return clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
+    }
+    return '/api/v1';
+  }
 
-  // ── Token management ───────────────────────────────────────
+  function getBaseUrl() {
+    return getApiBaseUrl();
+  }
+
   function getToken() {
     return sessionStorage.getItem('amipi_token');
   }
@@ -45,7 +56,7 @@ const API = (() => {
   }
 
   async function request(method, path, { body, formData, query } = {}) {
-    let url = `${BASE_URL}${path}`;
+    let url = `${getBaseUrl()}${path}`;
 
     if (query) {
       const params = new URLSearchParams();
@@ -119,7 +130,7 @@ const API = (() => {
     formBody.append('username', username);
     formBody.append('password', password);
 
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetch(`${getBaseUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formBody,

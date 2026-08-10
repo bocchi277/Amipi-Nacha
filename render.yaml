@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: amipi-nacha-backend
+    env: python
+    buildCommand: cd backend && pip install -r requirements.txt && alembic upgrade head
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: amipi-postgres
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*" # Replace with your Netlify URL e.g. https://your-app.netlify.app
+
+databases:
+  - name: amipi-postgres
+    databaseName: amipi_ach
+    user: amipi
+    plan: free
