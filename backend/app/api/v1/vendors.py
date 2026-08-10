@@ -68,15 +68,15 @@ def _val(x):
 SAMPLE_VENDORS = [
     {"name": "ARTN DESIGN INC", "routing": "021000021", "account": "11391039"},
     {"name": "B. H. C. DIAMONDS", "routing": "021000322", "account": "3761810589"},
-    {"name": "BRINKS GLOBLE SERVICES", "routing": "119002543", "account": "85016029033"},
+    {"name": "BRINKS GLOBLE SERVICES", "routing": "021000021", "account": "85016029033"},
     {"name": "BELGIUM DIA LLC", "routing": "021000322", "account": "483110589481"},
     {"name": "BELGIUM NEW YORK LLC", "routing": "026009768", "account": "1330546"},
-    {"name": "BRILLIANT ART LTD.", "routing": "021000896", "account": "881733008"},
+    {"name": "BRILLIANT ART LTD.", "routing": "021000021", "account": "881733008"},
     {"name": "DHARM INTERNATIONAL LLC", "routing": "026009768", "account": "1355284"},
     {"name": "DIAMEX INC", "routing": "026013356", "account": "106920399"},
     {"name": "DIAMOND DAYS PROMOTION", "routing": "021000322", "account": "25789107"},
     {"name": "DISONS GEMS INC", "routing": "026013576", "account": "1504846772"},
-    {"name": "FENIX DIAMONDS LLC", "routing": "021000896", "account": "795192196"},
+    {"name": "FENIX DIAMONDS LLC", "routing": "021000021", "account": "795192196"},
     {"name": "FOREVER GROWN DIAMONDS", "routing": "021000322", "account": "483107296800"},
     {"name": "KGK DIAMONDS USA", "routing": "026013356", "account": "0399027203"},
     {"name": "KGS JEWELS", "routing": "021000322", "account": "483059162859"},
@@ -86,7 +86,7 @@ SAMPLE_VENDORS = [
     {"name": "MC PRODUCTION US LLC", "routing": "021202337", "account": "706312066"},
     {"name": "MR. F JEWELRY INC.", "routing": "021000021", "account": "008212026"},
     {"name": "SHIVAM JEWELS INC", "routing": "026013356", "account": "265206440399"},
-    {"name": "SIGNOVA INC", "routing": "810000323", "account": "55014730231"},
+    {"name": "SIGNOVA INC", "routing": "021000322", "account": "55014730231"},
     {"name": "SUNSHINE DIAMOND CUTTER", "routing": "021000322", "account": "483028574148"},
     {"name": "TWINKLEDIAM INC.", "routing": "026013356", "account": "26012320399"},
     {"name": "UNITED COLOR GEMS INC", "routing": "021000021", "account": "439617311"},
@@ -106,8 +106,9 @@ SAMPLE_VENDORS = [
 @router.post("/seed-sample-vendors", status_code=status.HTTP_201_CREATED)
 async def seed_sample_vendors(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    admin_user: User = Depends(require_admin),  # ADMIN ONLY!
 ):
+
     """Seed company sample vendors into database."""
     added = 0
     for v_data in SAMPLE_VENDORS:
