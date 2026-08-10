@@ -9,11 +9,16 @@ const API = (() => {
   function getApiBaseUrl() {
     const customUrl = window.AMIPI_API_URL || localStorage.getItem('amipi_api_url');
     if (customUrl) {
-      // Remove trailing slash if present
       const clean = customUrl.replace(/\/+$/, '');
       return clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
     }
-    return '/api/v1';
+    // If running on localhost or 127.0.0.1, use relative path or local port
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalhost) {
+      return '/api/v1';
+    }
+    // Production default live Render backend
+    return 'https://amipi-nacha-backend.onrender.com/api/v1';
   }
 
   function getBaseUrl() {
