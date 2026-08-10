@@ -1,0 +1,168 @@
+/**
+ * AMIPI NACHA ACH Payment System — API Client
+ *
+ * Centralised HTTP helper for all backend communication.
+ * Handles token storage, auth headers, and JSON parsing.
+ */
+
+const API = (() => {
+  const BASE_URL = '/api/v1';
+
+  // ── Token management ───────────────────────────────────────
+  function getToken() {
+    return sessionStorage.getItem('amipi_token');
+  }
+
+  function setToken(token) {
+    sessionStorage.setItem('amipi_token', token);
+  }
+
+  function clearToken() {
+    sessionStorage.removeItem('amipi_token');
+    sessionStorage.removeItem('amipi_user');
+  }
+
+  function getUser() {
+    const raw = sessionStorage.getItem('amipi_user');
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  function setUser(user) {
+    sessionStorage.setItem('amipi_user', JSON.stringify(user));
+  }
+
+  function isAuthenticated() {
+    return !!getToken();
+  }
+
+  // ── HTTP helpers ───────────────────────────────────────────
+
+  function authHeaders() {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }
+
+  async function request(method, path, { body, formData, query } = {}) {
+    let url = `${BASE_URL}${path}`;
+
+    if (query) {
+      const params = new URLSearchParams();
+      Object.entries(query).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') params.append(k, v);
+      });
+      const qs = params.toString();
+      if (qs) url += `?${qs}`;
+    }
+
+    const opts = { method };
+
+    if (formData) {
+      // Multipart form — don't set Content-Type, browser adds boundary
+      const token = getToken();
+      opts.headers = {};
+      if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+      opts.body = formData;
+    } else {
+      opts.headers = authHeaders();
+      if (body) opts.body = JSON.stringify(body);
+    }
+
+    const res = await fetch(url, opts);
+
+    // Parse response body
+    let data;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      data = await res.text();
+    }
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        clearToken();
+        if (!path.includes('/auth/')) {
+          window.location.reload();
+        }
+      }
+      let errMsg = `An error occurred (HTTP ${res.status}). Please try again.`;
+      if (data) {
+        if (typeof data.detail === 'string') {
+          errMsg = data.detail;
+        } else if (Array.isArray(data.detail)) {
+          errMsg = data.detail.map(e => e.msg || e.detail || 'Validation error').join('; ');
+        } else if (typeof data.message === 'string') {
+          errMsg = data.message;
+        }
+      }
+      throw new Error(errMsg);
+    }
+
+    return data;
+  }
+
+  // ── Convenience methods ────────────────────────────────────
+
+  function get(path, query)         { return request('GET', path, { query }); }
+  function post(path, body)         { return request('POST', path, { body }); }
+  function put(path, body)          { return request('PUT', path, { body }); }
+  function del(path)                { return request('DELETE', path); }
+  function postForm(path, formData) { return request('POST', path, { formData }); }
+
+  // ── Auth-specific calls ────────────────────────────────────
+
+  async function login(username, password) {
+    // OAuth2PasswordRequestForm expects form-urlencoded
+    const formBody = new URLSearchParams();
+    formBody.append('username', username);
+    formBody.append('password', password);
+
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody,
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Login failed');
+    }
+
+    setToken(data.access_token);
+    setUser({
+      username: data.username,
+      role: data.role,
+    });
+
+    return data;
+  }
+
+  async function register(email, username, password, role = 'user') {
+    const data = await post('/auth/register', { email, username, password, role });
+    return data;
+  }
+
+  function logout() {
+    clearToken();
+    window.location.reload();
+  }
+
+  async function getProfile() {
+    return get('/auth/me');
+  }
+
+  // ── Public API ─────────────────────────────────────────────
+
+  return {
+    // Token
+    getToken, setToken, clearToken, getUser, setUser,
+    isAuthenticated,
+    // HTTP
+    get, post, put, del, postForm,
+    // Auth
+    login, register, logout, getProfile,
+  };
+})();

@@ -1,0 +1,282 @@
+/* ================================================================
+   Login Screen — Clean Professional Fintech Design
+   ================================================================ */
+
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--color-surface);
+
+  z-index: var(--z-lock);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: var(--space-lg);
+}
+
+.outerBox {
+  width: 92%;
+  max-width: 920px;
+  min-height: 520px;
+  background: var(--color-surface);
+  /* box-shadow: var(--shadow-xl); */
+  /* border: 1px solid var(--color-border); */
+  /* border-radius: var(--radius-xl); */
+  display: flex;
+  overflow: hidden;
+  animation: loginSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neck-img {
+  flex: 1 1 50%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.neck-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  mask-image: url(/frontend/v231-wit-08-job105-Photoroom.png);
+  -webkit-mask-image: url(/frontend/v231-wit-08-job105-Photoroom.png);
+  -webkit-mask-size: 130%;
+  mask-size: 130%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+.login-box {
+  flex: 1 1 53%;
+  position: relative;
+  background: var(--color-surface);
+  padding: var(--space-2xl) var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+  max-height: 90vh;
+}
+
+@keyframes loginSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-logo {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+/* Lucide-style bank icon (SVG icon instead of emoji) */
+.login-logo-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: var(--space-md);
+  color: var(--color-primary);
+  font-style: normal;
+}
+
+/* Solid dark heading, no gradient */
+.login-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  text-align: center;
+  margin-bottom: var(--space-sm);
+  letter-spacing: -0.02em;
+  font-family: var(--font-heading);
+}
+.login-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-bottom: var(--space-2xl);
+  font-weight: var(--font-weight-normal);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.login-form .form-input {
+  height: 2.75rem;
+  font-size: var(--text-base);
+}
+
+.login-form .form-label {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.login-form .btn {
+  height: 2.75rem;
+  font-size: var(--text-base);
+  margin-top: var(--space-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-lg) 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.login-footer {
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-xl);
+  line-height: 1.6;
+}
+
+.login-footer a {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Password visibility toggle */
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper .form-input {
+  padding-right: 3rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: var(--space-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-sm);
+  font-size: var(--text-base);
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.password-toggle:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+}
+
+/* Role indicator badge in header after login */
+.user-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem var(--space-md);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text-inverse);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Register mode toggle */
+.login-mode-toggle {
+  text-align: center;
+  margin-top: var(--space-lg);
+}
+
+.login-mode-toggle button {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+.login-mode-toggle button:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+.login-footer {
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2xl);
+  line-height: 1.7;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.login-footer a {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  transition: color var(--transition-fast);
+}
+.login-footer a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .outerBox {
+    flex-direction: column;
+    max-width: 440px;
+    min-height: auto;
+  }
+
+  .neck-img {
+    height: 180px;
+    flex: none;
+  }
+
+  .login-box {
+    padding: var(--space-xl) var(--space-lg);
+    flex: none;
+  }
+
+  .login-title {
+    font-size: var(--text-lg);
+  }
+
+  .login-logo-icon {
+    font-size: 2rem;
+  }
+
+  .login-form .form-input,
+  .login-form .btn {
+    height: 2.75rem;
+  }
+}

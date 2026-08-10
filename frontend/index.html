@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AMIPI INC — NACHA ACH Payment System</title>
+    <meta
+      name="description"
+      content="AMIPI INC Chase ACH NACHA File Generator — Secure payment batch processing, vendor management, and NACHA file generation."
+    />
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Stack+Sans+Notch:wght@200..700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/base.css?v=1.1" />
+    <link rel="stylesheet" href="css/login.css?v=1.1" />
+    <link rel="stylesheet" href="css/generate.css?v=1.1" />
+  </head>
+  <body>
+    <div class="login-screen" id="loginScreen">
+      <div class="outerBox">
+        <div class="neck-img"><img src="necklace.png" alt="" /></div>
+
+        <div class="login-box">
+          <h2 class="login-title" id="loginFormTitle">
+            AMIPI INC — ACH Generator
+          </h2>
+
+          <p class="login-subtitle" id="loginSubtitle">
+            Sign in to access the payment system
+          </p>
+
+          <form class="login-form" id="loginForm" autocomplete="off">
+            <!-- Email (register mode only) -->
+            <div class="form-group" id="emailGroup" style="display: none">
+              <label class="form-label" for="loginEmail">Email address</label>
+              <input
+                class="form-input"
+                type="email"
+                id="loginEmail"
+                placeholder="you@amipi.com"
+                autocomplete="email"
+              />
+            </div>
+
+            <!-- Username -->
+            <div class="form-group">
+              <label class="form-label" for="loginUsername">Username</label>
+              <input
+                class="form-input"
+                type="text"
+                id="loginUsername"
+                placeholder="Enter your username"
+                autocomplete="username"
+              />
+            </div>
+
+            <!-- Password -->
+            <div class="form-group">
+              <label class="form-label" for="loginPassword">Password</label>
+              <div class="password-wrapper">
+                <input
+                  class="form-input"
+                  type="password"
+                  id="loginPassword"
+                  placeholder="••••••••"
+                  autocomplete="current-password"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  id="togglePassword"
+                  aria-label="Toggle password visibility"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Error display -->
+            <div class="alert alert-error" id="loginError" role="alert"></div>
+
+            <!-- Submit button -->
+            <button
+              type="submit"
+              class="btn btn-primary btn-block btn-lg"
+              id="loginSubmitBtn"
+            >
+              <span
+                class="spinner"
+                id="loginSpinner"
+                style="display: none"
+              ></span>
+              <span class="btn-text" id="loginBtnText">Sign In</span>
+            </button>
+          </form>
+
+          <!-- Mode toggle -->
+          <div class="login-mode-toggle" id="loginModeToggle">
+            <button type="button" id="modeToggleBtn">
+              Need an account? Register
+            </button>
+          </div>
+
+          <div class="login-footer">
+            Chase CCD Credits · NACHA File Specifications<br />
+            All records: 94 characters fixed-width
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+       APP SHELL (hidden until authenticated)
+       ═══════════════════════════════════════════════════════════ -->
+    <div id="appShell" style="display: none">
+      <header class="app-header">
+        <h1><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem" style="vertical-align: text-bottom; margin-right: var(--space-xs);"><path d="M10.5 3 8 9l4 13 4-13-2.5-6"/><path d="M17 3a2 2 0 0 1 1.6.8l3 4a2 2 0 0 1 .013 2.382l-7.99 10.986a2 2 0 0 1-3.247 0l-7.99-10.986A2 2 0 0 1 2.4 7.8l2.998-3.997A2 2 0 0 1 7 3z"/><path d="M2 9h20"/></svg>AMIPI INC — Chase ACH NACHA Generator</h1>
+        <span class="header-subtitle"
+          >Chase CCD Credits · Multi-batch · Vendor Book</span
+        >
+        <div class="header-actions" id="headerUserInfo">
+          <!-- Populated by JS after login -->
+        </div>
+        <button class="header-btn" id="logoutBtn" style="display: none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>Logout
+        </button>
+      </header>
+
+      <div class="main-container">
+        <div class="tabs" id="mainTabs">
+          <button class="tab active" data-view="generate"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>Generate File</button>
+          <button class="tab" data-view="vendors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></svg>Vendor Book</button>
+          <button class="tab" id="adminTabBtn" data-view="admin-approvals" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Admin Review</button>
+          <button class="tab" data-view="history"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-credit-card" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>Payment History</button>
+          <button class="tab" data-view="help"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-badge-question-mark" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>Help & Templates</button>
+        </div>
+
+        <!-- Generate File View -->
+        <div class="view active" id="view-generate">
+          <!-- File Header / Company Info Card -->
+          <div class="card" style="margin-bottom: var(--space-lg)">
+            <div class="card-title">File Header — Company Info</div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label" for="coName">Company Name (16 chars)</label>
+                <input class="form-input" id="coName" maxlength="16" value="AMIPI INC" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="chaseAcct">Chase Pay-From Account Number</label>
+                <input class="form-input" id="chaseAcct" maxlength="17" value="785957066" />
+                <span class="form-hint">Discretionary data: <code>00000000000785957066</code></span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="entryDesc">Entry Description (10 chars)</label>
+                <input class="form-input" id="entryDesc" maxlength="10" value="EPAYMNT" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="effDate">Effective Entry Date (YYMMDD)</label>
+                <input class="form-input" id="effDate" maxlength="6" placeholder="260507" />
+                <span class="form-hint">Min. 1 business day ahead</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="fileIdMod">File ID Modifier</label>
+                <input class="form-input" id="fileIdMod" maxlength="1" value="A" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="traceStart">Starting Trace Sequence</label>
+                <input class="form-input" id="traceStart" maxlength="7" value="0000001" />
+              </div>
+            </div>
+            <div class="fixed-info-box">
+              <b>Chase Specification:</b> dest=<code> 021000021</code> &nbsp;·&nbsp; origin=<code>0000000000</code> &nbsp;·&nbsp; DFI=<code>02100002</code> &nbsp;·&nbsp; SEC=<code>CCD</code>
+            </div>
+          </div>
+
+          <!-- Spreadsheet Upload Card -->
+          <div class="card" style="margin-bottom: var(--space-lg)">
+            <div class="card-title">Upload Payment Spreadsheet (Batch 1)</div>
+
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="dropZone">
+              <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none" />
+
+              <div id="uploadZoneContent">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-title">Drop payment spreadsheet here or click to browse</div>
+                <div class="upload-sub">Supports Excel (.xlsx, .xls) and CSV (.csv) files</div>
+              </div>
+
+              <div class="upload-file-info" id="uploadFileInfo" style="display: none">
+                <div class="upload-file-name">
+                  <span id="selectedFileName">payments.xlsx</span>
+                  <span id="selectedFileSize" class="text-muted text-xs">(12 KB)</span>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="removeFileBtn">Change file</button>
+              </div>
+            </div>
+
+            <!-- Global Error Banner -->
+            <div class="alert alert-error" id="uploadGlobalError" style="display: none; margin-top: var(--space-md);"></div>
+
+            <!-- Action button -->
+            <div style="margin-top: var(--space-base); display: flex; gap: var(--space-md);">
+              <button type="button" class="btn btn-primary" id="uploadBtn" disabled>
+                <span class="spinner" id="uploadSpinner" style="display: none"></span>
+                <span>Upload & Parse Spreadsheet</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Results Section (Hidden until uploaded) -->
+          <div id="resultsSection" style="display: none">
+
+            <!-- Summary Bar -->
+            <div class="summary-bar">
+              <div class="summary-card">
+                <div class="summary-val" id="statTotalRows">0</div>
+                <div class="summary-lbl">Total Rows</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="statValidRows" style="color: var(--color-success)">0</div>
+                <div class="summary-lbl">Valid Rows</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="statErrorRows" style="color: var(--color-danger)">0</div>
+                <div class="summary-lbl">Validation Issues</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="statTotalAmount">$0.00</div>
+                <div class="summary-lbl">Total Credit Amount</div>
+              </div>
+            </div>
+
+            <!-- Duplicate Warning & Override Banner -->
+            <div class="duplicate-banner" id="duplicateBanner" style="display: none">
+              <div class="duplicate-title">Duplicate Transactions Detected</div>
+              <div class="duplicate-sub">One or more payment rows match existing transactions previously uploaded to the system.</div>
+              <div class="duplicate-actions">
+                <label class="override-checkbox-label">
+                  <input type="checkbox" id="overrideCheckbox" />
+                  Allow Duplicate Override
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="retryOverrideBtn">Re-upload with Override</button>
+              </div>
+            </div>
+
+            <!-- Error Details Panel -->
+            <div class="error-panel" id="errorPanel" style="display: none">
+              <div class="error-panel-title">
+                <span>Row Validation Issues</span>
+                <span class="badge badge-danger" id="errorCountBadge" style="margin-left: auto;">0 issue(s)</span>
+              </div>
+              <p class="text-xs text-muted" style="margin-bottom: var(--space-sm);">The following rows could not be parsed as valid payments and were skipped:</p>
+              <table class="error-table">
+                <thead>
+                  <tr>
+                    <th style="width: 80px;">Row #</th>
+                    <th>Raw Data</th>
+                    <th>Validation Errors</th>
+                  </tr>
+                </thead>
+                <tbody id="errorTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Valid Payments List Table -->
+            <div class="card">
+              <div class="card-title">Parsed Valid Payments (Batch 1)</div>
+              <div class="payments-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Payee / Vendor Name</th>
+                      <th>Routing #</th>
+                      <th>Account #</th>
+                      <th>Amount ($)</th>
+                      <th>Invoice / ID Ref</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="validPaymentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Manual Payment Entry Card (Batch 2) -->
+          <div class="card" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg)">
+            <div class="card-title">Manual Payment Entry (Batch 2)</div>
+
+            <!-- Entry Input Form -->
+            <div class="grid-4">
+              <div class="form-group">
+                <label class="form-label" for="manualVendorSelect">Select Vendor</label>
+                <select class="form-input" id="manualVendorSelect">
+                  <option value="">-- Select Vendor --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="manualAmount">Amount ($)</label>
+                <input class="form-input" type="number" id="manualAmount" step="0.01" placeholder="1250.50" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="manualIdNumber">Invoice / ID Ref</label>
+                <input class="form-input" type="text" id="manualIdNumber" placeholder="INV-5001" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="manualEffDate">Effective Date</label>
+                <input class="form-input" type="date" id="manualEffDate" />
+              </div>
+            </div>
+
+            <div class="alert alert-error" id="manualFormError" style="display: none; margin-top: var(--space-md);"></div>
+
+            <div style="margin-top: var(--space-base);">
+              <button type="button" class="btn btn-secondary" id="addManualEntryBtn">
+                <span>Add Entry to Batch 2 List</span>
+              </button>
+            </div>
+
+            <!-- Staged Entries Table -->
+            <div id="manualDraftSection" style="display: none; margin-top: var(--space-lg);">
+              <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--space-sm);">Staged Manual Payment Entries (Batch 2)</div>
+              <div class="payments-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Payee / Vendor Name</th>
+                      <th>Routing #</th>
+                      <th>Account #</th>
+                      <th>Amount ($)</th>
+                      <th>Invoice / ID Ref</th>
+                      <th>Effective Date</th>
+                      <th style="width: 80px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="manualDraftTableBody"></tbody>
+                </table>
+              </div>
+
+              <div class="draft-summary-bar">
+                <div>Staged Entries: <span id="manualDraftCount">0</span> · Total: <span id="manualDraftTotalAmount">$0.00</span></div>
+                <button type="button" class="btn btn-primary" id="submitManualBatchBtn" disabled>
+                  <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
+                  <span>Submit & Save Manual Batch 2</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual Batch 2 Results Section (Hidden until submitted) -->
+          <div id="manualResultsSection" style="display: none; margin-bottom: var(--space-xl);">
+
+            <!-- Summary Bar -->
+            <div class="summary-bar">
+              <div class="summary-card">
+                <div class="summary-val" id="manualStatTotalRows">0</div>
+                <div class="summary-lbl">Total Rows (Batch 2)</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="manualStatValidRows" style="color: var(--color-success)">0</div>
+                <div class="summary-lbl">Valid Rows</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="manualStatErrorRows" style="color: var(--color-danger)">0</div>
+                <div class="summary-lbl">Validation Issues</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="manualStatTotalAmount">$0.00</div>
+                <div class="summary-lbl">Total Credit Amount</div>
+              </div>
+            </div>
+
+            <!-- Duplicate Warning & Override Banner -->
+            <div class="duplicate-banner" id="manualDuplicateBanner" style="display: none">
+              <div class="duplicate-title">Duplicate Transactions Detected in Batch 2</div>
+              <div class="duplicate-sub">One or more manual payment entries match existing transactions previously submitted.</div>
+              <div class="duplicate-actions">
+                <label class="override-checkbox-label">
+                  <input type="checkbox" id="manualOverrideCheckbox" />
+                  Allow Duplicate Override
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="manualRetryOverrideBtn">Re-upload with Override</button>
+              </div>
+            </div>
+
+            <!-- Error Details Panel -->
+            <div class="error-panel" id="manualErrorPanel" style="display: none">
+              <div class="error-panel-title">
+                <span>Batch 2 Validation Issues</span>
+                <span class="badge badge-danger" id="manualErrorCountBadge" style="margin-left: auto;">0 issue(s)</span>
+              </div>
+              <table class="error-table">
+                <thead>
+                  <tr>
+                    <th style="width: 80px;">Row #</th>
+                    <th>Raw Data</th>
+                    <th>Validation Errors</th>
+                  </tr>
+                </thead>
+                <tbody id="manualErrorTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Valid Payments List Table -->
+            <div class="card">
+              <div class="card-title">Saved Valid Payments (Batch 2)</div>
+              <div class="payments-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Payee / Vendor Name</th>
+                      <th>Routing #</th>
+                      <th>Account #</th>
+                      <th>Amount ($)</th>
+                      <th>Invoice / ID Ref</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="manualValidPaymentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Combined NACHA File Generation Card -->
+          <div class="card" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg); border-top: 3px solid var(--color-primary);">
+            <div class="card-title">Generate Combined Chase NACHA File</div>
+            <p class="text-sm text-muted" style="margin-bottom: var(--space-md);">
+              Combines all parsed valid payments from Batch 1 (Spreadsheet) and Batch 2 (Manual Entry) into a single Chase CCD credit NACHA file (94 characters fixed-width per record, 10-record block padded).
+            </p>
+
+            <div class="alert alert-error" id="nachaGlobalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+            <div style="display: flex; gap: var(--space-md); align-items: center;">
+              <button type="button" class="btn btn-primary btn-lg" id="generateNachaBtn" disabled>
+                <span class="spinner" id="nachaSpinner" style="display: none"></span>
+                <span>Generate Combined NACHA File</span>
+              </button>
+              <span class="text-xs text-muted">Requires Batch 1 or Batch 2 payments to be loaded.</span>
+            </div>
+          </div>
+
+          <!-- Generated NACHA File Output & Download Card -->
+          <div class="card" id="nachaOutputCard" style="display: none; margin-bottom: var(--space-xl); border: 2px solid var(--color-success);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+              <div>
+                <div class="card-title" style="margin-bottom: 0;">NACHA Flat File Output</div>
+                <div class="text-xs text-muted" id="nachaFilename">AMIPIINC_transmit.txt</div>
+              </div>
+              <span class="badge badge-success" style="font-size: var(--text-xs);">Generated & Verified</span>
+            </div>
+
+            <!-- NACHA Control Totals Grid -->
+            <div class="nacha-meta-grid">
+              <div class="summary-card">
+                <div class="summary-val" id="nachaEntryCount">0</div>
+                <div class="summary-lbl">Credit Entries</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="nachaBatchCount">0</div>
+                <div class="summary-lbl">Total Batches</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="nachaBlockCount">0</div>
+                <div class="summary-lbl">Total Blocks (10x)</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="nachaCreditTotal" style="color: var(--color-success);">$0.00</div>
+                <div class="summary-lbl">Total Credit Amount</div>
+              </div>
+              <div class="summary-card" style="grid-column: span 2;">
+                <div class="summary-val font-mono" id="nachaEntryHash" style="font-size: var(--text-md); color: var(--color-text);">0000000000</div>
+                <div class="summary-lbl">Entry Hash (Chase Checksum)</div>
+              </div>
+              <div class="summary-card" style="grid-column: span 2;">
+                <div class="summary-val font-mono" id="nachaFileId" style="font-size: var(--text-xs); color: var(--color-text-muted); word-break: break-all;">—</div>
+                <div class="summary-lbl">File Record ID</div>
+              </div>
+            </div>
+
+            <!-- Raw NACHA Content Preview Box -->
+            <div class="nacha-preview-header">
+              <span>NACHA 94-Character Fixed-Width Line Preview</span>
+              <span>All records padded to 94 chars</span>
+            </div>
+            <pre class="nacha-preview-box" id="nachaRawPreview"></pre>
+
+            <!-- Download and Copy Actions -->
+            <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary" id="downloadNachaBtn">
+                <span>Download NACHA File (.txt)</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="copyNachaBtn">
+                <span>Copy NACHA Text</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vendor Book View -->
+        <div class="view" id="view-vendors">
+          <!-- Toolbar -->
+          <div class="card" style="margin-bottom: var(--space-md);">
+            <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
+              <div>
+                <div class="card-title" style="margin-bottom: 4px;">Vendor Directory & Bank Details</div>
+                <div class="text-xs text-muted">View active vendors and submit bank detail change requests for approval.</div>
+              </div>
+              <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                <input type="text" class="form-input" id="vendorSearchInput" placeholder="Search vendor name or routing..." style="width: 220px; font-size: var(--text-xs);" />
+                <button type="button" class="btn btn-primary btn-sm" id="refreshVendorsBtn">
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pending Change Requests Alert Bar -->
+          <div class="card" id="pendingReqSummaryCard" style="display: none; border-left: 4px solid var(--color-warning); background: hsl(40, 80%, 97%);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <strong style="color: hsl(35, 90%, 30%); font-size: var(--text-sm);">Pending Bank Detail Change Requests</strong>
+                <div class="text-xs text-muted" id="pendingReqSummaryText">0 change request(s) awaiting admin review.</div>
+              </div>
+              <span class="badge badge-warning" id="pendingReqBadge">0 Pending</span>
+            </div>
+          </div>
+
+          <!-- Vendor List Cards Container -->
+          <div id="vendorGridContainer" class="grid-2" style="margin-bottom: var(--space-xl);">
+            <!-- Rendered by VendorsScreen -->
+          </div>
+
+          <!-- Bank Detail Change Request Modal -->
+          <div class="modal-backdrop" id="changeRequestModal">
+            <div class="modal-card" style="max-width: 520px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                <h3 class="card-title" style="margin-bottom: 0;" id="reqModalVendorName">Request Bank Change</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeReqModalBtn" style="padding: 2px 8px;">✕</button>
+              </div>
+
+              <div class="alert alert-error" id="reqModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+              <div class="alert alert-success" id="reqModalSuccess" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <!-- Current Details Box -->
+              <div style="background: var(--color-surface-alt); padding: var(--space-md); border-radius: var(--radius-sm); margin-bottom: var(--space-md); font-size: var(--text-xs);">
+                <strong style="color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">CURRENT REGISTERED BANK DETAILS</strong>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs);">
+                  <div>Routing #: <span class="font-mono font-bold" id="reqModalCurrRouting">—</span></div>
+                  <div>Account #: <span class="font-mono font-bold" id="reqModalCurrAccount">—</span></div>
+                  <div>Account Type: <span class="font-mono" id="reqModalCurrType">—</span></div>
+                </div>
+              </div>
+
+              <!-- New Request Form -->
+              <form id="changeReqForm" onsubmit="event.preventDefault();">
+                <input type="hidden" id="reqModalVendorId" />
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="reqNewRouting">Requested New Routing Number (9 Digits)</label>
+                  <input type="text" class="form-input font-mono" id="reqNewRouting" maxlength="9" placeholder="e.g. 026013356" required />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="reqNewAccount">Requested New Account Number</label>
+                  <input type="text" class="form-input font-mono" id="reqNewAccount" placeholder="e.g. 987654321" required />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="reqNewAccountType">Requested Account Type</label>
+                  <select class="form-select" id="reqNewAccountType">
+                    <option value="checking">Checking</option>
+                    <option value="savings">Savings</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                  <label class="form-label" for="reqReason">Reason / Notes for Bank Change</label>
+                  <textarea class="form-input" id="reqReason" rows="2" placeholder="e.g. Vendor provided voided check for new operational account"></textarea>
+                </div>
+
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                  <button type="button" class="btn btn-secondary" id="cancelReqModalBtn">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="submitReqBtn">
+                    <span class="spinner" id="reqSpinner" style="display: none;"></span>
+                    <span>Submit Change Request</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Review View (Restricted to Admin Users) -->
+        <div class="view" id="view-admin-approvals">
+          <div class="card" id="adminAccessDeniedBox" style="display: none; border-left: 4px solid var(--color-danger); background: var(--color-danger-light);">
+            <div style="display: flex; gap: var(--space-md); align-items: center;">
+              <strong style="color: #991B1B; font-size: var(--text-md);">Access Denied</strong>
+              <span class="text-sm">Admin authorization is required to access the Change Request Review Panel. Standard users cannot review, approve, or reject vendor bank detail change requests.</span>
+            </div>
+          </div>
+
+          <div id="adminApprovalsContainer">
+            <div class="card" style="margin-bottom: var(--space-md);">
+              <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                <div>
+                  <div class="card-title" style="margin-bottom: 4px;">Admin Review — Vendor Bank Detail Change Requests</div>
+                  <div class="text-xs text-muted">Review pending bank detail change requests. Approvals mutate database vendor records and log to AuditLog. Rejections leave records unchanged.</div>
+                </div>
+                <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                  <span class="badge badge-warning" id="adminPendingCountBadge">0 Pending</span>
+                  <button type="button" class="btn btn-primary btn-sm" id="refreshAdminApprovalsBtn">
+                    <span class="spinner" id="adminSpinner" style="display: none;"></span>
+                    <span>Refresh List</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-success" id="adminGlobalAlert" style="display: none; margin-bottom: var(--space-md);"></div>
+
+            <!-- Pending Requests Table Card -->
+            <div class="card">
+              <div class="card-title">Pending Requests Awaiting Decision</div>
+              <div class="payments-table-wrap">
+                <table class="data-table" id="adminRequestsTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Vendor Name</th>
+                      <th>Requested By</th>
+                      <th>Requested New Bank Details</th>
+                      <th>Reason / Notes</th>
+                      <th>Status</th>
+                      <th style="width: 170px;">Admin Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminRequestsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment History & Transaction Table View -->
+        <div class="view" id="view-history">
+          <!-- Filters Card -->
+          <div class="card" style="margin-bottom: var(--space-md);">
+            <div class="card-title" style="margin-bottom: var(--space-md);">Transaction Table & Remittances</div>
+
+            <div class="grid-4" style="margin-bottom: var(--space-md);">
+              <div class="form-group">
+                <label class="form-label" for="historyVendorFilter">Vendor</label>
+                <select class="form-select" id="historyVendorFilter">
+                  <option value="">All Vendors</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="historyStatusFilter">Remittance Status</label>
+                <select class="form-select" id="historyStatusFilter">
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="sent">Sent</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="historyStartDate">Start Date</label>
+                <input type="date" class="form-input" id="historyStartDate" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="historyEndDate">End Date</label>
+                <input type="date" class="form-input" id="historyEndDate" />
+              </div>
+            </div>
+
+            <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 240px;">
+                <input type="text" class="form-input" id="historySearchInput" placeholder="Search vendor name, email, or invoice ref..." />
+              </div>
+              <div style="display: flex; gap: var(--space-sm);">
+                <button type="button" class="btn btn-secondary btn-sm" id="resetHistoryFiltersBtn">Reset Filters</button>
+                <button type="button" class="btn btn-primary btn-sm" id="applyHistoryFiltersBtn">
+                  <span>Apply Filters</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div class="alert alert-success" id="historyGlobalAlert" style="display: none; margin-bottom: var(--space-md);"></div>
+
+          <!-- Multi-Select Bulk Action Bar -->
+          <div class="card" id="historyBulkBar" style="display: none; background: hsl(220, 90%, 97%); border-left: 4px solid var(--color-primary); margin-bottom: var(--space-md);">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md);">
+              <div>
+                <strong style="color: var(--color-primary); font-size: var(--text-sm);">
+                  <span id="historySelectedCount">0</span> transaction(s) selected
+                </strong>
+                <span class="text-xs text-muted" style="margin-left: var(--space-sm);">Total: <strong id="historySelectedAmount">$0.00</strong></span>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="bulkResendBtn">
+                <span>Bulk Resend Remittance Emails</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main Table Card -->
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+              <div class="card-title" style="margin-bottom: 0;">Payment Remittances</div>
+              <span class="spinner" id="historySpinner" style="display: none;"></span>
+            </div>
+
+            <div class="payments-table-wrap" id="historyTableWrap">
+              <table class="data-table" id="historyTable">
+                <thead>
+                  <tr>
+                    <th style="width: 40px; text-align: center;">
+                      <input type="checkbox" id="historySelectAllCb" title="Select All On Page" />
+                    </th>
+                    <th style="width: 50px;">#</th>
+                    <th style="width: 100px;">Eff Date</th>
+                    <th>Vendor Name</th>
+                    <th>Recipient Email</th>
+                    <th>Amount ($)</th>
+                    <th>Invoice / Ref</th>
+                    <th>Status</th>
+                    <th>Sent Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-md); flex-wrap: wrap; gap: var(--space-md);">
+              <div class="text-xs text-muted" id="historyPageInfoDisplay">Showing 0 records</div>
+              <div style="display: flex; gap: var(--space-xs);">
+                <button type="button" class="btn btn-secondary btn-sm" id="prevHistoryPageBtn" disabled>Previous</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="nextHistoryPageBtn" disabled>Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Confirmation Modal for Bulk Resend -->
+          <div class="modal-backdrop" id="bulkResendConfirmModal">
+            <div class="modal-card" style="max-width: 540px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                <h3 class="card-title" style="margin-bottom: 0;">Confirm Bulk Email Remittance Dispatch</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeBulkResendModalBtn" style="padding: 2px 8px;">✕</button>
+              </div>
+
+              <div class="alert alert-error" id="confirmModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <div class="alert alert-warning show" style="margin-bottom: var(--space-md); font-size: var(--text-xs);">
+                <strong>Confirmation Step Required</strong><br/>
+                You are about to dispatch real remittance notification emails to the <strong id="confirmModalCount">0</strong> vendor(s) selected below (Totaling <strong id="confirmModalTotalAmount">$0.00</strong>).
+              </div>
+
+              <div style="background: var(--color-surface-alt); border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto; margin-bottom: var(--space-lg); border: 1px solid var(--color-border);" id="confirmModalVendorList">
+              </div>
+
+              <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="cancelBulkResendModalBtn">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmBulkResendBtn">
+                  <span class="spinner" id="resendSpinner" style="display: none;"></span>
+                  <span>Confirm & Send Remittances</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Help & Templates View -->
+        <div class="view" id="view-help">
+          <!-- Downloadable Spreadsheet Templates Card -->
+          <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card-title">Downloadable Spreadsheet Import Templates</div>
+            <div class="text-xs text-muted" style="margin-bottom: var(--space-md);">
+              Download pre-formatted import templates matching our system's spreadsheet parsing specifications. Routing and account columns are formatted to preserve leading zeros.
+            </div>
+
+            <div class="grid-2">
+              <!-- Payment Import Template Card -->
+              <div style="border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); background: var(--color-surface-alt);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-primary); font-size: var(--text-base); margin-bottom: var(--space-xs);">
+                  Payment Import Template (.csv / .xlsx)
+                </div>
+                <div class="text-xs text-muted" style="line-height: 1.6; margin-bottom: var(--space-md);">
+                  Pre-formatted structure for Batch 1 payment uploads. Pre-populates sample rows with valid ABA routing numbers, account numbers, amounts, and invoice references.<br/>
+                  <strong>Columns:</strong> <code class="font-mono">Vendor Name, Routing Number, Account Number, Account Type, Amount, Invoice Number</code>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" id="downloadPaymentTemplateBtnHelp">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Payment Template
+                </button>
+              </div>
+
+              <!-- Vendor Import Template Card -->
+              <div style="border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); background: var(--color-surface-alt);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-primary); font-size: var(--text-base); margin-bottom: var(--space-xs);">
+                  Vendor Master Import Template (.csv / .xlsx)
+                </div>
+                <div class="text-xs text-muted" style="line-height: 1.6; margin-bottom: var(--space-md);">
+                  Template for bulk importing vendor directory records into the Vendor Master Book.<br/>
+                  <strong>Columns:</strong> <code class="font-mono">name, routing, account, type, email</code>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="downloadVendorTemplateBtnHelp">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Vendor Template
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Usage & Technical Specifications Card -->
+          <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card-title">System Usage Guide & NACHA Rules</div>
+            
+            <div style="display: flex; flex-direction: column; gap: var(--space-md); font-size: var(--text-sm); line-height: 1.6;">
+              <div>
+                <strong style="color: var(--color-primary);">1. Batch 1 Upload & QuickBooks Support:</strong>
+                <p class="text-muted" style="margin-top: 4px;">
+                  Supports QuickBooks Desktop payment exports (.xlsx) and standard tabular files (.csv, .xlsx). The parser automatically extracts vendor names, amounts, invoice numbers, and matches against active database vendors.
+                </p>
+              </div>
+
+              <div>
+                <strong style="color: var(--color-primary);">2. Batch 2 Manual Payment Entry:</strong>
+                <p class="text-muted" style="margin-top: 4px;">
+                  Allows direct manual entry of payment items linked to registered vendors in the Vendor Book. Live duplicate checking flags identical payments (same vendor, amount, invoice ref, and effective date) and provides an explicit override option.
+                </p>
+              </div>
+
+              <div>
+                <strong style="color: var(--color-primary);">3. Combined NACHA Transmit File Specifications:</strong>
+                <p class="text-muted" style="margin-top: 4px;">
+                  Generates 94-character fixed-width NACHA flat files complying with Chase CCD Credit specifications. Automatically computes entry counts, batch counts, block counts, entry hash checksums, and total credit amounts.
+                </p>
+              </div>
+
+              <div>
+                <strong style="color: var(--color-primary);">4. Vendor Directory & Bank Detail Change Approvals:</strong>
+                <p class="text-muted" style="margin-top: 4px;">
+                  Standard users can view active vendor bank details and submit change requests. Bank detail updates enter a <span class="badge badge-warning">PENDING</span> state and require explicit Admin Review approval before mutating PostgreSQL records.
+                </p>
+              </div>
+
+              <div>
+                <strong style="color: var(--color-primary);">5. Transaction History & Remittance Email Notifications:</strong>
+                <p class="text-muted" style="margin-top: 4px;">
+                  All payment transactions record vendor remittance entries. Users can filter by vendor, status, or date range, select multiple items, and trigger bulk email dispatches with an explicit confirmation step.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Technical Validation Rules Reference Table -->
+          <div class="card">
+            <div class="card-title">Field Technical Specifications & Validation Rules</div>
+            <div class="payments-table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Field Name</th>
+                    <th>NACHA Standard</th>
+                    <th>Validation & Formatting Rules</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-bold">Routing Number</td>
+                    <td>9 Digits</td>
+                    <td>Must be a valid 9-digit ABA routing number passing the Modulus 10 checksum algorithm (e.g., <code class="font-mono">021000021</code>).</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Account Number</td>
+                    <td>Up to 17 Chars</td>
+                    <td>Must preserve leading zeros. In spreadsheets, format account cells as TEXT to avoid truncation.</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Account Type</td>
+                    <td>Checking / Savings</td>
+                    <td>Transaction code 22 for Checking credits; transaction code 32 for Savings credits.</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Invoice / ID Reference</td>
+                    <td>15 Chars Max</td>
+                    <td>Alphanumeric reference string. Auto-populated with invoice reference or last 6 non-zero account digits if left blank.</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Reserved Keywords</td>
+                    <td>Disallowed</td>
+                    <td>Chase CCD Credit guidelines strictly prohibit reserved terms <code class="font-mono">PAYROLL</code> and <code class="font-mono">REVERSAL</code> in entry descriptions.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/login.js"></script>
+    <script src="js/generate.js"></script>
+    <script src="js/vendors.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/history.js"></script>
+    <script src="js/help.js"></script>
+    <script>
+      // Tab navigation
+      document.querySelectorAll("#mainTabs .tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document
+            .querySelectorAll("#mainTabs .tab")
+            .forEach((t) => t.classList.remove("active"));
+          document
+            .querySelectorAll(".view")
+            .forEach((v) => v.classList.remove("active"));
+          tab.classList.add("active");
+          const viewId = "view-" + tab.dataset.view;
+          const viewEl = document.getElementById(viewId);
+          if (viewEl) viewEl.classList.add("active");
+        });
+      });
+    </script>
+  </body>
+</html>
