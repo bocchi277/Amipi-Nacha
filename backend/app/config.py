@@ -38,8 +38,22 @@ class Settings(BaseSettings):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
 
+    def get_sync_database_url(self) -> str:
+        if "SYNC_DATABASE_URL" in os.environ:
+            return os.environ["SYNC_DATABASE_URL"]
+        url = self.DATABASE_URL
+        if url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+psycopg2://"):
+            return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
+
 
 settings = Settings()
-# Ensure settings.DATABASE_URL uses asyncpg driver
+# Ensure settings.DATABASE_URL uses asyncpg driver and SYNC_DATABASE_URL uses psycopg2 driver
+settings.SYNC_DATABASE_URL = settings.get_sync_database_url()
 settings.DATABASE_URL = settings.get_async_database_url()
+
 
