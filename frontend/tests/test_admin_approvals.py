@@ -27,6 +27,11 @@ def test_standard_user_cannot_access_admin_review(page: Page, base_url: str):
     page.evaluate("sessionStorage.clear()")
     page.reload()
 
+    run_id = uuid.uuid4().hex[:6]
+    std_user = f"std_user_p6_{run_id}"
+    std_email = f"{std_user}@amipi.com"
+    std_password = "StdUserPass123!"
+
     # Register standard user via API
     page.evaluate(
         """
@@ -38,11 +43,11 @@ def test_standard_user_cannot_access_admin_review(page: Page, base_url: str):
             });
         }
         """,
-        [base_url, STD_EMAIL, STD_USER, STD_PASSWORD],
+        [base_url, std_email, std_user, std_password],
     )
 
-    page.fill("#loginUsername", STD_USER)
-    page.fill("#loginPassword", STD_PASSWORD)
+    page.fill("#loginUsername", std_user)
+    page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 
