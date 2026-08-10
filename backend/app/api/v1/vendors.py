@@ -59,6 +59,12 @@ class ChangeRequestResponseSchema(BaseModel):
     reviewed_by_user_id: Optional[str] = None
 
 
+def _val(x):
+    if x is None:
+        return ""
+    return x.value if hasattr(x, "value") else str(x)
+
+
 @router.get("", response_model=list[VendorResponseSchema])
 async def list_vendors(db: AsyncSession = Depends(get_async_db)):
     """List all active vendors."""
@@ -70,12 +76,13 @@ async def list_vendors(db: AsyncSession = Depends(get_async_db)):
             name=v.name,
             routing_number=v.routing_number,
             account_number=v.account_number,
-            account_type=v.account_type.value,
+            account_type=_val(v.account_type),
             default_id_number=v.default_id_number,
             is_active=v.is_active,
         )
         for v in vendors
     ]
+
 
 
 @router.post("", response_model=VendorResponseSchema, status_code=status.HTTP_201_CREATED)
@@ -105,7 +112,7 @@ async def create_vendor(
         name=vendor.name,
         routing_number=vendor.routing_number,
         account_number=vendor.account_number,
-        account_type=vendor.account_type.value,
+        account_type=_val(vendor.account_type),
         default_id_number=vendor.default_id_number,
         is_active=vendor.is_active,
     )
@@ -129,7 +136,7 @@ async def get_vendor(vendor_id: str, db: AsyncSession = Depends(get_async_db)):
         name=vendor.name,
         routing_number=vendor.routing_number,
         account_number=vendor.account_number,
-        account_type=vendor.account_type.value,
+        account_type=_val(vendor.account_type),
         default_id_number=vendor.default_id_number,
         is_active=vendor.is_active,
     )
