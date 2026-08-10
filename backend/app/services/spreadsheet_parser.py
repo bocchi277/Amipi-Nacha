@@ -313,14 +313,22 @@ def _process_qb_vendor_block(
 
     eff_date = entry_date or default_effective_date or date.today()
 
-    v_obj = vendor_map.get(vendor_name.strip().upper())
+    v_upper = vendor_name.strip().upper()
+    v_obj = vendor_map.get(v_upper)
     if not v_obj:
-        v_upper = vendor_name.strip().upper()
-        # Check fuzzy / truncated match (e.g. DB vendor name truncated to 22 chars)
+        v_clean = re.sub(r'[^A-Z0-9]', '', v_upper)
+        # Check fuzzy / substring / normalized match
         for db_name, db_v in vendor_map.items():
-            if db_name == v_upper[:22] or db_name in v_upper or v_upper in db_name:
+            db_clean = re.sub(r'[^A-Z0-9]', '', db_name.strip().upper())
+            if (
+                (len(db_clean) >= 4 and db_clean in v_clean)
+                or (len(v_clean) >= 4 and v_clean in db_clean)
+                or (len(db_clean) >= 4 and v_clean.startswith(db_clean))
+                or db_name in v_upper
+            ):
                 v_obj = db_v
                 break
+
 
     if not v_obj:
         row_errors.append(f"Vendor '{vendor_name}' not found in database and no banking routing/account provided.")
