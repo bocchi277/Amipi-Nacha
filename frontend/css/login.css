@@ -43,8 +43,8 @@
   object-fit: cover;
   object-position: center;
   display: block;
-  mask-image: url(/frontend/v231-wit-08-job105-Photoroom.png);
-  -webkit-mask-image: url(/frontend/v231-wit-08-job105-Photoroom.png);
+  mask-image: url(../v231-wit-08-job105-Photoroom.png);
+  -webkit-mask-image: url(../v231-wit-08-job105-Photoroom.png);
   -webkit-mask-size: 130%;
   mask-size: 130%;
   -webkit-mask-repeat: no-repeat;
