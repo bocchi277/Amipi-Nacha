@@ -202,6 +202,20 @@ async def combine_batches_and_generate_nacha(
 
         v_email = vendor_obj.email or f"remittance@{vendor_obj.name.lower().replace(' ', '')[:15]}.com"
 
+        from app.core.email_templates import ACTIVE_TEMPLATE, render_email_template
+
+        subj, body = render_email_template(
+            ACTIVE_TEMPLATE["subject"],
+            ACTIVE_TEMPLATE["body"],
+            {
+                "vendor_name": vendor_obj.name,
+                "amount": f"{p.amount:.2f}",
+                "invoice_ref": p.id_number or "N/A",
+                "effective_date": p.effective_date.isoformat(),
+                "company_name": company_name,
+            },
+        )
+
         remittance = VendorRemittance(
             vendor_id=vendor_obj.id,
             nacha_file_id=nacha_record.id,
@@ -211,17 +225,12 @@ async def combine_batches_and_generate_nacha(
             amount=p.amount,
             effective_date=p.effective_date,
             invoice_reference=p.id_number,
-            subject=f"Payment Remittance Advice — {vendor_obj.name} (${p.amount:.2f})",
-            body_text=(
-                f"Dear {vendor_obj.name},\n\n"
-                f"Please be advised that an ACH payment of ${p.amount:.2f} has been scheduled for "
-                f"effective date {p.effective_date.isoformat()}.\n"
-                f"Reference / Invoice: {p.id_number}\n\n"
-                f"Thank you,\nAMIPI Inc Accounts Payable"
-            ),
+            subject=subj,
+            body_text=body,
             status=RemittanceStatus.PENDING,
         )
         db_session.add(remittance)
+
 
     for b in ordered_batches:
         b.status = BatchStatus.PROCESSED

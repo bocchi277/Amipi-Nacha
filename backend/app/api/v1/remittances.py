@@ -47,7 +47,49 @@ class BulkResendResponseSchema(BaseModel):
     message: str
 
 
+class EmailTemplateSchema(BaseModel):
+    subject_template: str
+    body_template: str
+    available_placeholders: list[dict[str, str]]
+
+
+class UpdateEmailTemplateRequest(BaseModel):
+    subject_template: str
+    body_template: str
+
+
+@router.get("/template", response_model=EmailTemplateSchema)
+async def get_email_template(current_user: User = Depends(get_current_user)):
+    """Fetch the active remittance email template and available dynamic placeholders."""
+    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS
+    return EmailTemplateSchema(
+        subject_template=ACTIVE_TEMPLATE["subject"],
+        body_template=ACTIVE_TEMPLATE["body"],
+        available_placeholders=AVAILABLE_PLACEHOLDERS,
+    )
+
+
+@router.put("/template", response_model=EmailTemplateSchema)
+async def update_email_template(
+    payload: UpdateEmailTemplateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Update active remittance email template."""
+    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS
+    if payload.subject_template and payload.subject_template.strip():
+        ACTIVE_TEMPLATE["subject"] = payload.subject_template.strip()
+    if payload.body_template and payload.body_template.strip():
+        ACTIVE_TEMPLATE["body"] = payload.body_template.strip()
+
+    return EmailTemplateSchema(
+        subject_template=ACTIVE_TEMPLATE["subject"],
+        body_template=ACTIVE_TEMPLATE["body"],
+        available_placeholders=AVAILABLE_PLACEHOLDERS,
+    )
+
+
 @router.get("", response_model=list[RemittanceResponseSchema])
+
 async def list_remittances(
     remittance_status: Optional[RemittanceStatus] = Query(None, alias="status"),
     vendor_id: Optional[uuid.UUID] = Query(None),

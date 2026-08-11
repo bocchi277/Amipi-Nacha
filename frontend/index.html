@@ -746,7 +746,11 @@
               <div style="flex: 1; min-width: 240px;">
                 <input type="text" class="form-input" id="historySearchInput" placeholder="Search vendor name, email, or invoice ref..." />
               </div>
-              <div style="display: flex; gap: var(--space-sm);">
+              <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="openEmailTemplateModalBtn" title="Customize Remittance Email Template">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: text-bottom;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>Email Template</span>
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="resetHistoryFiltersBtn">Reset Filters</button>
                 <button type="button" class="btn btn-primary btn-sm" id="applyHistoryFiltersBtn">
                   <span>Apply Filters</span>
@@ -754,6 +758,7 @@
               </div>
             </div>
           </div>
+
 
           <!-- Alert Banner -->
           <div class="alert alert-success" id="historyGlobalAlert" style="display: none; margin-bottom: var(--space-md);"></div>
@@ -838,7 +843,53 @@
               </div>
             </div>
           </div>
+
+          <!-- Customize Email Template Modal -->
+          <div class="modal-backdrop" id="emailTemplateModal">
+            <div class="modal-card" style="max-width: 600px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                <h3 class="card-title" style="margin-bottom: 0;">Customize Remittance Email Template</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeEmailTemplateModalBtn" style="padding: 2px 8px;">✕</button>
+              </div>
+
+              <div class="alert alert-error" id="emailTmplError" style="display: none; margin-bottom: var(--space-md);"></div>
+              <div class="alert alert-success" id="emailTmplSuccess" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <!-- Available Placeholders Badge Info -->
+              <div style="background: var(--color-surface-alt, #f8fafc); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); margin-bottom: var(--space-md); font-size: var(--text-xs);">
+                <strong style="color: var(--color-text-muted); display: block; margin-bottom: 4px;">DYNAMIC PLACEHOLDERS (Click to insert into active input):</strong>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="tmplPlaceholdersBox">
+                  <span class="badge badge-secondary placeholder-chip" style="cursor: pointer;" onclick="HistoryScreen.insertPlaceholder('{{vendor_name}}')">{{vendor_name}}</span>
+                  <span class="badge badge-secondary placeholder-chip" style="cursor: pointer;" onclick="HistoryScreen.insertPlaceholder('{{amount}}')">{{amount}}</span>
+                  <span class="badge badge-secondary placeholder-chip" style="cursor: pointer;" onclick="HistoryScreen.insertPlaceholder('{{invoice_ref}}')">{{invoice_ref}}</span>
+                  <span class="badge badge-secondary placeholder-chip" style="cursor: pointer;" onclick="HistoryScreen.insertPlaceholder('{{effective_date}}')">{{effective_date}}</span>
+                  <span class="badge badge-secondary placeholder-chip" style="cursor: pointer;" onclick="HistoryScreen.insertPlaceholder('{{company_name}}')">{{company_name}}</span>
+                </div>
+              </div>
+
+              <form id="emailTemplateForm" onsubmit="event.preventDefault();">
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="tmplSubjectInput">Email Subject Line Template</label>
+                  <input type="text" class="form-input" id="tmplSubjectInput" required />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                  <label class="form-label" for="tmplBodyInput">Email Message Body Template</label>
+                  <textarea class="form-input font-mono" id="tmplBodyInput" rows="9" style="font-size: var(--text-xs); line-height: 1.5;" required></textarea>
+                </div>
+
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                  <button type="button" class="btn btn-secondary" id="resetDefaultTmplBtn">Reset to Default</button>
+                  <button type="submit" class="btn btn-primary" id="saveEmailTmplBtn">
+                    <span class="spinner" id="tmplSpinner" style="display: none;"></span>
+                    <span>Save Email Template</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
+
 
         <!-- Help & Templates View -->
         <div class="view" id="view-help">

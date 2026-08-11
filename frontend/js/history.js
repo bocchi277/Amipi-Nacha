@@ -43,6 +43,17 @@ const HistoryScreen = (() => {
     const confirmSendBtn = el('confirmBulkResendBtn');
     if (confirmSendBtn) confirmSendBtn.addEventListener('click', handleExecuteBulkResend);
 
+    // Email Template Modal listeners
+    const openTmplBtn = el('openEmailTemplateModalBtn');
+    const closeTmplBtn = el('closeEmailTemplateModalBtn');
+    const resetTmplBtn = el('resetDefaultTmplBtn');
+    const tmplForm = el('emailTemplateForm');
+
+    if (openTmplBtn) openTmplBtn.addEventListener('click', openEmailTemplateModal);
+    if (closeTmplBtn) closeTmplBtn.addEventListener('click', hideEmailTemplateModal);
+    if (resetTmplBtn) resetTmplBtn.addEventListener('click', resetEmailTemplateToDefault);
+    if (tmplForm) tmplForm.addEventListener('submit', handleSaveEmailTemplate);
+
     const prevBtn = el('prevHistoryPageBtn');
     const nextBtn = el('nextHistoryPageBtn');
     if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
@@ -58,6 +69,109 @@ const HistoryScreen = (() => {
       });
     });
   }
+
+  // ── Email Template Management ──────────────────────────────────
+  let activeTemplateData = null;
+
+  async function openEmailTemplateModal() {
+    const modal = el('emailTemplateModal');
+    const errBox = el('emailTmplError');
+    const succBox = el('emailTmplSuccess');
+    if (errBox) errBox.style.display = 'none';
+    if (succBox) succBox.style.display = 'none';
+
+    try {
+      const data = await API.get('/remittances/template');
+      activeTemplateData = data;
+      if (el('tmplSubjectInput')) el('tmplSubjectInput').value = data.subject_template || '';
+      if (el('tmplBodyInput')) el('tmplBodyInput').value = data.body_template || '';
+    } catch (err) {
+      console.warn('Failed to load email template:', err);
+    }
+
+    if (modal) modal.classList.add('active');
+  }
+
+  function hideEmailTemplateModal() {
+    const modal = el('emailTemplateModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function insertPlaceholder(tag) {
+    const bodyInput = el('tmplBodyInput');
+    const subjectInput = el('tmplSubjectInput');
+    
+    // Insert into focused input, defaulting to body textarea
+    const activeEl = document.activeElement === subjectInput ? subjectInput : bodyInput;
+    if (!activeEl) return;
+
+    const start = activeEl.selectionStart || activeEl.value.length;
+    const end = activeEl.selectionEnd || activeEl.value.length;
+    const text = activeEl.value;
+
+    activeEl.value = text.substring(0, start) + tag + text.substring(end);
+    activeEl.focus();
+    activeEl.selectionStart = activeEl.selectionEnd = start + tag.length;
+  }
+
+  function resetEmailTemplateToDefault() {
+    if (el('tmplSubjectInput')) {
+      el('tmplSubjectInput').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
+    }
+    if (el('tmplBodyInput')) {
+      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nPlease be advised that an ACH payment of \${{amount}} has been scheduled for effective date {{effective_date}}.\n\nPayment Details:\n• Payee / Vendor Name: {{vendor_name}}\n• Payment Amount ($):  \${{amount}}\n• Invoice Reference:   {{invoice_ref}}\n• Effective Date:      {{effective_date}}\n\nIf you have any questions regarding this remittance, please contact Accounts Payable.\n\nThank you,\n{{company_name}} Accounts Payable`;
+    }
+  }
+
+  async function handleSaveEmailTemplate(e) {
+    if (e) e.preventDefault();
+
+    const subjectVal = el('tmplSubjectInput').value.trim();
+    const bodyVal = el('tmplBodyInput').value.trim();
+    const errBox = el('emailTmplError');
+    const succBox = el('emailTmplSuccess');
+    const spinner = el('tmplSpinner');
+    const saveBtn = el('saveEmailTmplBtn');
+
+    if (errBox) errBox.style.display = 'none';
+    if (succBox) succBox.style.display = 'none';
+
+    if (!subjectVal || !bodyVal) {
+      if (errBox) {
+        errBox.textContent = 'Both Subject Line and Body Template are required.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    if (saveBtn) saveBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      await API.put('/remittances/template', {
+        subject_template: subjectVal,
+        body_template: bodyVal,
+      });
+
+      if (succBox) {
+        succBox.textContent = 'Email template updated successfully! All future remittances will use this template.';
+        succBox.style.display = 'block';
+      }
+
+      setTimeout(() => {
+        hideEmailTemplateModal();
+      }, 1800);
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to save email template.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
 
   async function loadVendorsDropdown() {
     const select = el('historyVendorFilter');
@@ -381,6 +495,7 @@ const HistoryScreen = (() => {
     init,
     loadData,
     toggleRowSelection,
+    insertPlaceholder,
   };
 })();
 
