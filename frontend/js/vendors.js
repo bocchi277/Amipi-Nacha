@@ -9,6 +9,8 @@ const VendorsScreen = (() => {
   let loadedVendors = [];
   let loadedChangeRequests = [];
   let activeVendorForRequest = null;
+  let currentViewMode = 'card'; // 'card' or 'table'
+  let showFullAccountDetails = false;
 
   function el(id) { return document.getElementById(id); }
 
@@ -25,6 +27,29 @@ const VendorsScreen = (() => {
     const refreshBtn = el('refreshVendorsBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', loadData);
+    }
+
+    // View Mode Toggle Listeners
+    const cardBtn = el('vendorCardViewBtn');
+    const tableBtn = el('vendorTableViewBtn');
+    if (cardBtn) {
+      cardBtn.addEventListener('click', () => setViewMode('card'));
+    }
+    if (tableBtn) {
+      tableBtn.addEventListener('click', () => setViewMode('table'));
+    }
+
+    // Account Mask Toggle Listener
+    const maskBtn = el('vendorMaskToggleBtn');
+    if (maskBtn) {
+      maskBtn.addEventListener('click', () => {
+        showFullAccountDetails = !showFullAccountDetails;
+        const btnText = maskBtn.querySelector('span');
+        if (btnText) {
+          btnText.textContent = showFullAccountDetails ? 'Hide Account Details' : 'Show Account Details';
+        }
+        filterAndRenderVendors();
+      });
     }
 
     const closeBtn = el('closeReqModalBtn');
@@ -45,6 +70,55 @@ const VendorsScreen = (() => {
         }
       });
     });
+  }
+
+  function setViewMode(mode) {
+    currentViewMode = mode;
+    const cardBtn = el('vendorCardViewBtn');
+    const tableBtn = el('vendorTableViewBtn');
+    const gridContainer = el('vendorGridContainer');
+    const tableContainer = el('vendorTableContainer');
+
+    if (mode === 'card') {
+      if (cardBtn) {
+        cardBtn.style.background = 'var(--color-surface, #ffffff)';
+        cardBtn.style.color = 'var(--color-text, #0f172a)';
+        cardBtn.style.fontWeight = '600';
+        cardBtn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+      }
+      if (tableBtn) {
+        tableBtn.style.background = 'transparent';
+        tableBtn.style.color = 'var(--color-text-muted, #64748b)';
+        tableBtn.style.fontWeight = 'normal';
+        tableBtn.style.boxShadow = 'none';
+      }
+      if (gridContainer) gridContainer.style.display = 'grid';
+      if (tableContainer) tableContainer.style.display = 'none';
+    } else {
+      if (tableBtn) {
+        tableBtn.style.background = 'var(--color-surface, #ffffff)';
+        tableBtn.style.color = 'var(--color-text, #0f172a)';
+        tableBtn.style.fontWeight = '600';
+        tableBtn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+      }
+      if (cardBtn) {
+        cardBtn.style.background = 'transparent';
+        cardBtn.style.color = 'var(--color-text-muted, #64748b)';
+        cardBtn.style.fontWeight = 'normal';
+        cardBtn.style.boxShadow = 'none';
+      }
+      if (gridContainer) gridContainer.style.display = 'none';
+      if (tableContainer) tableContainer.style.display = 'block';
+    }
+
+    filterAndRenderVendors();
+  }
+
+  function maskAccount(acct) {
+    if (!acct) return '••••';
+    if (showFullAccountDetails) return acct;
+    if (acct.length <= 4) return acct;
+    return '•••• ' + acct.slice(-4);
   }
 
   async function loadData() {
@@ -92,7 +166,11 @@ const VendorsScreen = (() => {
       (v.account_number && v.account_number.includes(term))
     );
 
-    renderVendorCards(filtered);
+    if (currentViewMode === 'card') {
+      renderVendorCards(filtered);
+    } else {
+      renderVendorTable(filtered);
+    }
   }
 
   function renderVendorCards(vendors) {
@@ -126,7 +204,7 @@ const VendorsScreen = (() => {
           <div class="alert alert-warning show" style="margin-top: var(--space-sm); font-size: var(--text-xs); padding: 8px 12px;" data-pending-request-id="${pendingReq.id}">
             <strong>Change Request PENDING Admin Review</strong><br/>
             Requested Routing: <span class="font-mono font-bold">${pendingReq.requested_routing_number}</span> |
-            Account: <span class="font-mono font-bold">${pendingReq.requested_account_number}</span>
+            Account: <span class="font-mono font-bold">${maskAccount(pendingReq.requested_account_number)}</span>
           </div>
         `;
       }
@@ -147,7 +225,7 @@ const VendorsScreen = (() => {
           </div>
           <div>
             <span class="text-muted">Account Number:</span><br/>
-            <strong class="font-mono vendor-account-display">${v.account_number}</strong>
+            <strong class="font-mono vendor-account-display">${maskAccount(v.account_number)}</strong>
           </div>
           <div>
             <span class="text-muted">Account Type:</span><br/>
@@ -169,6 +247,58 @@ const VendorsScreen = (() => {
       `;
 
       container.appendChild(card);
+    });
+  }
+
+  function renderVendorTable(vendors) {
+    const tbody = el('vendorTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (vendors.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="padding: 24px; text-align: center; color: var(--color-text-muted);">
+            No vendors found in directory.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    vendors.forEach((v, idx) => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
+      tr.style.background = idx % 2 === 0 ? 'var(--color-surface, #ffffff)' : 'var(--color-surface-alt, #f8fafc)';
+
+      const pendingReq = loadedChangeRequests.find(r =>
+        String(r.vendor_id).toLowerCase() === String(v.id).toLowerCase() &&
+        String(r.status).toLowerCase() === 'pending'
+      );
+
+      let statusBadge = '<span class="badge badge-success">Active</span>';
+      if (pendingReq) {
+        statusBadge += ' <span class="badge badge-warning" title="Bank change request pending admin approval">Pending Change</span>';
+      }
+
+      tr.innerHTML = `
+        <td style="padding: 12px 16px;">
+          <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
+          <span class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</span>
+        </td>
+        <td style="padding: 12px 16px;" class="font-mono">${v.routing_number}</td>
+        <td style="padding: 12px 16px;" class="font-mono">${maskAccount(v.account_number)}</td>
+        <td style="padding: 12px 16px;" class="font-mono">${(v.account_type || 'checking').toUpperCase()}</td>
+        <td style="padding: 12px 16px;">${statusBadge}</td>
+        <td style="padding: 12px 16px; text-align: right;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openChangeModal('${v.id}')">
+            Request Bank Change
+          </button>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
     });
   }
 
