@@ -25,7 +25,7 @@ class GenerateNachaRequest(BaseModel):
     company_account: str = "785957066"
     effective_entry_date: Optional[str] = None
     file_id_modifier: str = "A"
-    trace_sequence_start: int = 1
+    trace_sequence_start: Optional[int] = None
     entry_description: str = "EPAYMNT"
 
 
@@ -43,7 +43,16 @@ class NachaFileResponse(BaseModel):
     raw_content: str
 
 
+@router.get("/next-trace-sequence", status_code=status.HTTP_200_OK)
+async def get_next_trace_sequence_endpoint(db: AsyncSession = Depends(get_async_db)):
+    """Fetch the next auto-incremented starting trace sequence number."""
+    from app.services.nacha_service import get_next_trace_sequence
+    seq = await get_next_trace_sequence(db)
+    return {"next_trace_sequence": seq}
+
+
 @router.post("/generate", response_model=NachaFileResponse, status_code=status.HTTP_201_CREATED)
+
 async def generate_nacha_file_endpoint(
     payload: GenerateNachaRequest,
     db: AsyncSession = Depends(get_async_db),

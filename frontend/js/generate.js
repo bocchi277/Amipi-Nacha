@@ -542,7 +542,8 @@ const GenerateScreen = (() => {
     const entryDesc = (el('entryDesc').value.trim() || 'EPAYMNT').toUpperCase();
     const effVal = el('effDate').value.trim();
     const fileIdMod = el('fileIdMod').value.trim() || 'A';
-    const traceStart = parseInt(el('traceStart').value.trim() || '1', 10);
+    const rawTraceStart = parseInt(el('traceStart').value.trim() || '0', 10);
+    const traceStart = (!isNaN(rawTraceStart) && rawTraceStart > 0) ? rawTraceStart : null;
 
     if (entryDesc === 'PAYROLL' || entryDesc === 'REVERSAL') {
       showNachaError('Entry description cannot be PAYROLL or REVERSAL for Chase CCD credits.');
@@ -563,6 +564,7 @@ const GenerateScreen = (() => {
       file_id_modifier: fileIdMod,
       trace_sequence_start: traceStart,
     };
+
 
     setNachaLoading(true);
     if (el('nachaGlobalError')) el('nachaGlobalError').style.display = 'none';

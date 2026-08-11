@@ -19,6 +19,28 @@ from app.nacha.generator import generate_nacha_file, GenerationResult
 from app.nacha.models import Batch, EntryDetail, FileHeaderConfig, NachaFileInput
 
 
+async def get_next_trace_sequence(db_session: AsyncSession) -> int:
+    """Fetch the auto-incremented starting trace sequence for the next NACHA file."""
+    res = await db_session.execute(
+        select(NachaFileRecord).order_by(NachaFileRecord.created_at.desc())
+    )
+    last_file = res.scalars().first()
+    if not last_file or not last_file.raw_content:
+        return 1
+
+    # Extract trace sequence from the last Entry Detail record (line starting with '6')
+    lines = [l for l in last_file.raw_content.splitlines() if l.startswith("6")]
+    if not lines:
+        return 1
+
+    last_line = lines[-1]
+    try:
+        last_seq = int(last_line[87:94])
+        return last_seq + 1
+    except (ValueError, IndexError):
+        return 1
+
+
 async def combine_batches_and_generate_nacha(
     db_session: AsyncSession,
     batch_ids: list[uuid.UUID],
@@ -26,18 +48,12 @@ async def combine_batches_and_generate_nacha(
     company_account: str = "785957066",
     effective_entry_date: Optional[datetime.date | str] = None,
     file_id_modifier: str = "A",
-    trace_sequence_start: int = 1,
+    trace_sequence_start: Optional[int] = None,
     entry_description: str = "EPAYMNT",
     created_by_user_id: Optional[uuid.UUID] = None,
 ) -> tuple[NachaFileRecord, GenerationResult]:
     """
     Combine multiple payment batches (e.g. Batch 1 + Batch 2) into a single NACHA file.
-
-    1. Fetches batches & linked payments from PostgreSQL.
-    2. Maps DB Payments & Vendors -> Phase 1 EntryDetail objects.
-    3. Invokes Phase 1 generate_nacha_file core.
-    4. Persists NachaFileRecord in database with combined control totals.
-    5. Links Payments to NachaFileRecord and updates statuses to PROCESSING.
     """
     if not batch_ids:
         raise ValueError("At least one batch_id must be provided for NACHA generation.")
@@ -73,6 +89,9 @@ async def combine_batches_and_generate_nacha(
     else:
         eff_yymmdd = file_date_yymmdd
 
+    if trace_sequence_start is None or trace_sequence_start <= 0:
+        trace_sequence_start = await get_next_trace_sequence(db_session)
+
     cfg = FileHeaderConfig(
         company_name=company_name,
         company_account=company_account,
@@ -83,6 +102,8 @@ async def combine_batches_and_generate_nacha(
         file_id_modifier=file_id_modifier.upper()[:1],
         trace_sequence_start=trace_sequence_start,
     )
+
+
 
     nacha_batches: list[Batch] = []
     payments_to_update: list[Payment] = []
