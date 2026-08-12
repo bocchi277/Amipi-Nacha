@@ -13,6 +13,7 @@ Includes brand-new, end-to-end regression tests verifying:
 9. Security Hardening (403 Forbidden for standard users, SQLi resistance, path sanitization).
 """
 import io
+import openpyxl
 import pytest
 from datetime import date
 from decimal import Decimal
@@ -25,51 +26,36 @@ from app.models import (
     AccountType, AuditLog, BatchStatus, NachaFileRecord,
     Payment, PaymentStatus, RemittanceStatus, UploadBatch, User, UserRole, Vendor, VendorChangeRequest, VendorRemittance
 )
-from app.nacha.generator import generate_nacha_file
-from app.services.nacha_service import get_next_trace_sequence
-
-
-class ParsedPaymentData:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+from app.services.nacha_service import combine_batches_and_generate_nacha, get_next_trace_sequence
 
 
 @pytest.mark.asyncio
 async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
-    """Test 1: Verify exact 94-character line length & Chase NACHA record structures."""
-    v = Vendor(
-        name="CHASE REQ VENDOR",
-        routing_number="021000021",
-        account_number="123456789",
-        account_type=AccountType.CHECKING,
-    )
-    db_session.add(v)
+    """Test 1: Verify exact 94-character line length & Chase NACHA record structures via combine_batches_and_generate_nacha."""
+    v = Vendor(name="CHASE REQ VENDOR", routing_number="021000021", account_number="123456789")
+    b = UploadBatch(batch_number=1, filename="chase_test.xlsx", total_amount=Decimal("1500.75"))
+    db_session.add_all([v, b])
     await db_session.commit()
 
-    payments_data = [
-        ParsedPaymentData(
-            vendor_name=v.name,
-            amount=Decimal("1500.75"),
-            id_number="INV-2026-X",
-            effective_date=date(2026, 8, 15),
-            vendor_id=v.id,
-            routing_number=v.routing_number,
-            account_number=v.account_number,
-            account_type="checking",
-        )
-    ]
+    p = Payment(
+        vendor_id=v.id,
+        batch_id=b.id,
+        amount=Decimal("1500.75"),
+        id_number="INV-2026-X",
+        effective_date=date(2026, 8, 15),
+        status=PaymentStatus.PENDING,
+    )
+    db_session.add(p)
+    await db_session.commit()
 
-    nacha_text, file_rec = await generate_nacha_file(
-        payments=payments_data,
-        company_name="AMIPI INC",
-        chase_account="10029999",
-        entry_description="PAYMENT",
-        trace_sequence_start=5000,
+    n_rec = await combine_batches_and_generate_nacha(
         db_session=db_session,
+        batch_ids=[b.id],
+        company_name="AMIPI INC",
+        company_account="10029999",
     )
 
-    lines = nacha_text.splitlines()
+    lines = n_rec.raw_content.splitlines()
     assert len(lines) >= 5
     for idx, line in enumerate(lines):
         assert len(line) == 94, f"Line {idx+1} length {len(line)} != 94 chars: '{line}'"
@@ -91,13 +77,17 @@ async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession
     """Test 2: Verify next trace sequence queries latest NACHA file and auto-starts at last_trace + 1."""
     n_rec = NachaFileRecord(
         filename="chase_nacha_20260813.txt",
+        file_creation_date="260813",
+        file_creation_time="0000",
+        total_credit_amount=Decimal("1500.00"),
+        total_entry_count=1,
+        total_batch_count=1,
+        total_block_count=1,
         raw_content="101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       \n"
                     "5220AMIPI INC                         021000021CCDREMITTANCE 260813260813   102100001000001\n"
                     "622021000021012345678900000150000INV-2026-X     ARTN DESIGN INC         0210000210004050\n"
                     "8220000001000210000200000000000000000000150000021000021                         02100001000001\n"
                     "900000100000100000001000210000200000000000000000000150000                                       ",
-        total_credit_amount=Decimal("1500.00"),
-        total_entries=1,
     )
     db_session.add(n_rec)
     await db_session.commit()
@@ -113,19 +103,25 @@ async def test_multi_invoice_breakdown_parsing_and_api(db_session: AsyncSession)
     db_session.add(v)
     await db_session.commit()
 
-    csv_content = (
-        "Type,Num,Date,Name,Paid Amount\n"
-        "Bill Pmt -Check,ACH,07/30/2026,BRINKS GLOBLE SERVICES,-3047.91\n"
-        "Bill,875886,06/30/2026,,1700.23\n"
-        "Bill,2425708,06/30/2026,,231.29\n"
-        "Bill,876153,07/01/2026,,1116.39\n"
-        "TOTAL,,,,,3047.91\n"
-    )
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Payments"
+
+    ws.append(["Type", "Num", "Date", "Name", "Paid Amount"])
+    ws.append(["Bill Pmt -Check", "ACH", "07/30/2026", "BRINKS GLOBLE SERVICES", -3047.91])
+    ws.append(["Bill", "875886", "06/30/2026", "", 1700.23])
+    ws.append(["Bill", "2425708", "06/30/2026", "", 231.29])
+    ws.append(["Bill", "876153", "07/01/2026", "", 1116.39])
+    ws.append(["TOTAL", "", "", "", 3047.91])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    excel_bytes = buf.getvalue()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         res = await client.post(
             "/api/v1/payments/upload",
-            files={"file": ("brinks_multi.csv", csv_content.encode("utf-8"), "text/csv")},
+            files={"file": ("brinks_multi.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             data={"batch_number": "1"},
         )
         assert res.status_code == 201
@@ -133,7 +129,7 @@ async def test_multi_invoice_breakdown_parsing_and_api(db_session: AsyncSession)
         assert len(data["valid_payments"]) == 1
         p = data["valid_payments"][0]
         assert p["vendor_name"] == "BRINKS GLOBLE SERVICES"
-        assert p["amount"] == "3047.91"
+        assert Decimal(p["amount"]) == Decimal("3047.91")
         assert p["invoice_breakdown"] is not None
         assert len(p["invoice_breakdown"]) == 3
         invoices = [item["invoice_number"] for item in p["invoice_breakdown"]]
@@ -168,9 +164,9 @@ async def test_payment_row_item_editing_endpoint(db_session: AsyncSession):
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["amount"] == "250.50"
+        assert float(data["amount"]) == 250.50
         assert data["id_number"] == "INV-NEW-REF"
-        assert data["batch_total_amount"] == "250.50"
+        assert float(data["batch_total_amount"]) == 250.50
 
         await db_session.refresh(payment)
         assert payment.amount == Decimal("250.50")
