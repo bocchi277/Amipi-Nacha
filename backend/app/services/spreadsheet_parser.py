@@ -278,7 +278,11 @@ def _parse_qb_excel(
             current_date = row_date
 
         if row_type.lower() in ("bill", "bill pmt -check", "check", "payment"):
-            if row_num:
+            is_header_row = (
+                row_type.lower() != "bill"
+                or row_num.upper() in ("ACH", "CHECK", "EFT", "PMT", "PAYMENT", "BILL PMT -CHECK", "BILL PMT")
+            )
+            if row_num and not is_header_row:
                 sub_amt = float(abs(row_amt)) if row_amt is not None else None
                 sub_date = row_date.isoformat() if row_date else None
                 current_invoices.append({
@@ -344,9 +348,13 @@ def _process_qb_vendor_block(
     if row_errors:
         result.errors.append(ParsedRowError(row_number=row_idx, raw_data=raw_info, errors=row_errors))
     else:
-        inv_nums = [inv["invoice_number"] if isinstance(inv, dict) else str(inv) for inv in invoices]
+        filtered_invoices = [
+            inv for inv in invoices
+            if isinstance(inv, dict) and inv.get("invoice_number", "").upper() not in ("ACH", "CHECK", "EFT", "PMT", "PAYMENT", "BILL PMT -CHECK", "BILL PMT")
+        ]
+        inv_nums = [inv["invoice_number"] for inv in filtered_invoices]
         id_ref = _compress_invoices(inv_nums)
-        breakdown_list = [inv for inv in invoices if isinstance(inv, dict)] if len(invoices) > 1 else None
+        breakdown_list = filtered_invoices if len(filtered_invoices) > 0 else None
 
         result.valid_payments.append(
             ParsedPayment(
