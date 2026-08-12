@@ -36,12 +36,17 @@ const AdminScreen = (() => {
     const isAdmin = user && user.role === 'admin';
 
     const adminTab = el('adminTabBtn');
+    const auditTab = el('auditTabBtn');
     if (adminTab) {
       adminTab.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+    if (auditTab) {
+      auditTab.style.display = isAdmin ? 'inline-flex' : 'none';
     }
 
     return isAdmin;
   }
+
 
   async function loadPendingRequests() {
     const container = el('adminApprovalsContainer');

@@ -146,7 +146,9 @@
           <button class="tab active" data-view="generate"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkle" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>Generate File</button>
           <button class="tab" data-view="vendors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></svg>Vendor Book</button>
           <button class="tab" id="adminTabBtn" data-view="admin-approvals" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Admin Review</button>
+          <button class="tab" id="auditTabBtn" data-view="audit-logs" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Audit Trail</button>
           <button class="tab" data-view="history"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-credit-card" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>Payment History</button>
+
           <button class="tab" data-view="help"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-badge-question-mark" style="margin-right: var(--space-xs); vertical-align: text-bottom;"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>Help & Templates</button>
         </div>
 
@@ -793,6 +795,55 @@
           </div>
         </div>
 
+        <!-- System Audit Trail View (Restricted to Admin Users) -->
+        <div class="view" id="view-audit-logs">
+          <div class="card" id="auditAccessDeniedBox" style="display: none; border-left: 4px solid var(--color-danger); background: var(--color-danger-light);">
+            <div style="display: flex; gap: var(--space-md); align-items: center;">
+              <strong style="color: #991B1B; font-size: var(--text-md);">Access Denied</strong>
+              <span class="text-sm">Admin authorization is required to access the Security Audit Trail. Standard users cannot view security activity logs.</span>
+            </div>
+          </div>
+
+          <div id="auditContainer">
+            <!-- Toolbar & Filter Card -->
+            <div class="card" style="margin-bottom: var(--space-md);">
+              <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                <div>
+                  <div class="card-title" style="margin-bottom: 4px;">Security Audit Trail & Activity Logs</div>
+                  <div class="text-xs text-muted">Immutable audit logs of all batch uploads, NACHA file generations, bank approvals, profile updates, and email dispatches.</div>
+                </div>
+                <div style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
+                  <input type="text" class="form-input" id="auditActionFilter" placeholder="Filter by action type..." style="width: 200px; font-size: var(--text-xs);" />
+                  <button type="button" class="btn btn-primary btn-sm" id="refreshAuditLogsBtn">
+                    <span class="spinner" id="auditSpinner" style="display: none;"></span>
+                    <span>Refresh Audit Trail</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Audit Logs Table Card -->
+            <div class="card">
+              <div class="table-responsive">
+                <table class="table" style="width: 100%; border-collapse: collapse; font-size: var(--text-xs);">
+                  <thead>
+                    <tr style="background: var(--color-surface-alt, #f8fafc); border-bottom: 1px solid var(--border-color, #e2e8f0); text-align: left;">
+                      <th style="padding: 12px 16px;">Timestamp</th>
+                      <th style="padding: 12px 16px;">User</th>
+                      <th style="padding: 12px 16px;">Action Event</th>
+                      <th style="padding: 12px 16px;">Target Entity</th>
+                      <th style="padding: 12px 16px;">Details / Audit Payload</th>
+                    </tr>
+                  </thead>
+                  <tbody id="auditTableBody">
+                    <!-- Rendered by AuditScreen -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Payment History & Transaction Table View -->
         <div class="view" id="view-history">
           <!-- Filters Card -->
@@ -1143,7 +1194,9 @@
     <script src="js/generate.js"></script>
     <script src="js/vendors.js"></script>
     <script src="js/admin.js"></script>
+    <script src="js/audit.js"></script>
     <script src="js/history.js"></script>
+
     <script src="js/help.js"></script>
     <script>
       // Tab navigation

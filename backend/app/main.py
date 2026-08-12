@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.nacha import router as nacha_router
 from app.api.v1.payments import router as payments_router
@@ -40,6 +41,8 @@ app.include_router(payments_router, prefix=settings.API_V1_STR)
 app.include_router(vendors_router, prefix=settings.API_V1_STR)
 app.include_router(nacha_router, prefix=settings.API_V1_STR)
 app.include_router(remittances_router, prefix=settings.API_V1_STR)
+app.include_router(audit_router, prefix=settings.API_V1_STR)
+
 
 
 @app.get("/health", tags=["Health"])
