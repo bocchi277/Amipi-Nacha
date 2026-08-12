@@ -85,7 +85,13 @@ const API = (() => {
       if (body) opts.body = JSON.stringify(body);
     }
 
-    const res = await fetch(url, opts);
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (netErr) {
+      throw new Error('Backend server is waking up or initializing. Please retry in a few seconds.');
+    }
+
 
     // Parse response body
     let data;

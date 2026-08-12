@@ -56,11 +56,11 @@ const AuditScreen = (() => {
       loadedLogs = data || [];
       filterAndRenderLogs();
     } catch (err) {
-      console.warn('Failed to load audit logs:', err);
-      renderEmptyTable(err.message || 'Failed to retrieve security audit trail logs.');
+      renderEmptyTable(err.message || 'Audit trail service initializing. Click Refresh in a moment.');
     } finally {
       setLoading(false);
     }
+
   }
 
   function setLoading(loading) {
