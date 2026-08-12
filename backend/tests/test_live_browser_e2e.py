@@ -34,6 +34,7 @@ async def test_live_browser_e2e_full_workflow():
 
         print("--- [E2E STEP 3] Spreadsheet Upload & Invoice Breakdown Modal Test ---")
         await page.set_input_files("#fileInput", EXCEL_PATH)
+        await page.click("#uploadBtn")
         await page.wait_for_selector("#validPaymentsTableBody tr", timeout=25000)
 
         rows = await page.query_selector_all("#validPaymentsTableBody tr")
