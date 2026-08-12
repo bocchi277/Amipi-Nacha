@@ -23,6 +23,20 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
+
+@app.on_event("startup")
+async def on_startup():
+    """Auto-migrate production database columns on backend startup."""
+    from sqlalchemy import text
+    from app.db.session import async_engine
+    try:
+        async with async_engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;"))
+            await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
+    except Exception as err:
+        print(f"Startup DB migration warning: {err}")
+
+
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
