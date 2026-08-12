@@ -12,6 +12,7 @@ const GenerateScreen = (() => {
   let lastUploadResponse = null;
   let loadedVendors = [];
   let manualDraftEntries = [];
+  let currentRenderedBatch1Payments = [];
 
   let batch1Id = null;
   let batch2Id = null;
@@ -425,8 +426,6 @@ const GenerateScreen = (() => {
       tbody.appendChild(tr);
     });
   }
-
-  let currentRenderedBatch1Payments = [];
 
   function renderValidPaymentsTable(payments, tbodyId) {
     if (tbodyId === 'validPaymentsTableBody') {
