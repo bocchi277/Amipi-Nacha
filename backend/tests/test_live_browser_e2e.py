@@ -30,7 +30,7 @@ async def test_live_browser_e2e_full_workflow():
             await page.fill("#loginUsername", "admin")
             await page.fill("#loginPassword", "admin123")
             await page.click("#loginSubmitBtn")
-            await page.wait_for_selector("#mainApp", timeout=15000)
+            await page.wait_for_selector("#appShell", timeout=15000)
 
         print("--- [E2E STEP 3] Spreadsheet Upload & Invoice Breakdown Modal Test ---")
         await page.set_input_files("#fileInput", EXCEL_PATH)
