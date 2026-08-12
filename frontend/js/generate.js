@@ -426,7 +426,12 @@ const GenerateScreen = (() => {
     });
   }
 
+  let currentRenderedBatch1Payments = [];
+
   function renderValidPaymentsTable(payments, tbodyId) {
+    if (tbodyId === 'validPaymentsTableBody') {
+      currentRenderedBatch1Payments = payments || [];
+    }
     const tbody = el(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -475,9 +480,10 @@ const GenerateScreen = (() => {
   }
 
   function openBreakdownModal(idx) {
-    if (!lastUploadResponse || !lastUploadResponse.valid_payments || !lastUploadResponse.valid_payments[idx]) return;
-    const p = lastUploadResponse.valid_payments[idx];
-    if (!p.invoice_breakdown || p.invoice_breakdown.length === 0) return;
+    const p = (currentRenderedBatch1Payments && currentRenderedBatch1Payments[idx])
+      || (lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments[idx]);
+    if (!p || !p.invoice_breakdown || p.invoice_breakdown.length === 0) return;
+
 
     if (el('breakdownVendorTitle')) el('breakdownVendorTitle').textContent = `Invoice Breakdown — ${p.vendor_name}`;
     if (el('breakdownTotalSubtitle')) el('breakdownTotalSubtitle').textContent = `Total Payment Amount: $${parseFloat(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${p.invoice_breakdown.length} Invoices)`;
