@@ -50,11 +50,11 @@ async def list_audit_logs(
     if user_id:
         stmt = stmt.where(AuditLog.user_id == user_id)
     if start_date:
-        stmt = stmt.where(AuditLog.timestamp >= start_date)
+        stmt = stmt.where(AuditLog.created_at >= start_date)
     if end_date:
-        stmt = stmt.where(AuditLog.timestamp <= end_date)
+        stmt = stmt.where(AuditLog.created_at <= end_date)
 
-    stmt = stmt.order_by(AuditLog.timestamp.desc()).limit(limit)
+    stmt = stmt.order_by(AuditLog.created_at.desc()).limit(limit)
 
     res = await db.execute(stmt)
     logs = res.scalars().all()
@@ -75,7 +75,8 @@ async def list_audit_logs(
             entity_type=l.entity_type,
             entity_id=l.entity_id,
             details=l.details,
-            timestamp=l.timestamp.isoformat(),
+            timestamp=l.created_at.isoformat() if l.created_at else "",
         )
         for l in logs
     ]
+
