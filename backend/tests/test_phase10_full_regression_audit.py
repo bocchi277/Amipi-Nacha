@@ -48,14 +48,14 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
     db_session.add(p)
     await db_session.commit()
 
-    nacha_text, file_rec = await combine_batches_and_generate_nacha(
+    n_rec = await combine_batches_and_generate_nacha(
         db_session=db_session,
         batch_ids=[b.id],
         company_name="AMIPI INC",
         company_account="10029999",
     )
 
-    lines = nacha_text.splitlines()
+    lines = n_rec.raw_content.splitlines()
     assert len(lines) >= 5
     for idx, line in enumerate(lines):
         assert len(line) == 94, f"Line {idx+1} length {len(line)} != 94 chars: '{line}'"
@@ -77,9 +77,11 @@ async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession
     """Test 2: Verify next trace sequence queries latest NACHA file and auto-starts at last_trace + 1."""
     line1 = "101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       "
     line2 = "5220AMIPI INC                         021000021CCDREMITTANCE 260813260813   102100001000001"
-    line3 = "622021000021012345678900000150000INV-2026-X     ARTN DESIGN INC         0210000210004050"
+    line3 = "622" + "021000021" + "01234567890     " + "0000015000" + "INV-2026-X     " + "ARTN DESIGN INC       " + "00" + "0" + "02100002" + "0004050"
     line4 = "8220000001000210000200000000000000000000150000021000021                         02100001000001"
     line5 = "900000100000100000001000210000200000000000000000000150000                                       "
+
+    assert len(line3) == 94
 
     n_rec = NachaFileRecord(
         filename="chase_nacha_20260813.txt",
