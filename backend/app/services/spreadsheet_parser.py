@@ -40,6 +40,8 @@ class ParsedPayment:
     account_number: Optional[str] = None
     account_type: Optional[str] = "checking"
     notes: Optional[str] = None
+    invoice_breakdown: Optional[list[dict[str, Any]]] = None
+
 
 
 @dataclass
@@ -277,7 +279,13 @@ def _parse_qb_excel(
 
         if row_type.lower() in ("bill", "bill pmt -check", "check", "payment"):
             if row_num:
-                current_invoices.append(row_num)
+                sub_amt = float(abs(row_amt)) if row_amt is not None else None
+                sub_date = row_date.isoformat() if row_date else None
+                current_invoices.append({
+                    "invoice_number": row_num,
+                    "amount": sub_amt,
+                    "invoice_date": sub_date,
+                })
             if row_amt is not None and row_type.lower() == "bill":
                 current_amount += abs(row_amt)
 
@@ -295,7 +303,7 @@ def _process_qb_vendor_block(
     row_idx: int,
     vendor_name: str,
     amount: Decimal,
-    invoices: list[str],
+    invoices: list[Any],
     entry_date: Optional[date],
     vendor_map: dict[str, Vendor],
     default_effective_date: Optional[date],
@@ -336,7 +344,10 @@ def _process_qb_vendor_block(
     if row_errors:
         result.errors.append(ParsedRowError(row_number=row_idx, raw_data=raw_info, errors=row_errors))
     else:
-        id_ref = _compress_invoices(invoices)
+        inv_nums = [inv["invoice_number"] if isinstance(inv, dict) else str(inv) for inv in invoices]
+        id_ref = _compress_invoices(inv_nums)
+        breakdown_list = [inv for inv in invoices if isinstance(inv, dict)] if len(invoices) > 1 else None
+
         result.valid_payments.append(
             ParsedPayment(
                 vendor_name=v_obj.name,
@@ -346,7 +357,8 @@ def _process_qb_vendor_block(
                 vendor_id=v_obj.id,
                 routing_number=v_obj.routing_number,
                 account_number=v_obj.account_number,
-                    account_type=v_obj.account_type.value if hasattr(v_obj.account_type, "value") else str(v_obj.account_type),
+                account_type=v_obj.account_type.value if hasattr(v_obj.account_type, "value") else str(v_obj.account_type),
+                invoice_breakdown=breakdown_list,
             )
         )
 

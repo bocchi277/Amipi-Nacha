@@ -181,8 +181,25 @@ const GenerateScreen = (() => {
 
     if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', hideEditRowModal);
     if (cancelEditModalBtn) cancelEditModalBtn.addEventListener('click', hideEditRowModal);
-    if (editForm) editForm.addEventListener('submit', handleSaveEditPayment);
+    // Breakdown Modal Listeners
+    const closeBreakdownBtn = el('closeBreakdownModalBtn');
+    const cancelBreakdownBtn = el('cancelBreakdownModalBtn');
+    if (closeBreakdownBtn) closeBreakdownBtn.addEventListener('click', hideBreakdownModal);
+    if (cancelBreakdownBtn) cancelBreakdownBtn.addEventListener('click', hideBreakdownModal);
   }
+
+  return {
+    init,
+    handleUpload,
+    loadVendors,
+    removeManualEntry,
+    handleSubmitManualBatch,
+    handleGenerateNacha,
+    handleDownloadNacha,
+    openEditRowModal,
+    openBreakdownModal,
+  };
+
 
   function openEditRowModal(idx) {
     if (!lastUploadResponse || !lastUploadResponse.valid_payments || !lastUploadResponse.valid_payments[idx]) return;
@@ -432,12 +449,19 @@ const GenerateScreen = (() => {
         ? `<span class="badge badge-warning">Override Duplicate</span>`
         : `<span class="badge badge-success">Valid</span>`;
 
+      let breakdownBadge = '';
+      if (p.invoice_breakdown && p.invoice_breakdown.length > 1) {
+        breakdownBadge = `<button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openBreakdownModal(${idx})" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; vertical-align: middle;" title="View itemized price breakdown">
+          ${p.invoice_breakdown.length} Invoices 🔍
+        </button>`;
+      }
+
       tr.innerHTML = `
         <td class="font-mono">${idx + 1}</td>
         <td class="font-bold">${p.vendor_name}</td>
         <td class="font-mono">${p.routing_number || '—'}</td>
         <td class="font-mono">${p.account_number || '—'}</td>
-        <td class="font-mono">${amtFormatted}</td>
+        <td class="font-mono">${amtFormatted} ${breakdownBadge}</td>
         <td class="font-mono">${p.id_number || '—'}</td>
         <td>${dupBadge}</td>
         <td style="text-align: right;">
@@ -449,6 +473,41 @@ const GenerateScreen = (() => {
       tbody.appendChild(tr);
     });
   }
+
+  function openBreakdownModal(idx) {
+    if (!lastUploadResponse || !lastUploadResponse.valid_payments || !lastUploadResponse.valid_payments[idx]) return;
+    const p = lastUploadResponse.valid_payments[idx];
+    if (!p.invoice_breakdown || p.invoice_breakdown.length === 0) return;
+
+    el('breakdownVendorTitle').textContent = `Invoice Breakdown — ${p.vendor_name}`;
+    el('breakdownTotalSubtitle').textContent = `Total Payment Amount: $${parseFloat(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${p.invoice_breakdown.length} Invoices)`;
+
+    const tbody = el('breakdownTableBody');
+    tbody.innerHTML = '';
+
+    p.invoice_breakdown.forEach((item, i) => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
+      const amtStr = item.amount !== null && item.amount !== undefined
+        ? `$${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '—';
+
+      tr.innerHTML = `
+        <td style="padding: 8px 12px;" class="font-mono">${i + 1}</td>
+        <td style="padding: 8px 12px;" class="font-mono font-bold">${item.invoice_number || '—'}</td>
+        <td style="padding: 8px 12px;" class="font-mono text-muted">${item.invoice_date || '—'}</td>
+        <td style="padding: 8px 12px; text-align: right;" class="font-mono">${amtStr}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    el('invoiceBreakdownModal').classList.add('active');
+  }
+
+  function hideBreakdownModal() {
+    el('invoiceBreakdownModal').classList.remove('active');
+  }
+
 
 
   // ── Batch 2: Manual Payment Entry ─────────────────────────────
@@ -743,6 +802,7 @@ const GenerateScreen = (() => {
     handleGenerateNacha,
     handleDownloadNacha,
     openEditRowModal,
+    openBreakdownModal,
   };
 })();
 

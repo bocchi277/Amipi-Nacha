@@ -5,7 +5,8 @@ import os
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
+
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -28,6 +29,7 @@ class ParsedRowErrorSchema(BaseModel):
 
 
 class ParsedPaymentSchema(BaseModel):
+    payment_id: Optional[str] = None
     vendor_name: str
     amount: str
     id_number: str
@@ -36,6 +38,8 @@ class ParsedPaymentSchema(BaseModel):
     account_number: Optional[str] = None
     fingerprint: Optional[str] = None
     is_duplicate_override: bool = False
+    invoice_breakdown: Optional[list[dict[str, Any]]] = None
+
 
 
 class BatchSummarySchema(BaseModel):
@@ -186,14 +190,17 @@ async def upload_payment_spreadsheet(
             amount=vp.amount,
             id_number=vp.id_number,
             effective_date=vp.effective_date,
+            invoice_breakdown=getattr(vp, 'invoice_breakdown', None),
             status=PaymentStatus.PENDING,
             fingerprint=fp,
             is_duplicate_override=is_override,
             created_by_user_id=current_user.id if current_user else None,
         )
         db.add(payment)
+        await db.flush()
         created_payments.append(
             ParsedPaymentSchema(
+                payment_id=str(payment.id),
                 vendor_name=vp.vendor_name,
                 amount=str(vp.amount),
                 id_number=vp.id_number,
@@ -202,8 +209,10 @@ async def upload_payment_spreadsheet(
                 account_number=vp.account_number,
                 fingerprint=fp,
                 is_duplicate_override=is_override,
+                invoice_breakdown=getattr(vp, 'invoice_breakdown', None),
             )
         )
+
 
     # Audit Logging
     audit = AuditLog(
@@ -441,10 +450,12 @@ async def get_upload_batch(batch_id: str, db: AsyncSession = Depends(get_async_d
                 "status": p.status.value,
                 "fingerprint": p.fingerprint,
                 "is_duplicate_override": p.is_duplicate_override,
+                "invoice_breakdown": p.invoice_breakdown,
             }
             for p in payments
         ],
     }
+
 
 
 class UpdatePaymentRequest(BaseModel):
