@@ -29,6 +29,12 @@ from app.nacha.generator import generate_nacha_file
 from app.services.nacha_service import get_next_trace_sequence
 
 
+class ParsedPaymentData:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 @pytest.mark.asyncio
 async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
     """Test 1: Verify exact 94-character line length & Chase NACHA record structures."""
@@ -40,25 +46,6 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
     )
     db_session.add(v)
     await db_session.commit()
-
-    payments = [
-        ParsedPaymentData(
-            vendor_name=v.name,
-            amount=Decimal("1500.75"),
-            id_number="INV-2026-X",
-            effective_date=date(2026, 8, 15),
-            vendor_id=v.id,
-            routing_number=v.routing_number,
-            account_number=v.account_number,
-            account_type="checking",
-        )
-    ]
-
-    # Dummy class to mimic ParsedPayment
-    class ParsedPaymentData:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
 
     payments_data = [
         ParsedPaymentData(
@@ -102,7 +89,6 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession):
     """Test 2: Verify next trace sequence queries latest NACHA file and auto-starts at last_trace + 1."""
-    # Seed prior NACHA record with last trace sequence 4050
     n_rec = NachaFileRecord(
         filename="chase_nacha_20260813.txt",
         raw_content="101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       \n"
@@ -127,7 +113,6 @@ async def test_multi_invoice_breakdown_parsing_and_api(db_session: AsyncSession)
     db_session.add(v)
     await db_session.commit()
 
-    # Multi-invoice QuickBooks CSV content
     csv_content = (
         "Type,Num,Date,Name,Paid Amount\n"
         "Bill Pmt -Check,ACH,07/30/2026,BRINKS GLOBLE SERVICES,-3047.91\n"
@@ -187,7 +172,6 @@ async def test_payment_row_item_editing_endpoint(db_session: AsyncSession):
         assert data["id_number"] == "INV-NEW-REF"
         assert data["batch_total_amount"] == "250.50"
 
-        # Verify DB mutation
         await db_session.refresh(payment)
         assert payment.amount == Decimal("250.50")
         assert payment.id_number == "INV-NEW-REF"
@@ -201,7 +185,6 @@ async def test_vendor_profile_email_update_endpoint(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        # Register user for auth
         await client.post("/api/v1/auth/register", json={"email": "prof_user@amipi.com", "username": "prof_user", "password": "Password123!"})
         res_login = await client.post("/api/v1/auth/login", data={"username": "prof_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_login.json()['access_token']}"}
@@ -226,7 +209,6 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        # Standard user request
         await client.post("/api/v1/auth/register", json={"email": "std_user@amipi.com", "username": "std_user", "password": "Password123!"})
         res_std = await client.post("/api/v1/auth/login", data={"username": "std_user", "password": "Password123!"})
         std_headers = {"Authorization": f"Bearer {res_std.json()['access_token']}"}
@@ -239,11 +221,9 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
         assert res_req.status_code == 201
         req_id = res_req.json()["id"]
 
-        # Standard user try approve -> 403 Forbidden
         res_forbidden = await client.post(f"/api/v1/vendors/change-requests/{req_id}/approve", headers=std_headers)
         assert res_forbidden.status_code == 403
 
-        # Admin approve
         await client.post("/api/v1/auth/register", json={"email": "admin_flow@amipi.com", "username": "admin_flow", "password": "Password123!", "role": "admin"})
         res_admin = await client.post("/api/v1/auth/login", data={"username": "admin_flow", "password": "Password123!"})
         admin_headers = {"Authorization": f"Bearer {res_admin.json()['access_token']}"}
@@ -252,7 +232,6 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
         assert res_appr.status_code == 200
         assert res_appr.json()["status"] == "approved"
 
-        # Verify DB Vendor bank details mutated
         await db_session.refresh(v)
         assert v.routing_number == "026013356"
         assert v.account_number == "999888777"
@@ -262,6 +241,9 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
 async def test_remittance_advice_template_and_dispatch(db_session: AsyncSession):
     """Test 7: Verify remittance email template update, pending dispatch, and bulk resend."""
     v = Vendor(name="REMIT VENDOR", routing_number="021000021", account_number="123123")
+    db_session.add(v)
+    await db_session.flush()
+
     remit = VendorRemittance(
         vendor_id=v.id,
         vendor_name=v.name,
@@ -273,7 +255,7 @@ async def test_remittance_advice_template_and_dispatch(db_session: AsyncSession)
         body_text="Dear REMIT VENDOR, payment of $890.00 has been processed.",
         status=RemittanceStatus.PENDING,
     )
-    db_session.add_all([v, remit])
+    db_session.add(remit)
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -281,14 +263,12 @@ async def test_remittance_advice_template_and_dispatch(db_session: AsyncSession)
         res_login = await client.post("/api/v1/auth/login", data={"username": "remit_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_login.json()['access_token']}"}
 
-        # Dispatch pending remittances
         res_disp = await client.post("/api/v1/remittances/send", headers=headers)
         assert res_disp.status_code == 200
         dispatched = res_disp.json()
         assert len(dispatched) >= 1
         assert dispatched[0]["status"] == "sent"
 
-        # Bulk resend
         res_resend = await client.post(
             "/api/v1/remittances/bulk-resend",
             json={"remittance_ids": [str(remit.id)]},
@@ -311,7 +291,6 @@ async def test_admin_security_audit_trail_query(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        # Standard user -> 403 Forbidden
         await client.post("/api/v1/auth/register", json={"email": "std_audit@amipi.com", "username": "std_audit", "password": "Password123!"})
         res_std = await client.post("/api/v1/auth/login", data={"username": "std_audit", "password": "Password123!"})
         std_headers = {"Authorization": f"Bearer {res_std.json()['access_token']}"}
@@ -319,7 +298,6 @@ async def test_admin_security_audit_trail_query(db_session: AsyncSession):
         res_std_audit = await client.get("/api/v1/audit-logs", headers=std_headers)
         assert res_std_audit.status_code == 403
 
-        # Admin user -> 200 OK
         await client.post("/api/v1/auth/register", json={"email": "admin_audit@amipi.com", "username": "admin_audit", "password": "Password123!", "role": "admin"})
         res_admin = await client.post("/api/v1/auth/login", data={"username": "admin_audit", "password": "Password123!"})
         admin_headers = {"Authorization": f"Bearer {res_admin.json()['access_token']}"}
