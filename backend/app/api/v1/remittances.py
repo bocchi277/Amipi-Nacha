@@ -5,11 +5,12 @@ Provides filterable table query, pending dispatch, and bulk resend endpoints.
 """
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -34,6 +35,8 @@ class RemittanceResponseSchema(BaseModel):
     sent_at: Optional[str] = None
     resend_count: int
     created_at: str
+    invoice_breakdown: Optional[list[dict[str, Any]]] = None
+
 
 
 class BulkResendRequest(BaseModel):
@@ -105,7 +108,7 @@ async def list_remittances(
 
     Supports filtering by status, vendor_id, nacha_file_id, date range, and text search.
     """
-    stmt = select(VendorRemittance)
+    stmt = select(VendorRemittance).options(selectinload(VendorRemittance.payment))
 
     if remittance_status:
         stmt = stmt.where(VendorRemittance.status == remittance_status)
@@ -148,9 +151,11 @@ async def list_remittances(
             sent_at=r.sent_at.isoformat() if r.sent_at else None,
             resend_count=r.resend_count,
             created_at=r.created_at.isoformat(),
+            invoice_breakdown=r.payment.invoice_breakdown if (r.payment and r.payment.invoice_breakdown) else None,
         )
         for r in remittances
     ]
+
 
 
 @router.post("/send", response_model=list[RemittanceResponseSchema])

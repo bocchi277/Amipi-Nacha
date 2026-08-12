@@ -277,6 +277,13 @@ const HistoryScreen = (() => {
       const formattedEffDate = r.effective_date ? r.effective_date.substring(0, 10) : '—';
       const formattedSentDate = r.sent_at ? r.sent_at.substring(0, 16).replace('T', ' ') : '—';
 
+      let breakdownBadge = '';
+      if (r.invoice_breakdown && r.invoice_breakdown.length > 1) {
+        breakdownBadge = `<button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openHistoryBreakdownModal(${globalIdx})" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; vertical-align: middle;" title="View itemized price breakdown">
+          ${r.invoice_breakdown.length} Invoices 🔍
+        </button>`;
+      }
+
       tr.innerHTML = `
         <td style="text-align: center;">
           <input type="checkbox" class="history-row-cb" data-remittance-id="${r.id}" ${isChecked ? 'checked' : ''} onchange="HistoryScreen.toggleRowSelection('${r.id}', this.checked)" />
@@ -285,7 +292,7 @@ const HistoryScreen = (() => {
         <td class="font-mono text-xs">${formattedEffDate}</td>
         <td class="font-bold">${r.vendor_name}</td>
         <td class="font-mono text-xs text-muted">${r.recipient_email}</td>
-        <td class="font-mono font-bold">${amtFormatted}</td>
+        <td class="font-mono font-bold">${amtFormatted} ${breakdownBadge}</td>
         <td class="font-mono text-xs">${r.invoice_reference || '—'}</td>
         <td>${statusBadge}</td>
         <td class="font-mono text-xs text-muted">${formattedSentDate}</td>
@@ -293,6 +300,42 @@ const HistoryScreen = (() => {
 
       tbody.appendChild(tr);
     });
+  }
+
+  function openHistoryBreakdownModal(globalIdx) {
+    const r = filteredRemittances[globalIdx - 1];
+    if (!r || !r.invoice_breakdown || r.invoice_breakdown.length === 0) return;
+
+    if (el('breakdownVendorTitle')) el('breakdownVendorTitle').textContent = `Invoice Breakdown — ${r.vendor_name}`;
+    if (el('breakdownTotalSubtitle')) el('breakdownTotalSubtitle').textContent = `Total Payment Amount: $${parseFloat(r.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${r.invoice_breakdown.length} Invoices)`;
+
+    const tbody = el('breakdownTableBody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      r.invoice_breakdown.forEach((item, i) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
+        const amtStr = item.amount !== null && item.amount !== undefined
+          ? `$${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : '—';
+
+        tr.innerHTML = `
+          <td style="padding: 8px 12px;" class="font-mono">${i + 1}</td>
+          <td style="padding: 8px 12px;" class="font-mono font-bold">${item.invoice_number || '—'}</td>
+          <td style="padding: 8px 12px;" class="font-mono text-muted">${item.invoice_date || '—'}</td>
+          <td style="padding: 8px 12px; text-align: right;" class="font-mono">${amtStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const modal = el('invoiceBreakdownModal');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
+  }
+
 
     renderPaginationControls(filteredRemittances.length, totalPages);
     updateSelectAllCheckboxState();
@@ -496,6 +539,7 @@ const HistoryScreen = (() => {
     loadData,
     toggleRowSelection,
     insertPlaceholder,
+    openHistoryBreakdownModal,
   };
 })();
 

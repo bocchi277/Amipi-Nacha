@@ -479,34 +479,44 @@ const GenerateScreen = (() => {
     const p = lastUploadResponse.valid_payments[idx];
     if (!p.invoice_breakdown || p.invoice_breakdown.length === 0) return;
 
-    el('breakdownVendorTitle').textContent = `Invoice Breakdown — ${p.vendor_name}`;
-    el('breakdownTotalSubtitle').textContent = `Total Payment Amount: $${parseFloat(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${p.invoice_breakdown.length} Invoices)`;
+    if (el('breakdownVendorTitle')) el('breakdownVendorTitle').textContent = `Invoice Breakdown — ${p.vendor_name}`;
+    if (el('breakdownTotalSubtitle')) el('breakdownTotalSubtitle').textContent = `Total Payment Amount: $${parseFloat(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${p.invoice_breakdown.length} Invoices)`;
 
     const tbody = el('breakdownTableBody');
-    tbody.innerHTML = '';
+    if (tbody) {
+      tbody.innerHTML = '';
+      p.invoice_breakdown.forEach((item, i) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
+        const amtStr = item.amount !== null && item.amount !== undefined
+          ? `$${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : '—';
 
-    p.invoice_breakdown.forEach((item, i) => {
-      const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
-      const amtStr = item.amount !== null && item.amount !== undefined
-        ? `$${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '—';
+        tr.innerHTML = `
+          <td style="padding: 8px 12px;" class="font-mono">${i + 1}</td>
+          <td style="padding: 8px 12px;" class="font-mono font-bold">${item.invoice_number || '—'}</td>
+          <td style="padding: 8px 12px;" class="font-mono text-muted">${item.invoice_date || '—'}</td>
+          <td style="padding: 8px 12px; text-align: right;" class="font-mono">${amtStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
 
-      tr.innerHTML = `
-        <td style="padding: 8px 12px;" class="font-mono">${i + 1}</td>
-        <td style="padding: 8px 12px;" class="font-mono font-bold">${item.invoice_number || '—'}</td>
-        <td style="padding: 8px 12px;" class="font-mono text-muted">${item.invoice_date || '—'}</td>
-        <td style="padding: 8px 12px; text-align: right;" class="font-mono">${amtStr}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    el('invoiceBreakdownModal').classList.add('active');
+    const modal = el('invoiceBreakdownModal');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
   }
 
   function hideBreakdownModal() {
-    el('invoiceBreakdownModal').classList.remove('active');
+    const modal = el('invoiceBreakdownModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
+
 
 
 
