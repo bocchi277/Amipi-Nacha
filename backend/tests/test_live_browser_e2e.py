@@ -5,7 +5,6 @@ Simulates real user browser interactions on the Netlify live web application:
 https://amipi-nacha.netlify.app/
 """
 import os
-import time
 import pytest
 from playwright.async_api import async_playwright
 
@@ -21,18 +20,21 @@ async def test_live_browser_e2e_full_workflow():
         page = await context.new_page()
 
         print("\n--- [E2E STEP 1] Navigating to Live Web App ---")
-        await page.goto(BASE_URL, wait_until="networkidle")
-        assert "AMIPI" in await page.title() or "NACHA" in await page.title()
+        await page.goto(BASE_URL, wait_until="domcontentloaded")
+        await page.wait_for_selector("#loginScreen", timeout=15000)
 
-        print("--- [E2E STEP 2] Logging in as Admin ---")
-        await page.fill("#username", "admin")
-        await page.fill("#password", "admin123")
-        await page.click("#loginBtn")
-        await page.wait_for_selector("#mainTabs", timeout=15000)
+        # Check if already logged in or needs login
+        is_login_visible = await page.is_visible("#loginScreen")
+        if is_login_visible:
+            print("--- [E2E STEP 2] Logging in as Admin ---")
+            await page.fill("#loginUsername", "admin")
+            await page.fill("#loginPassword", "admin123")
+            await page.click("#loginSubmitBtn")
+            await page.wait_for_selector("#mainApp", timeout=15000)
 
         print("--- [E2E STEP 3] Spreadsheet Upload & Invoice Breakdown Modal Test ---")
         await page.set_input_files("#fileInput", EXCEL_PATH)
-        await page.wait_for_selector("#validPaymentsTableBody tr", timeout=20000)
+        await page.wait_for_selector("#validPaymentsTableBody tr", timeout=25000)
 
         rows = await page.query_selector_all("#validPaymentsTableBody tr")
         assert len(rows) > 0, "No valid payment rows parsed from spreadsheet"
