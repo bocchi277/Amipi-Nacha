@@ -33,11 +33,16 @@ TestingAsyncSessionLocal = async_sessionmaker(
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a fresh transactional DB session for each test."""
     async with TestingAsyncSessionLocal() as session:
+        # Ensure schema migrations for newly added columns
+        await session.execute(
+            text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;")
+        )
         # Truncate tables for test isolation
         await session.execute(
             text("TRUNCATE TABLE audit_logs, payments, nacha_files, vendors, upload_batches, users CASCADE;")
         )
         await session.commit()
+
 
         # Override FastAPI dependency to use test session
         async def _override_get_db():
