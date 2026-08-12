@@ -48,14 +48,14 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
     db_session.add(p)
     await db_session.commit()
 
-    nacha_text, file_rec = await combine_batches_and_generate_nacha(
+    n_rec, gen_res = await combine_batches_and_generate_nacha(
         db_session=db_session,
         batch_ids=[b.id],
         company_name="AMIPI INC",
         company_account="10029999",
     )
 
-    lines = nacha_text.splitlines()
+    lines = n_rec.raw_content.splitlines()
     assert len(lines) >= 5
     for idx, line in enumerate(lines):
         assert len(line) == 94, f"Line {idx+1} length {len(line)} != 94 chars: '{line}'"
