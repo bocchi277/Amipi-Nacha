@@ -623,6 +623,7 @@
                 <thead>
                   <tr style="background: var(--color-surface-alt, #f8fafc); border-bottom: 1px solid var(--border-color, #e2e8f0); text-align: left;">
                     <th style="padding: 12px 16px;">Payee / Vendor Name</th>
+                    <th style="padding: 12px 16px;">Vendor Email</th>
                     <th style="padding: 12px 16px;">Routing Number</th>
                     <th style="padding: 12px 16px;">Account Number</th>
                     <th style="padding: 12px 16px;">Account Type</th>
@@ -636,6 +637,7 @@
               </table>
             </div>
           </div>
+
 
 
           <!-- Bank Detail Change Request Modal -->
@@ -691,6 +693,44 @@
                   <button type="submit" class="btn btn-primary" id="submitReqBtn">
                     <span class="spinner" id="reqSpinner" style="display: none;"></span>
                     <span>Submit Change Request</span>
+                  </button>
+                </div>
+              </form>
+          <!-- Edit Vendor Profile Modal -->
+          <div class="modal-backdrop" id="editVendorProfileModal">
+            <div class="modal-card" style="max-width: 500px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                <h3 class="card-title" style="margin-bottom: 0;" id="editVendorModalTitle">Edit Vendor Profile</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeEditVendorModalBtn" style="padding: 2px 8px;">✕</button>
+              </div>
+
+              <div class="alert alert-error" id="editVendorError" style="display: none; margin-bottom: var(--space-md);"></div>
+              <div class="alert alert-success" id="editVendorSuccess" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <form id="editVendorProfileForm" onsubmit="event.preventDefault();">
+                <input type="hidden" id="editVendorId" />
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="editVendorName">Vendor Name</label>
+                  <input type="text" class="form-input" id="editVendorName" required maxlength="22" />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="editVendorEmail">Vendor Email Address (for Remittances)</label>
+                  <input type="email" class="form-input" id="editVendorEmail" placeholder="e.g. ap@vendorcompany.com" required />
+                  <span class="form-hint">Used automatically for sending payment confirmation remittance advice emails.</span>
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                  <label class="form-label" for="editVendorRef">Default Invoice Reference / ID</label>
+                  <input type="text" class="form-input font-mono" id="editVendorRef" placeholder="e.g. INV-DEFAULT" />
+                </div>
+
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                  <button type="button" class="btn btn-secondary" id="cancelEditVendorModalBtn">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="saveVendorProfileBtn">
+                    <span class="spinner" id="editVendorSpinner" style="display: none;"></span>
+                    <span>Save Vendor Profile</span>
                   </button>
                 </div>
               </form>

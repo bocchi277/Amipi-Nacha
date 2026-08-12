@@ -27,6 +27,13 @@ class CreateVendorSchema(BaseModel):
     account_number: str
     account_type: AccountType = AccountType.CHECKING
     default_id_number: Optional[str] = None
+    email: Optional[str] = None
+
+
+class UpdateVendorSchema(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    default_id_number: Optional[str] = None
 
 
 class VendorResponseSchema(BaseModel):
@@ -36,7 +43,9 @@ class VendorResponseSchema(BaseModel):
     account_number: str
     account_type: str
     default_id_number: Optional[str] = None
+    email: Optional[str] = None
     is_active: bool
+
 
 
 class CreateChangeRequestSchema(BaseModel):
@@ -142,10 +151,128 @@ async def list_vendors(db: AsyncSession = Depends(get_async_db)):
             account_number=v.account_number,
             account_type=_val(v.account_type),
             default_id_number=v.default_id_number,
+            email=v.email,
             is_active=v.is_active,
         )
         for v in vendors
     ]
+
+
+@router.post("", response_model=VendorResponseSchema, status_code=status.HTTP_201_CREATED)
+async def create_vendor(
+    payload: CreateVendorSchema,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new Vendor."""
+    rt = payload.routing_number.strip()
+    if len(rt) != 9 or not validate_routing_checksum(rt):
+        raise HTTPException(status_code=400, detail=f"Invalid 9-digit routing number '{rt}'.")
+
+    vendor = Vendor(
+        name=payload.name.strip()[:22],
+        routing_number=rt,
+        account_number=payload.account_number.strip(),
+        account_type=payload.account_type,
+        default_id_number=payload.default_id_number,
+        email=payload.email.strip() if payload.email and payload.email.strip() else None,
+    )
+    db.add(vendor)
+    await db.commit()
+    await db.refresh(vendor)
+
+    return VendorResponseSchema(
+        id=str(vendor.id),
+        name=vendor.name,
+        routing_number=vendor.routing_number,
+        account_number=vendor.account_number,
+        account_type=_val(vendor.account_type),
+        default_id_number=vendor.default_id_number,
+        email=vendor.email,
+        is_active=vendor.is_active,
+    )
+
+
+@router.get("/{vendor_id}", response_model=VendorResponseSchema)
+async def get_vendor(vendor_id: str, db: AsyncSession = Depends(get_async_db)):
+    """Fetch vendor by ID."""
+    try:
+        v_uuid = uuid.UUID(vendor_id.strip())
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid vendor_id format.")
+
+    res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
+    vendor = res.scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found.")
+
+    return VendorResponseSchema(
+        id=str(vendor.id),
+        name=vendor.name,
+        routing_number=vendor.routing_number,
+        account_number=vendor.account_number,
+        account_type=_val(vendor.account_type),
+        default_id_number=vendor.default_id_number,
+        email=vendor.email,
+        is_active=vendor.is_active,
+    )
+
+
+@router.put("/{vendor_id}", response_model=VendorResponseSchema)
+async def update_vendor(
+    vendor_id: str,
+    payload: UpdateVendorSchema,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update vendor details (email address, vendor name, default reference ID).
+    """
+    try:
+        v_uuid = uuid.UUID(vendor_id.strip())
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid vendor_id format.")
+
+    res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
+    vendor = res.scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found.")
+
+    if payload.name is not None and payload.name.strip():
+        vendor.name = payload.name.strip()[:22]
+    if payload.email is not None:
+        vendor.email = payload.email.strip() if payload.email.strip() else None
+    if payload.default_id_number is not None:
+        vendor.default_id_number = payload.default_id_number.strip() if payload.default_id_number.strip() else None
+
+    # Audit Log
+    audit_entry = AuditLog(
+        user_id=current_user.id,
+        action="VENDOR_PROFILE_UPDATED",
+        entity_type="Vendor",
+        entity_id=str(vendor.id),
+        details={
+            "vendor_name": vendor.name,
+            "updated_email": vendor.email,
+            "updated_by_user": current_user.username,
+        },
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+    await db.refresh(vendor)
+
+    return VendorResponseSchema(
+        id=str(vendor.id),
+        name=vendor.name,
+        routing_number=vendor.routing_number,
+        account_number=vendor.account_number,
+        account_type=_val(vendor.account_type),
+        default_id_number=vendor.default_id_number,
+        email=vendor.email,
+        is_active=vendor.is_active,
+    )
+
 
 
 

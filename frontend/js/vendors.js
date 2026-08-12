@@ -62,6 +62,14 @@ const VendorsScreen = (() => {
       form.addEventListener('submit', handleSubmitChangeRequest);
     }
 
+    const closeEditVendorBtn = el('closeEditVendorModalBtn');
+    const cancelEditVendorBtn = el('cancelEditVendorModalBtn');
+    const editVendorForm = el('editVendorProfileForm');
+
+    if (closeEditVendorBtn) closeEditVendorBtn.addEventListener('click', hideEditVendorModal);
+    if (cancelEditVendorBtn) cancelEditVendorBtn.addEventListener('click', hideEditVendorModal);
+    if (editVendorForm) editVendorForm.addEventListener('submit', handleSaveVendorProfile);
+
     // Auto-reload when switching to view-vendors tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -71,6 +79,93 @@ const VendorsScreen = (() => {
       });
     });
   }
+
+  function openEditVendorModal(vendorId) {
+    const vendor = loadedVendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+
+    el('editVendorId').value = vendor.id;
+    el('editVendorModalTitle').textContent = `Edit Vendor Profile — ${vendor.name}`;
+    el('editVendorName').value = vendor.name;
+    el('editVendorEmail').value = vendor.email || (`ap@${vendor.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`);
+    el('editVendorRef').value = vendor.default_id_number || '';
+
+    if (el('editVendorError')) el('editVendorError').style.display = 'none';
+    if (el('editVendorSuccess')) el('editVendorSuccess').style.display = 'none';
+
+    el('editVendorProfileModal').classList.add('active');
+  }
+
+  function hideEditVendorModal() {
+    el('editVendorProfileModal').classList.remove('active');
+  }
+
+  async function handleSaveVendorProfile(e) {
+    if (e) e.preventDefault();
+
+    const vendorId = el('editVendorId').value;
+    const name = el('editVendorName').value.trim();
+    const email = el('editVendorEmail').value.trim();
+    const ref = el('editVendorRef').value.trim();
+
+    const errBox = el('editVendorError');
+    const succBox = el('editVendorSuccess');
+    const spinner = el('editVendorSpinner');
+    const btn = el('saveVendorProfileBtn');
+
+    if (errBox) errBox.style.display = 'none';
+    if (succBox) succBox.style.display = 'none';
+
+    if (!name) {
+      errBox.textContent = 'Vendor Name is required.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    if (!email || !email.includes('@')) {
+      errBox.textContent = 'Please enter a valid vendor email address.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      await API.put(`/vendors/${vendorId}`, {
+        name,
+        email,
+        default_id_number: ref || undefined,
+      });
+
+      if (succBox) {
+        succBox.textContent = 'Vendor profile updated successfully! Email saved to database.';
+        succBox.style.display = 'block';
+      }
+
+      await loadData();
+
+      setTimeout(() => {
+        hideEditVendorModal();
+      }, 1500);
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to update vendor profile.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  return {
+    init,
+    loadData,
+    openChangeModal,
+    openEditVendorModal,
+  };
+
 
   function setViewMode(mode) {
     currentViewMode = mode;
@@ -232,14 +327,17 @@ const VendorsScreen = (() => {
             <span class="font-mono">${(v.account_type || 'checking').toUpperCase()}</span>
           </div>
           <div>
-            <span class="text-muted">Default Ref:</span><br/>
-            <span class="font-mono">${v.default_id_number || 'None'}</span>
+            <span class="text-muted">Email Address:</span><br/>
+            <span class="font-mono text-xs" style="color: var(--color-primary);">${v.email || 'ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com'}</span>
           </div>
         </div>
 
         ${pendingNoticeHtml}
 
-        <div style="margin-top: var(--space-md); display: flex; justify-content: flex-end;">
+        <div style="margin-top: var(--space-md); display: flex; gap: var(--space-xs); justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openEditVendorModal('${v.id}')">
+            Edit Profile
+          </button>
           <button type="button" class="btn btn-secondary btn-sm req-change-btn" onclick="VendorsScreen.openChangeModal('${v.id}')">
             Request Bank Change
           </button>
@@ -259,7 +357,7 @@ const VendorsScreen = (() => {
     if (vendors.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" style="padding: 24px; text-align: center; color: var(--color-text-muted);">
+          <td colspan="7" style="padding: 24px; text-align: center; color: var(--color-text-muted);">
             No vendors found in directory.
           </td>
         </tr>
@@ -282,21 +380,30 @@ const VendorsScreen = (() => {
         statusBadge += ' <span class="badge badge-warning" title="Bank change request pending admin approval">Pending Change</span>';
       }
 
+      const displayEmail = v.email || ('ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
+
       tr.innerHTML = `
         <td style="padding: 12px 16px;">
           <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
           <span class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</span>
         </td>
+        <td style="padding: 12px 16px;" class="font-mono text-xs">${displayEmail}</td>
         <td style="padding: 12px 16px;" class="font-mono">${v.routing_number}</td>
         <td style="padding: 12px 16px;" class="font-mono">${maskAccount(v.account_number)}</td>
         <td style="padding: 12px 16px;" class="font-mono">${(v.account_type || 'checking').toUpperCase()}</td>
         <td style="padding: 12px 16px;">${statusBadge}</td>
         <td style="padding: 12px 16px; text-align: right;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openChangeModal('${v.id}')">
-            Request Bank Change
-          </button>
+          <div style="display: flex; gap: var(--space-xs); justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openEditVendorModal('${v.id}')">
+              Edit Profile
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openChangeModal('${v.id}')">
+              Request Bank Change
+            </button>
+          </div>
         </td>
       `;
+
 
       tbody.appendChild(tr);
     });
@@ -400,6 +507,7 @@ const VendorsScreen = (() => {
     init,
     loadData,
     openChangeModal,
+    openEditVendorModal,
   };
 })();
 
