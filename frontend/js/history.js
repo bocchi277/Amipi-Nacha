@@ -300,6 +300,9 @@ const HistoryScreen = (() => {
 
       tbody.appendChild(tr);
     });
+
+    renderPaginationControls(filteredRemittances.length, totalPages);
+    updateSelectAllCheckboxState();
   }
 
   function openHistoryBreakdownModal(globalIdx) {
@@ -334,11 +337,6 @@ const HistoryScreen = (() => {
       modal.classList.add('active');
       modal.style.display = 'flex';
     }
-  }
-
-
-    renderPaginationControls(filteredRemittances.length, totalPages);
-    updateSelectAllCheckboxState();
   }
 
   function renderEmptyTable(message) {
