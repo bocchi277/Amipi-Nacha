@@ -48,14 +48,14 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
     db_session.add(p)
     await db_session.commit()
 
-    n_rec = await combine_batches_and_generate_nacha(
+    nacha_text, file_rec = await combine_batches_and_generate_nacha(
         db_session=db_session,
         batch_ids=[b.id],
         company_name="AMIPI INC",
         company_account="10029999",
     )
 
-    lines = n_rec.raw_content.splitlines()
+    lines = nacha_text.splitlines()
     assert len(lines) >= 5
     for idx, line in enumerate(lines):
         assert len(line) == 94, f"Line {idx+1} length {len(line)} != 94 chars: '{line}'"
@@ -75,6 +75,12 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession):
     """Test 2: Verify next trace sequence queries latest NACHA file and auto-starts at last_trace + 1."""
+    line1 = "101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       "
+    line2 = "5220AMIPI INC                         021000021CCDREMITTANCE 260813260813   102100001000001"
+    line3 = "622021000021012345678900000150000INV-2026-X     ARTN DESIGN INC         0210000210004050"
+    line4 = "8220000001000210000200000000000000000000150000021000021                         02100001000001"
+    line5 = "900000100000100000001000210000200000000000000000000150000                                       "
+
     n_rec = NachaFileRecord(
         filename="chase_nacha_20260813.txt",
         file_creation_date="260813",
@@ -84,11 +90,7 @@ async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession
         total_batch_count=1,
         total_block_count=1,
         entry_hash="021000021",
-        raw_content="101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       \n"
-                    "5220AMIPI INC                         021000021CCDREMITTANCE 260813260813   102100001000001\n"
-                    "622021000021012345678900000150000INV-2026-X     ARTN DESIGN INC         0210000210004050\n"
-                    "8220000001000210000200000000000000000000150000021000021                         02100001000001\n"
-                    "900000100000100000001000210000200000000000000000000150000                                       ",
+        raw_content=f"{line1}\n{line2}\n{line3}\n{line4}\n{line5}",
     )
     db_session.add(n_rec)
     await db_session.commit()
