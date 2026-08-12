@@ -173,7 +173,96 @@ const GenerateScreen = (() => {
     if (copyNachaBtn) {
       copyNachaBtn.addEventListener('click', handleCopyNachaText);
     }
+
+    // Edit Payment Row Modal Listeners
+    const closeEditModalBtn = el('closeEditPaymentModalBtn');
+    const cancelEditModalBtn = el('cancelEditPaymentModalBtn');
+    const editForm = el('editPaymentRowForm');
+
+    if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', hideEditRowModal);
+    if (cancelEditModalBtn) cancelEditModalBtn.addEventListener('click', hideEditRowModal);
+    if (editForm) editForm.addEventListener('submit', handleSaveEditPayment);
   }
+
+  function openEditRowModal(idx) {
+    if (!lastUploadResponse || !lastUploadResponse.valid_payments || !lastUploadResponse.valid_payments[idx]) return;
+    const p = lastUploadResponse.valid_payments[idx];
+
+    el('editPaymentIndex').value = idx;
+    el('editPaymentId').value = p.payment_id || '';
+    el('editPaymentVendorName').value = p.vendor_name || '';
+    el('editPaymentAmount').value = parseFloat(p.amount || 0).toFixed(2);
+    el('editPaymentRef').value = p.id_number || '';
+    if (el('editPaymentModalError')) el('editPaymentModalError').style.display = 'none';
+
+    el('editPaymentRowModal').classList.add('active');
+  }
+
+  function hideEditRowModal() {
+    el('editPaymentRowModal').classList.remove('active');
+  }
+
+  async function handleSaveEditPayment(e) {
+    if (e) e.preventDefault();
+
+    const idx = parseInt(el('editPaymentIndex').value, 10);
+    const paymentId = el('editPaymentId').value;
+    const newAmountVal = el('editPaymentAmount').value.trim();
+    const newRefVal = el('editPaymentRef').value.trim();
+    const errBox = el('editPaymentModalError');
+
+    if (errBox) errBox.style.display = 'none';
+
+    if (!newAmountVal || isNaN(newAmountVal) || parseFloat(newAmountVal) <= 0) {
+      if (errBox) {
+        errBox.textContent = 'Please enter a valid positive dollar amount.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    if (!newRefVal) {
+      if (errBox) {
+        errBox.textContent = 'Invoice / Reference Number is required.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    const p = lastUploadResponse.valid_payments[idx];
+    const newAmount = parseFloat(newAmountVal);
+
+    p.amount = newAmount.toFixed(2);
+    p.id_number = newRefVal;
+
+    // Recalculate summary total amount
+    let sumAmt = 0;
+    lastUploadResponse.valid_payments.forEach(vp => {
+      sumAmt += parseFloat(vp.amount || 0);
+    });
+    if (lastUploadResponse.summary) {
+      lastUploadResponse.summary.total_amount = sumAmt.toFixed(2);
+    }
+    el('statTotalAmount').textContent = `$${sumAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // Re-render table
+    renderValidPaymentsTable(lastUploadResponse.valid_payments, 'validPaymentsTableBody');
+
+    // Sync update to backend PostgreSQL if payment_id is present
+    if (paymentId) {
+      try {
+        await API.put(`/payments/${paymentId}`, {
+          amount: newAmount,
+          id_number: newRefVal,
+        });
+      } catch (err) {
+        console.warn('Failed to sync payment update to backend:', err);
+      }
+    }
+
+    hideEditRowModal();
+  }
+
 
   function setFile(file) {
     currentFile = file;
@@ -351,10 +440,16 @@ const GenerateScreen = (() => {
         <td class="font-mono">${amtFormatted}</td>
         <td class="font-mono">${p.id_number || '—'}</td>
         <td>${dupBadge}</td>
+        <td style="text-align: right;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openEditRowModal(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">
+            Edit
+          </button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
   }
+
 
   // ── Batch 2: Manual Payment Entry ─────────────────────────────
   function handleAddManualEntry() {
@@ -647,6 +742,7 @@ const GenerateScreen = (() => {
     handleSubmitManualBatch,
     handleGenerateNacha,
     handleDownloadNacha,
+    openEditRowModal,
   };
 })();
 

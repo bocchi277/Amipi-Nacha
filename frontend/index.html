@@ -298,6 +298,7 @@
                       <th>Amount ($)</th>
                       <th>Invoice / ID Ref</th>
                       <th>Status</th>
+                      <th style="text-align: right;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="validPaymentsTableBody"></tbody>
@@ -305,6 +306,46 @@
               </div>
             </div>
 
+
+            <!-- Edit Payment Row Modal -->
+            <div class="modal-backdrop" id="editPaymentRowModal">
+              <div class="modal-card" style="max-width: 480px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                  <h3 class="card-title" style="margin-bottom: 0;">Edit Payment Item Details</h3>
+                  <button type="button" class="btn btn-secondary btn-sm" id="closeEditPaymentModalBtn" style="padding: 2px 8px;">✕</button>
+                </div>
+
+                <div class="alert alert-error" id="editPaymentModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+                <form id="editPaymentRowForm" onsubmit="event.preventDefault();">
+                  <input type="hidden" id="editPaymentIndex" />
+                  <input type="hidden" id="editPaymentId" />
+
+                  <div class="form-group" style="margin-bottom: var(--space-md);">
+                    <label class="form-label" for="editPaymentVendorName">Payee / Vendor Name</label>
+                    <input type="text" class="form-input" id="editPaymentVendorName" disabled style="background: var(--color-surface-alt, #f8fafc);" />
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: var(--space-md);">
+                    <label class="form-label" for="editPaymentAmount">Payment Amount ($)</label>
+                    <input type="number" step="0.01" min="0.01" class="form-input font-mono" id="editPaymentAmount" required />
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: var(--space-lg);">
+                    <label class="form-label" for="editPaymentRef">Invoice / Reference Number</label>
+                    <input type="text" class="form-input font-mono" id="editPaymentRef" required />
+                  </div>
+
+                  <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" id="cancelEditPaymentModalBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveEditPaymentBtn">
+                      <span class="spinner" id="editPaymentSpinner" style="display: none;"></span>
+                      <span>Save Changes</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
 
           <!-- Manual Payment Entry Card (Batch 2) -->

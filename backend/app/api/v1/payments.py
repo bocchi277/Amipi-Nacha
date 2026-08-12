@@ -445,3 +445,60 @@ async def get_upload_batch(batch_id: str, db: AsyncSession = Depends(get_async_d
             for p in payments
         ],
     }
+
+
+class UpdatePaymentRequest(BaseModel):
+    amount: Optional[Decimal] = None
+    id_number: Optional[str] = None
+    effective_date: Optional[date] = None
+
+
+@router.put("/{payment_id}", status_code=status.HTTP_200_OK)
+async def update_payment_item(
+    payment_id: uuid.UUID,
+    payload: UpdatePaymentRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    """
+    Update details of a parsed payment item before NACHA file generation.
+    Recalculates batch total amount and updates payment fields in PostgreSQL.
+    """
+    res = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = res.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment record not found.")
+
+    if payload.amount is not None:
+        payment.amount = payload.amount
+    if payload.id_number is not None:
+        payment.id_number = payload.id_number.strip()
+    if payload.effective_date is not None:
+        payment.effective_date = payload.effective_date
+
+    # Recalculate fingerprint if needed
+    if payment.vendor_id:
+        payment.fingerprint = compute_payment_fingerprint(
+            payment.vendor_id, payment.amount, payment.id_number, payment.effective_date
+        )
+
+    # Recalculate batch total
+    res_all = await db.execute(select(Payment).where(Payment.batch_id == payment.batch_id))
+    all_batch_payments = res_all.scalars().all()
+    new_total = sum((p.amount for p in all_batch_payments), Decimal("0.00"))
+
+    res_b = await db.execute(select(UploadBatch).where(UploadBatch.id == payment.batch_id))
+    batch = res_b.scalar_one_or_none()
+    if batch:
+        batch.total_amount = new_total
+
+    await db.commit()
+
+    return {
+        "payment_id": str(payment.id),
+        "amount": str(payment.amount),
+        "id_number": payment.id_number,
+        "effective_date": payment.effective_date.isoformat(),
+        "batch_total_amount": str(new_total),
+    }
+
