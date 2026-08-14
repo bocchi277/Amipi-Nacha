@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
-from app.models import AuditLog, RemittanceStatus, User, VendorRemittance
+from app.models import AuditLog, NachaFileRecord, RemittanceStatus, User, VendorRemittance
 from app.services.email_service import bulk_resend_remittances, send_single_remittance
 
 router = APIRouter(prefix="/remittances", tags=["Vendor Remittances"])
@@ -35,6 +35,7 @@ class RemittanceResponseSchema(BaseModel):
     sent_at: Optional[str] = None
     resend_count: int
     created_at: str
+    created_by_username: Optional[str] = "admin"
     invoice_breakdown: Optional[list[dict[str, Any]]] = None
 
 
@@ -108,7 +109,10 @@ async def list_remittances(
 
     Supports filtering by status, vendor_id, nacha_file_id, date range, and text search.
     """
-    stmt = select(VendorRemittance).options(selectinload(VendorRemittance.payment))
+    stmt = select(VendorRemittance).options(
+        selectinload(VendorRemittance.payment),
+        selectinload(VendorRemittance.nacha_file).selectinload(NachaFileRecord.created_by_user)
+    )
 
     if remittance_status:
         stmt = stmt.where(VendorRemittance.status == remittance_status)
@@ -151,6 +155,7 @@ async def list_remittances(
             sent_at=r.sent_at.isoformat() if r.sent_at else None,
             resend_count=r.resend_count,
             created_at=r.created_at.isoformat(),
+            created_by_username=(r.nacha_file.created_by_user.username if (r.nacha_file and r.nacha_file.created_by_user) else "admin"),
             invoice_breakdown=r.payment.invoice_breakdown if (r.payment and r.payment.invoice_breakdown) else None,
         )
         for r in remittances
