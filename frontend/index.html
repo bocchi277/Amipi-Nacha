@@ -595,7 +595,11 @@
                   <span>Show Account Details</span>
                 </button>
 
-                <button type="button" class="btn btn-primary btn-sm" id="refreshVendorsBtn">
+                <button type="button" class="btn btn-primary btn-sm" id="openAddVendorModalBtn" style="font-size: var(--text-xs); display: flex; align-items: center; gap: 4px;">
+                  <span>+ Add Vendor</span>
+                </button>
+
+                <button type="button" class="btn btn-secondary btn-sm" id="refreshVendorsBtn">
                   <span>Refresh</span>
                 </button>
               </div>
@@ -1213,6 +1217,109 @@
 
         <div style="display: flex; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary" id="cancelBreakdownModalBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Vendor Tabbed Modal -->
+    <div class="modal-backdrop" id="addVendorModal">
+      <div class="modal-card" style="max-width: 580px; width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <h3 class="card-title" style="margin-bottom: 0;">Add Vendor(s) to Master Book</h3>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeAddVendorModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <!-- Sub-Tabs Navigation -->
+        <div style="display: flex; gap: var(--space-xs); border-bottom: 1px solid var(--border-color, #e2e8f0); margin-bottom: var(--space-md);">
+          <button type="button" class="btn btn-sm add-vendor-tab active" id="addSingleVendorTabBtn" style="border-radius: 4px 4px 0 0; padding: 6px 14px; font-weight: 600; font-size: var(--text-xs); border-bottom: 2px solid var(--color-primary);">
+            Single Vendor (Manual)
+          </button>
+          <button type="button" class="btn btn-sm add-vendor-tab" id="addBulkVendorTabBtn" style="border-radius: 4px 4px 0 0; padding: 6px 14px; font-weight: 600; font-size: var(--text-xs); color: var(--color-text-muted); background: transparent;">
+            Bulk Import (CSV / Excel)
+          </button>
+        </div>
+
+        <div class="alert alert-danger" id="addVendorError" style="display: none; margin-bottom: var(--space-md);"></div>
+        <div class="alert alert-success" id="addVendorSuccess" style="display: none; margin-bottom: var(--space-md);"></div>
+
+        <!-- Tab 1 Content: Single Vendor Form -->
+        <div id="addSingleVendorContent">
+          <form id="addVendorForm">
+            <div class="form-group" style="margin-bottom: var(--space-sm);">
+              <label class="form-label" for="addVendorName">Vendor Name <span style="color: var(--color-danger);">*</span></label>
+              <input type="text" class="form-input" id="addVendorName" placeholder="e.g. ACME SUPPLIES INC" maxlength="22" required />
+              <div class="text-xs text-muted" style="margin-top: 2px;">Max 22 characters for NACHA spec compliance.</div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: var(--space-sm);">
+              <div class="form-group">
+                <label class="form-label" for="addVendorRouting">Routing Number <span style="color: var(--color-danger);">*</span></label>
+                <input type="text" class="form-input" id="addVendorRouting" placeholder="9-digit ABA routing" maxlength="9" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="addVendorAccount">Account Number <span style="color: var(--color-danger);">*</span></label>
+                <input type="text" class="form-input" id="addVendorAccount" placeholder="Bank account number" required />
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: var(--space-md);">
+              <div class="form-group">
+                <label class="form-label" for="addVendorAccountType">Account Type</label>
+                <select class="form-select" id="addVendorAccountType">
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="addVendorRef">Default Invoice Ref / ID</label>
+                <input type="text" class="form-input" id="addVendorRef" placeholder="e.g. INV-1001" />
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+              <label class="form-label" for="addVendorEmail">Vendor Email (Remittance Advice)</label>
+              <input type="email" class="form-input" id="addVendorEmail" placeholder="ap@vendor.com" />
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+              <button type="button" class="btn btn-secondary btn-sm" id="cancelAddVendorModalBtn">Cancel</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="saveAddVendorBtn">
+                <span class="spinner" id="addVendorSpinner" style="display: none;"></span>
+                <span>Create Vendor</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Tab 2 Content: Bulk CSV/Excel Upload -->
+        <div id="addBulkVendorContent" style="display: none;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md); background: var(--color-surface-alt, #f8fafc); padding: 12px; border-radius: var(--radius-sm, 6px); border: 1px solid var(--border-color, #e2e8f0);">
+            <div>
+              <strong style="font-size: var(--text-xs);">Need a format template?</strong>
+              <div class="text-xs text-muted">Download our standardized CSV template with pre-formatted column headers.</div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="downloadVendorTemplateBtn" style="font-size: var(--text-xs); white-space: nowrap;">
+              ⬇ Download Template (.csv)
+            </button>
+          </div>
+
+          <form id="bulkVendorForm">
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+              <label class="form-label" for="bulkVendorFileInput">Select Vendor File (.csv, .xlsx)</label>
+              <input type="file" class="form-input" id="bulkVendorFileInput" accept=".csv, .xlsx, .xls" required />
+              <div class="text-xs text-muted" style="margin-top: 4px;">Supported columns: Vendor Name, Routing Number, Account Number, Account Type, Invoice Ref, Email.</div>
+            </div>
+
+            <div id="bulkVendorResultSummary" style="display: none; margin-bottom: var(--space-md);"></div>
+
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+              <button type="button" class="btn btn-secondary btn-sm" id="cancelBulkVendorModalBtn">Cancel</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="uploadBulkVendorBtn">
+                <span class="spinner" id="bulkVendorSpinner" style="display: none;"></span>
+                <span>Upload & Import Vendors</span>
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

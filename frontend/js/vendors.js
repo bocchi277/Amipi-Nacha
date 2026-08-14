@@ -70,6 +70,27 @@ const VendorsScreen = (() => {
     if (cancelEditVendorBtn) cancelEditVendorBtn.addEventListener('click', hideEditVendorModal);
     if (editVendorForm) editVendorForm.addEventListener('submit', handleSaveVendorProfile);
 
+    // Add Vendor Modal Event Listeners
+    const openAddVendorBtn = el('openAddVendorModalBtn');
+    const closeAddVendorBtn = el('closeAddVendorModalBtn');
+    const cancelAddVendorBtn = el('cancelAddVendorModalBtn');
+    const cancelBulkVendorBtn = el('cancelBulkVendorModalBtn');
+    const addSingleVendorTab = el('addSingleVendorTabBtn');
+    const addBulkVendorTab = el('addBulkVendorTabBtn');
+    const singleVendorForm = el('addVendorForm');
+    const bulkVendorForm = el('bulkVendorForm');
+    const downloadTemplateBtn = el('downloadVendorTemplateBtn');
+
+    if (openAddVendorBtn) openAddVendorBtn.addEventListener('click', openAddVendorModal);
+    if (closeAddVendorBtn) closeAddVendorBtn.addEventListener('click', hideAddVendorModal);
+    if (cancelAddVendorBtn) cancelAddVendorBtn.addEventListener('click', hideAddVendorModal);
+    if (cancelBulkVendorBtn) cancelBulkVendorBtn.addEventListener('click', hideAddVendorModal);
+    if (addSingleVendorTab) addSingleVendorTab.addEventListener('click', () => switchAddVendorTab('single'));
+    if (addBulkVendorTab) addBulkVendorTab.addEventListener('click', () => switchAddVendorTab('bulk'));
+    if (singleVendorForm) singleVendorForm.addEventListener('submit', handleCreateSingleVendorSubmit);
+    if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
+    if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
+
     // Auto-reload when switching to view-vendors tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -155,6 +176,187 @@ const VendorsScreen = (() => {
       }
     } finally {
       if (btn) btn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  // ── Add Vendor Modal & Workflow ──────────────────────────────
+  function switchAddVendorTab(tabType) {
+    const singleTab = el('addSingleVendorTabBtn');
+    const bulkTab = el('addBulkVendorTabBtn');
+    const singleContent = el('addSingleVendorContent');
+    const bulkContent = el('addBulkVendorContent');
+
+    if (el('addVendorError')) el('addVendorError').style.display = 'none';
+    if (el('addVendorSuccess')) el('addVendorSuccess').style.display = 'none';
+
+    if (tabType === 'single') {
+      if (singleTab) {
+        singleTab.style.borderBottom = '2px solid var(--color-primary)';
+        singleTab.style.color = 'var(--color-primary)';
+      }
+      if (bulkTab) {
+        bulkTab.style.borderBottom = 'none';
+        bulkTab.style.color = 'var(--color-text-muted)';
+      }
+      if (singleContent) singleContent.style.display = 'block';
+      if (bulkContent) bulkContent.style.display = 'none';
+    } else {
+      if (bulkTab) {
+        bulkTab.style.borderBottom = '2px solid var(--color-primary)';
+        bulkTab.style.color = 'var(--color-primary)';
+      }
+      if (singleTab) {
+        singleTab.style.borderBottom = 'none';
+        singleTab.style.color = 'var(--color-text-muted)';
+      }
+      if (bulkContent) bulkContent.style.display = 'block';
+      if (singleContent) singleContent.style.display = 'none';
+    }
+  }
+
+  function openAddVendorModal() {
+    if (el('addVendorError')) el('addVendorError').style.display = 'none';
+    if (el('addVendorSuccess')) el('addVendorSuccess').style.display = 'none';
+    if (el('bulkVendorResultSummary')) el('bulkVendorResultSummary').style.display = 'none';
+    if (el('addVendorForm')) el('addVendorForm').reset();
+    if (el('bulkVendorForm')) el('bulkVendorForm').reset();
+    switchAddVendorTab('single');
+    if (el('addVendorModal')) el('addVendorModal').classList.add('active');
+  }
+
+  function hideAddVendorModal() {
+    if (el('addVendorModal')) el('addVendorModal').classList.remove('active');
+  }
+
+  async function handleCreateSingleVendorSubmit(e) {
+    if (e) e.preventDefault();
+
+    const name = el('addVendorName') ? el('addVendorName').value.trim() : '';
+    const routing_number = el('addVendorRouting') ? el('addVendorRouting').value.trim() : '';
+    const account_number = el('addVendorAccount') ? el('addVendorAccount').value.trim() : '';
+    const account_type = el('addVendorAccountType') ? el('addVendorAccountType').value : 'checking';
+    const default_id_number = el('addVendorRef') ? (el('addVendorRef').value.trim() || null) : null;
+    const email = el('addVendorEmail') ? (el('addVendorEmail').value.trim() || null) : null;
+
+    const errBox = el('addVendorError');
+    const succBox = el('addVendorSuccess');
+    const spinner = el('addVendorSpinner');
+    const saveBtn = el('saveAddVendorBtn');
+
+    if (errBox) errBox.style.display = 'none';
+    if (succBox) succBox.style.display = 'none';
+
+    if (!name || !routing_number || !account_number) {
+      if (errBox) {
+        errBox.textContent = 'Vendor Name, Routing Number, and Account Number are required.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    if (saveBtn) saveBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      await API.post('/vendors', {
+        name,
+        routing_number,
+        account_number,
+        account_type,
+        default_id_number,
+        email,
+      });
+
+      hideAddVendorModal();
+      await loadData();
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to create vendor.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  function downloadVendorTemplate() {
+    const csvContent = 'Vendor Name,Routing Number,Account Number,Account Type,Invoice Ref,Email\nACME SUPPLIES INC,021000021,11391039,checking,INV-1001,ap@acme.com\nBELGIUM DIA LLC,021000322,483110589481,checking,INV-1002,ap@belgium.com\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'vendor_import_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  async function handleUploadBulkVendorsSubmit(e) {
+    if (e) e.preventDefault();
+
+    const fileInput = el('bulkVendorFileInput');
+    const errBox = el('addVendorError');
+    const succBox = el('addVendorSuccess');
+    const summaryBox = el('bulkVendorResultSummary');
+    const spinner = el('bulkVendorSpinner');
+    const uploadBtn = el('uploadBulkVendorBtn');
+
+    if (errBox) errBox.style.display = 'none';
+    if (succBox) succBox.style.display = 'none';
+    if (summaryBox) summaryBox.style.display = 'none';
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      if (errBox) {
+        errBox.textContent = 'Please select a CSV or Excel file to upload.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    if (uploadBtn) uploadBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      const result = await API.postForm('/vendors/bulk-upload', formData);
+
+      let summaryHtml = `<div class="card" style="padding: 12px; background: var(--color-surface-alt, #f8fafc); border-left: 4px solid var(--color-primary);">
+        <strong style="font-size: var(--text-xs); color: var(--color-primary);">Bulk Import Complete:</strong>
+        <ul style="margin: 4px 0 0 16px; padding: 0; font-size: var(--text-xs);">
+          <li><strong>${result.imported_count}</strong> new vendor(s) imported successfully</li>
+          <li><strong>${result.skipped_count}</strong> duplicate vendor(s) skipped</li>
+          <li><strong>${result.errors ? result.errors.length : 0}</strong> row error(s)</li>
+        </ul>
+      </div>`;
+
+      if (result.errors && result.errors.length > 0) {
+        summaryHtml += `<div class="alert alert-danger" style="margin-top: 8px; font-size: var(--text-xs); max-height: 120px; overflow-y: auto;">
+          <strong>Row Validation Warnings:</strong><br/>
+          ${result.errors.map(err => `Row ${err.row}: ${err.error}`).join('<br/>')}
+        </div>`;
+      }
+
+      if (summaryBox) {
+        summaryBox.innerHTML = summaryHtml;
+        summaryBox.style.display = 'block';
+      }
+
+      if (result.imported_count > 0) {
+        await loadData();
+      }
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to upload bulk vendors file.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (uploadBtn) uploadBtn.disabled = false;
       if (spinner) spinner.style.display = 'none';
     }
   }

@@ -4,11 +4,13 @@ Vendor Management & Bank Detail Change Approval Router.
 Standard users submit bank change requests; Admin users approve or reject.
 Approvals update actual vendor banking details and log to AuditLog.
 """
+import csv
+import io
 import json
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +30,13 @@ class CreateVendorSchema(BaseModel):
     account_type: AccountType = AccountType.CHECKING
     default_id_number: Optional[str] = None
     email: Optional[str] = None
+
+
+class BulkVendorUploadResponseSchema(BaseModel):
+    total_rows: int
+    imported_count: int
+    skipped_count: int
+    errors: list[dict[str, Any]]
 
 
 class UpdateVendorSchema(BaseModel):
@@ -190,6 +199,147 @@ async def create_vendor(
         default_id_number=vendor.default_id_number,
         email=vendor.email,
         is_active=vendor.is_active,
+    )
+
+
+@router.get("/sample-template")
+async def download_vendor_sample_template():
+    """Download a standardized CSV template for bulk vendor import."""
+    content = "Vendor Name,Routing Number,Account Number,Account Type,Invoice Ref,Email\nACME SUPPLIES INC,021000021,11391039,checking,INV-1001,ap@acme.com\nBELGIUM DIA LLC,021000322,483110589481,checking,INV-1002,ap@belgium.com\n"
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=vendor_import_template.csv"},
+    )
+
+
+@router.post("/bulk-upload", response_model=BulkVendorUploadResponseSchema, status_code=status.HTTP_201_CREATED)
+async def bulk_upload_vendors(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Bulk import vendors from a CSV or Excel (.xlsx) file.
+    Validates mandatory fields, ABA routing checksums, and filters out duplicates.
+    """
+    import openpyxl
+    filename = file.filename or ""
+    content_bytes = await file.read()
+    if not content_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    rows_to_process = []
+
+    if filename.lower().endswith((".xlsx", ".xls")):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                raise HTTPException(status_code=400, detail="Excel sheet contains no data.")
+
+            headers = [str(cell or "").strip().lower() for cell in rows[0]]
+            for row_idx, row in enumerate(rows[1:], start=2):
+                if not any(row):
+                    continue
+                row_dict = {}
+                for col_idx, h in enumerate(headers):
+                    val = str(row[col_idx] or "").strip() if col_idx < len(row) else ""
+                    row_dict[h] = val
+                rows_to_process.append((row_idx, row_dict))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+    else:
+        # CSV parsing
+        try:
+            text_data = content_bytes.decode("utf-8-sig", errors="ignore")
+            reader = csv.DictReader(io.StringIO(text_data))
+            for row_idx, row in enumerate(reader, start=2):
+                if not any(row.values()):
+                    continue
+                clean_row = {str(k or "").strip().lower(): str(v or "").strip() for k, v in row.items() if k}
+                rows_to_process.append((row_idx, clean_row))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+    if not rows_to_process:
+        raise HTTPException(status_code=400, detail="No vendor data rows found in uploaded file.")
+
+    # Fetch existing vendors for duplicate checking
+    res = await db.execute(select(Vendor))
+    existing_vendors = res.scalars().all()
+    existing_names = {v.name.strip().upper() for v in existing_vendors}
+    existing_routing_acct = {(v.routing_number.strip(), v.account_number.strip()) for v in existing_vendors}
+
+    imported_count = 0
+    skipped_count = 0
+    errors = []
+
+    for row_idx, r in rows_to_process:
+        name = r.get("vendor name") or r.get("name") or r.get("vendor_name") or r.get("vendor") or ""
+        routing = r.get("routing number") or r.get("routing_number") or r.get("routing") or r.get("aba") or ""
+        account = r.get("account number") or r.get("account_number") or r.get("account") or r.get("acct") or ""
+        acct_type_str = r.get("account type") or r.get("account_type") or r.get("type") or "checking"
+        default_ref = r.get("invoice ref") or r.get("invoice_ref") or r.get("default_id_number") or r.get("ref") or None
+        email = r.get("email") or r.get("vendor email") or r.get("vendor_email") or None
+
+        name_clean = name.strip()[:22]
+        routing_clean = "".join(filter(str.isdigit, routing.strip()))
+        account_clean = account.strip()
+
+        if not name_clean:
+            errors.append({"row": row_idx, "error": "Vendor name is required."})
+            continue
+
+        if not routing_clean or len(routing_clean) != 9 or not validate_routing_checksum(routing_clean):
+            errors.append({"row": row_idx, "error": f"Invalid 9-digit ABA routing number '{routing}' for '{name_clean}'."})
+            continue
+
+        if not account_clean:
+            errors.append({"row": row_idx, "error": f"Account number is required for '{name_clean}'."})
+            continue
+
+        if name_clean.upper() in existing_names or (routing_clean, account_clean) in existing_routing_acct:
+            skipped_count += 1
+            continue
+
+        acct_type = AccountType.SAVINGS if "sav" in acct_type_str.lower() else AccountType.CHECKING
+
+        vendor = Vendor(
+            name=name_clean,
+            routing_number=routing_clean,
+            account_number=account_clean,
+            account_type=acct_type,
+            default_id_number=default_ref.strip() if default_ref and default_ref.strip() else None,
+            email=email.strip() if email and email.strip() else None,
+            is_active=True,
+        )
+        db.add(vendor)
+        existing_names.add(name_clean.upper())
+        existing_routing_acct.add((routing_clean, account_clean))
+        imported_count += 1
+
+    if imported_count > 0:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="BULK_IMPORT_VENDORS",
+            entity_type="Vendor",
+            details={
+                "imported_count": imported_count,
+                "skipped_count": skipped_count,
+                "error_count": len(errors),
+                "filename": filename,
+            },
+        )
+        db.add(audit)
+        await db.commit()
+
+    return BulkVendorUploadResponseSchema(
+        total_rows=len(rows_to_process),
+        imported_count=imported_count,
+        skipped_count=skipped_count,
+        errors=errors,
     )
 
 
