@@ -274,7 +274,9 @@ def _parse_qb_excel(
 
         if row_name:
             current_vendor = row_name
-        if row_date:
+        if row_type.lower() in ("bill pmt -check", "check", "payment", "bill pmt", "ach") and row_date:
+            current_date = row_date
+        elif current_date is None and row_date:
             current_date = row_date
 
         if row_type.lower() in ("bill", "bill pmt -check", "check", "payment"):
