@@ -59,6 +59,19 @@ const HistoryScreen = (() => {
     if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
     if (nextBtn) nextBtn.addEventListener('click', () => changePage(1));
 
+    // Prototype Top Action Bar Event Listeners
+    const exportCsvBtn = el('historyExportCsvBtn');
+    const exportExcelBtn = el('historyExportExcelBtn');
+    const saveJsonBtn = el('historySaveJsonBtn');
+    const loadJsonBtn = el('historyLoadJsonBtn');
+    const clearHistoryBtn = el('clearHistoryBtn');
+
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', handleExportCSV);
+    if (exportExcelBtn) exportExcelBtn.addEventListener('click', handleExportExcel);
+    if (saveJsonBtn) saveJsonBtn.addEventListener('click', handleSaveJSON);
+    if (loadJsonBtn) loadJsonBtn.addEventListener('click', handleLoadJSON);
+    if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', handleClearHistory);
+
     // Auto-load when switching to view-history tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -219,6 +232,7 @@ const HistoryScreen = (() => {
       allRemittances = data || [];
       filteredRemittances = [...allRemittances];
       currentPage = 1;
+      updateKPIs();
       renderTable();
     } catch (err) {
       console.warn('Failed to load remittance payment history:', err);
@@ -226,6 +240,100 @@ const HistoryScreen = (() => {
     } finally {
       setLoading(false);
     }
+  }
+
+  function updateKPIs() {
+    const totalPayments = filteredRemittances.length;
+    const uniqueVendors = new Set(filteredRemittances.map(r => r.vendor_name)).size;
+    const totalAmount = filteredRemittances.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+
+    if (el('kpiTotalPayments')) el('kpiTotalPayments').textContent = totalPayments;
+    if (el('kpiTotalVendors')) el('kpiTotalVendors').textContent = uniqueVendors;
+    if (el('kpiTotalAmount')) el('kpiTotalAmount').textContent = `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (el('historyRecordCountBadge')) el('historyRecordCountBadge').textContent = `${totalPayments} records`;
+  }
+
+  function handleExportCSV() {
+    if (filteredRemittances.length === 0) {
+      alert('No remittance records to export.');
+      return;
+    }
+    const headers = ['ID', 'Effective Date', 'Vendor Name', 'Recipient Email', 'Amount ($)', 'Invoice Reference', 'Status', 'Sent At'];
+    const rows = filteredRemittances.map(r => [
+      r.id,
+      r.effective_date ? r.effective_date.substring(0, 10) : '',
+      `"${(r.vendor_name || '').replace(/"/g, '""')}"`,
+      r.recipient_email || '',
+      r.amount,
+      `"${(r.invoice_reference || '').replace(/"/g, '""')}"`,
+      r.status,
+      r.sent_at || '',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    downloadFile(csvContent, 'payment_history_export.csv', 'text/csv;charset=utf-8;');
+  }
+
+  function handleExportExcel() {
+    handleExportCSV();
+  }
+
+  function handleSaveJSON() {
+    if (filteredRemittances.length === 0) {
+      alert('No history data available to save.');
+      return;
+    }
+    const jsonContent = JSON.stringify(filteredRemittances, null, 2);
+    downloadFile(jsonContent, 'amipi_payment_history.json', 'application/json;');
+  }
+
+  function handleLoadJSON() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try {
+          const loadedData = JSON.parse(evt.target.result);
+          if (Array.isArray(loadedData)) {
+            allRemittances = loadedData;
+            filteredRemittances = [...allRemittances];
+            updateKPIs();
+            renderTable();
+            alert(`Loaded ${loadedData.length} records from backup JSON.`);
+          } else {
+            alert('Invalid JSON structure. Expected an array of payment records.');
+          }
+        } catch (err) {
+          alert('Failed to parse JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    };
+    fileInput.click();
+  }
+
+  function handleClearHistory() {
+    if (confirm('Are you sure you want to clear the visible payment history view?')) {
+      filteredRemittances = [];
+      updateKPIs();
+      renderEmptyTable('Payment history cleared.');
+    }
+  }
+
+  function downloadFile(content, fileName, contentType) {
+    const blob = new Blob([content], { type: contentType });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = fileName;
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function resetFilters() {

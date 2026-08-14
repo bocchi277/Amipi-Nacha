@@ -871,46 +871,101 @@
 
         <!-- Payment History & Transaction Table View -->
         <div class="view" id="view-history">
-          <!-- Filters Card -->
-          <div class="card" style="margin-bottom: var(--space-md);">
-            <div class="card-title" style="margin-bottom: var(--space-md);">Transaction Table & Remittances</div>
 
-            <div class="grid-4" style="margin-bottom: var(--space-md);">
-              <div class="form-group">
-                <label class="form-label" for="historyVendorFilter">Vendor</label>
-                <select class="form-select" id="historyVendorFilter">
-                  <option value="">All Vendors</option>
+          <!-- Header Toolbar Card (Prototype Layout with Modern Design System) -->
+          <div class="card" style="margin-bottom: var(--space-md); padding: var(--space-lg);">
+            <!-- Top Bar: Title, Badge, and Action Buttons -->
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md); margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-color, #e2e8f0); padding-bottom: var(--space-md);">
+              <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                <span style="font-size: var(--text-lg);">📋</span>
+                <h3 class="card-title" style="margin-bottom: 0; text-transform: uppercase; font-size: var(--text-md); letter-spacing: 0.5px; color: var(--color-text);">
+                  Payment History — Last 12 Months
+                </h3>
+                <span class="badge badge-primary" id="historyRecordCountBadge" style="background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; padding: 4px 10px; font-weight: 600;">
+                  0 records
+                </span>
+              </div>
+
+              <!-- Top Action Bar Buttons -->
+              <div style="display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="historyExportCsvBtn" style="background: white; border: 1px solid var(--border-color, #cbd5e1); color: var(--color-text); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                  <span>⬆ Export CSV</span>
+                </button>
+
+                <button type="button" class="btn btn-secondary btn-sm" id="historyExportExcelBtn" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                  <span>⬇ Export Excel</span>
+                </button>
+
+                <button type="button" class="btn btn-success btn-sm" id="historySaveJsonBtn" style="background: #10B981; color: white; border: none; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                  <span>💾 Save JSON</span>
+                </button>
+
+                <button type="button" class="btn btn-secondary btn-sm" id="historyLoadJsonBtn" style="background: #FFFBEB; border: 1px solid #FDE68A; color: #D97706; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                  <span>📁 Load JSON</span>
+                </button>
+
+                <button type="button" class="btn btn-secondary btn-sm" id="openEmailTemplateModalBtn" style="background: #F3E8FF; border: 1px solid #E9D5FF; color: #6B21A8; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Customize Remittance Email Template">
+                  <span>✉ Email Template</span>
+                </button>
+
+                <button type="button" class="btn btn-danger btn-sm" id="clearHistoryBtn" style="background: white; border: 1px solid #FCA5A5; color: #DC2626; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                  <span>🗑 Clear</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- KPI Metric Summary Cards -->
+            <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 140px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: var(--radius-md, 8px); padding: 14px 18px;">
+                <div style="font-size: var(--text-2xl); font-weight: 700; color: #3730A3;" id="kpiTotalPayments">0</div>
+                <div style="font-size: var(--text-xs); color: #4338CA; font-weight: 500; margin-top: 2px;">Payments</div>
+              </div>
+
+              <div style="flex: 1; min-width: 140px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: var(--radius-md, 8px); padding: 14px 18px;">
+                <div style="font-size: var(--text-2xl); font-weight: 700; color: #3730A3;" id="kpiTotalVendors">0</div>
+                <div style="font-size: var(--text-xs); color: #4338CA; font-weight: 500; margin-top: 2px;">Vendors</div>
+              </div>
+
+              <div style="flex: 1; min-width: 180px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: var(--radius-md, 8px); padding: 14px 18px;">
+                <div style="font-size: var(--text-2xl); font-weight: 700; color: #3730A3;" id="kpiTotalAmount">$0.00</div>
+                <div style="font-size: var(--text-xs); color: #4338CA; font-weight: 500; margin-top: 2px;">Total paid</div>
+              </div>
+            </div>
+
+            <!-- Filter Inputs Row (Sleek Inline Prototype Style) -->
+            <div style="display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 140px;">
+                <select class="form-select" id="historyVendorFilter" style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;">
+                  <option value="">Vendor name...</option>
                 </select>
               </div>
 
-              <div class="form-group">
-                <label class="form-label" for="historyStatusFilter">Remittance Status</label>
-                <select class="form-select" id="historyStatusFilter">
-                  <option value="">All Statuses</option>
+              <div style="width: 120px;">
+                <input type="date" class="form-input" id="historyStartDate" title="Start Date" style="font-size: var(--text-xs); padding: 6px 8px; border-radius: 6px;" />
+              </div>
+
+              <div style="width: 120px;">
+                <input type="date" class="form-input" id="historyEndDate" title="End Date" style="font-size: var(--text-xs); padding: 6px 8px; border-radius: 6px;" />
+              </div>
+
+              <div style="flex: 1; min-width: 130px;">
+                <input type="text" class="form-input" id="historySearchInput" placeholder="Invoice / Ref..." style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;" />
+              </div>
+
+              <div style="width: 120px;">
+                <select class="form-select" id="historyStatusFilter" style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;">
+                  <option value="">All statuses</option>
                   <option value="pending">Pending</option>
                   <option value="sent">Sent</option>
                 </select>
               </div>
 
-              <div class="form-group">
-                <label class="form-label" for="historyStartDate">Start Date</label>
-                <input type="date" class="form-input" id="historyStartDate" />
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="historyEndDate">End Date</label>
-                <input type="date" class="form-input" id="historyEndDate" />
-              </div>
-            </div>
-
-            <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
-              <div style="flex: 1; min-width: 240px;">
-                <input type="text" class="form-input" id="historySearchInput" placeholder="Search vendor name, email, or invoice ref..." />
-              </div>
-              <div style="display: flex; gap: var(--space-sm);">
-                <button type="button" class="btn btn-secondary btn-sm" id="resetHistoryFiltersBtn">Reset Filters</button>
-                <button type="button" class="btn btn-primary btn-sm" id="applyHistoryFiltersBtn">
-                  <span>Apply Filters</span>
+              <div style="display: flex; gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="resetHistoryFiltersBtn" style="font-size: var(--text-xs); padding: 6px 12px; border-radius: 6px; white-space: nowrap;">
+                  ✕ Clear filters
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" id="applyHistoryFiltersBtn" style="font-size: var(--text-xs); padding: 6px 14px; border-radius: 6px; white-space: nowrap;">
+                  <span>Apply</span>
                 </button>
               </div>
             </div>
