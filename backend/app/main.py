@@ -48,7 +48,7 @@ app.add_middleware(
         "*",
     ],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
@@ -56,7 +56,15 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
-    """Ensure CORS headers are present on all responses including 404/500 errors."""
+    """Ensure CORS headers are present on all responses including 404/500 errors and OPTIONS preflight."""
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response
+        res = Response(status_code=200)
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD, *"
+        res.headers["Access-Control-Allow-Headers"] = "*"
+        return res
+
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -67,7 +75,7 @@ async def add_cors_headers(request, call_next):
         )
 
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD, *"
     response.headers["Access-Control-Allow-Headers"] = "*"
     return response
 
