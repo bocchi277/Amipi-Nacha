@@ -13,9 +13,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
-from app.models import RemittanceStatus, User, VendorRemittance
+from app.models import AuditLog, RemittanceStatus, User, VendorRemittance
 from app.services.email_service import bulk_resend_remittances, send_single_remittance
 
 router = APIRouter(prefix="/remittances", tags=["Vendor Remittances"])
@@ -229,4 +229,95 @@ async def bulk_resend_remittance_emails(
         success_count=success_cnt,
         failed_count=fail_cnt,
         message=f"Successfully resent {success_cnt} of {len(payload.remittance_ids)} remittance email(s).",
+    )
+
+
+class BulkDeleteRemittancesRequest(BaseModel):
+    remittance_ids: list[uuid.UUID]
+
+
+class BulkDeleteRemittancesResponseSchema(BaseModel):
+    deleted_count: int
+    message: str
+
+
+@router.delete("/{remittance_id}")
+async def delete_single_remittance(
+    remittance_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Delete a single remittance transaction record from the database (Admin only).
+    """
+    stmt = select(VendorRemittance).where(VendorRemittance.id == remittance_id)
+    res = await db.execute(stmt)
+    remittance = res.scalar_one_or_none()
+    if not remittance:
+        raise HTTPException(status_code=404, detail="Remittance record not found")
+
+    vendor_name = remittance.vendor_name
+    await db.delete(remittance)
+
+    audit_entry = AuditLog(
+        user_id=admin_user.id,
+        action="DELETE_REMITTANCE",
+        entity_type="VendorRemittance",
+        entity_id=str(remittance_id),
+        details={
+            "remittance_id": str(remittance_id),
+            "vendor_name": vendor_name,
+            "admin_user_id": str(admin_user.id),
+            "username": admin_user.username,
+        },
+    )
+    db.add(audit_entry)
+    await db.commit()
+
+    return {"message": f"Remittance record for {vendor_name} deleted successfully"}
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteRemittancesResponseSchema)
+async def bulk_delete_remittances(
+    payload: BulkDeleteRemittancesRequest,
+    db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Bulk delete remittance transaction records from the database (Admin only).
+    """
+    if not payload.remittance_ids:
+        raise HTTPException(status_code=400, detail="At least one remittance_id must be provided.")
+
+    stmt = select(VendorRemittance).where(VendorRemittance.id.in_(payload.remittance_ids))
+    res = await db.execute(stmt)
+    remittances = res.scalars().all()
+
+    deleted_count = len(remittances)
+    if deleted_count == 0:
+        return BulkDeleteRemittancesResponseSchema(
+            deleted_count=0,
+            message="No matching remittance records found to delete."
+        )
+
+    for r in remittances:
+        await db.delete(r)
+
+    audit_entry = AuditLog(
+        user_id=admin_user.id,
+        action="BULK_DELETE_REMITTANCES",
+        entity_type="VendorRemittance",
+        details={
+            "deleted_count": deleted_count,
+            "remittance_ids": [str(rid) for rid in payload.remittance_ids],
+            "admin_user_id": str(admin_user.id),
+            "username": admin_user.username,
+        },
+    )
+    db.add(audit_entry)
+    await db.commit()
+
+    return BulkDeleteRemittancesResponseSchema(
+        deleted_count=deleted_count,
+        message=f"Successfully deleted {deleted_count} remittance transaction record(s)."
     )

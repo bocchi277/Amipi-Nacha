@@ -8,6 +8,7 @@ Verifies:
 4. Bulk resending on a filtered selection of remittance IDs with resend_count increment & AuditLog creation.
 """
 import uuid
+from datetime import date
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -186,3 +187,68 @@ async def test_bulk_resend_on_filtered_selection(db_session):
     res_audit = await db_session.execute(select(AuditLog).where(AuditLog.action == "BULK_REMITTANCE_RESEND"))
     audit = res_audit.scalar_one()
     assert audit.details["success_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_single_and_bulk_remittance_deletion(db_session):
+    """Test single and bulk deletion of remittance transaction records by Admin."""
+    admin = User(username="remit_admin", email="remitadmin@test.com", password_hash="hash", role="admin")
+    std_user = User(username="remit_std", email="remitstd@test.com", password_hash="hash", role="user")
+    v = Vendor(name="DEL REMIT VENDOR", routing_number="021000021", account_number="111222")
+    db_session.add_all([admin, std_user, v])
+    await db_session.commit()
+    await db_session.refresh(v)
+
+    r1 = VendorRemittance(
+        vendor_id=v.id,
+        vendor_name=v.name,
+        recipient_email="del1@test.com",
+        amount="500.00",
+        effective_date=date(2026, 8, 10),
+        subject="Payment Advice",
+        body_text="Remittance body",
+        status=RemittanceStatus.PENDING,
+    )
+    r2 = VendorRemittance(
+        vendor_id=v.id,
+        vendor_name=v.name,
+        recipient_email="del2@test.com",
+        amount="750.00",
+        effective_date=date(2026, 8, 10),
+        subject="Payment Advice",
+        body_text="Remittance body",
+        status=RemittanceStatus.SENT,
+    )
+    db_session.add_all([r1, r2])
+    await db_session.commit()
+    await db_session.refresh(r1)
+    await db_session.refresh(r2)
+
+    from app.core.security import create_access_token
+    admin_token = create_access_token(data={"sub": str(admin.id)})
+    std_token = create_access_token(data={"sub": str(std_user.id)})
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        # Standard user forbidden check
+        std_res = await client.delete(
+            f"/api/v1/remittances/{r1.id}",
+            headers={"Authorization": f"Bearer {std_token}"}
+        )
+        assert std_res.status_code == 403
+
+        # Single delete by admin
+        admin_res = await client.delete(
+            f"/api/v1/remittances/{r1.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert admin_res.status_code == 200
+
+        # Bulk delete by admin
+        bulk_res = await client.post(
+            "/api/v1/remittances/bulk-delete",
+            json={"remittance_ids": [str(r2.id)]},
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert bulk_res.status_code == 200
+        assert bulk_res.json()["deleted_count"] == 1
+

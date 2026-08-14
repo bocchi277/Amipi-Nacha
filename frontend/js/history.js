@@ -16,6 +16,13 @@ const HistoryScreen = (() => {
   let currentPage = 1;
   const pageSize = 10;
 
+  let historyToDelete = [];
+
+  function isAdmin() {
+    const user = API.getUser();
+    return user && String(user.role).toLowerCase() === 'admin';
+  }
+
   function el(id) { return document.getElementById(id); }
 
   function init() {
@@ -64,13 +71,22 @@ const HistoryScreen = (() => {
     const exportExcelBtn = el('historyExportExcelBtn');
     const saveJsonBtn = el('historySaveJsonBtn');
     const loadJsonBtn = el('historyLoadJsonBtn');
-    const clearHistoryBtn = el('clearHistoryBtn');
 
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', handleExportCSV);
     if (exportExcelBtn) exportExcelBtn.addEventListener('click', handleExportExcel);
     if (saveJsonBtn) saveJsonBtn.addEventListener('click', handleSaveJSON);
     if (loadJsonBtn) loadJsonBtn.addEventListener('click', handleLoadJSON);
-    if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', handleClearHistory);
+
+    // Delete History Modal Event Listeners
+    const bulkDeleteHistoryBtn = el('bulkDeleteHistoryBtn');
+    const closeDeleteHistoryBtn = el('closeDeleteHistoryModalBtn');
+    const cancelDeleteHistoryBtn = el('cancelDeleteHistoryModalBtn');
+    const executeDeleteHistoryBtn = el('executeDeleteHistoryBtn');
+
+    if (bulkDeleteHistoryBtn) bulkDeleteHistoryBtn.addEventListener('click', openConfirmDeleteSelectionHistory);
+    if (closeDeleteHistoryBtn) closeDeleteHistoryBtn.addEventListener('click', hideDeleteHistoryModal);
+    if (cancelDeleteHistoryBtn) cancelDeleteHistoryBtn.addEventListener('click', hideDeleteHistoryModal);
+    if (executeDeleteHistoryBtn) executeDeleteHistoryBtn.addEventListener('click', executeHistoryDeletion);
 
     // Auto-load when switching to view-history tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
@@ -405,6 +421,12 @@ const HistoryScreen = (() => {
         <td class="font-mono text-xs">${r.invoice_reference || '—'}</td>
         <td>${statusBadge}</td>
         <td class="font-mono text-xs text-muted">${formattedSentDate}</td>
+        <td style="text-align: right;">
+          ${isAdmin() ? `
+          <button type="button" class="btn btn-sm" onclick="HistoryScreen.openConfirmDeleteSingleHistory('${r.id}')" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 6px; font-weight: 600; font-size: 10px;" title="Delete Record (Admin Only)">
+            🗑 Delete
+          </button>` : '—'}
+        </td>
       `;
 
       tbody.appendChild(tr);
@@ -535,6 +557,7 @@ const HistoryScreen = (() => {
     const bar = el('historyBulkBar');
     const countDisplay = el('historySelectedCount');
     const amtDisplay = el('historySelectedAmount');
+    const bulkDeleteBtn = el('bulkDeleteHistoryBtn');
     if (!bar) return;
 
     const count = selectedRemittanceIds.size;
@@ -549,9 +572,94 @@ const HistoryScreen = (() => {
         }
       });
 
-      if (amtDisplay) amtDisplay.textContent = totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (amtDisplay) amtDisplay.textContent = '$' + totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (bulkDeleteBtn) bulkDeleteBtn.style.display = isAdmin() ? 'inline-block' : 'none';
     } else {
       bar.style.display = 'none';
+    }
+  }
+
+  // ── History Deletion Workflow (Admin Only) ───────────────────
+  function openConfirmDeleteSingleHistory(id) {
+    const item = allRemittances.find(r => r.id === id);
+    if (!item) return;
+    historyToDelete = [item];
+    showDeleteHistoryConfirmationModal();
+  }
+
+  function openConfirmDeleteSelectionHistory() {
+    if (selectedRemittanceIds.size === 0) return;
+    historyToDelete = allRemittances.filter(r => selectedRemittanceIds.has(r.id));
+    showDeleteHistoryConfirmationModal();
+  }
+
+  function showDeleteHistoryConfirmationModal() {
+    const modal = el('confirmDeleteHistoryModal');
+    const warningBox = el('pendingDeletionSevereWarning');
+    const msgEl = el('confirmDeleteHistoryMessage');
+    const titleEl = el('confirmDeleteHistoryTitle');
+    const listEl = el('deleteHistoryListText');
+
+    if (!modal) return;
+
+    const hasPending = historyToDelete.some(r => String(r.status).toLowerCase() === 'pending');
+
+    if (hasPending) {
+      if (warningBox) warningBox.style.display = 'block';
+      if (titleEl) titleEl.textContent = '⚠️ WARNING: Deleting Pending Remittance';
+      if (msgEl) {
+        msgEl.textContent = historyToDelete.length === 1
+          ? `You are about to delete 1 PENDING transaction for "${historyToDelete[0].vendor_name}". If deleted, remittance advice emails will NEVER be sent to the vendor.`
+          : `You are about to delete ${historyToDelete.length} transactions including PENDING items. If deleted, remittance advice emails will NEVER be sent for these transactions.`;
+      }
+    } else {
+      if (warningBox) warningBox.style.display = 'none';
+      if (titleEl) titleEl.textContent = 'Confirm History Deletion';
+      if (msgEl) {
+        msgEl.textContent = historyToDelete.length === 1
+          ? `Are you sure you want to permanently delete transaction record for "${historyToDelete[0].vendor_name}"?`
+          : `Are you sure you want to permanently delete ${historyToDelete.length} transaction record(s) from payment history?`;
+      }
+    }
+
+    if (listEl) {
+      listEl.innerHTML = historyToDelete.map(r => `• ${r.vendor_name} | Amount: $${r.amount} | Ref: ${r.invoice_reference || '—'} | Status: ${r.status.toUpperCase()}`).join('<br/>');
+    }
+
+    modal.classList.add('active');
+  }
+
+  function hideDeleteHistoryModal() {
+    const modal = el('confirmDeleteHistoryModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  async function executeHistoryDeletion() {
+    if (historyToDelete.length === 0) return;
+
+    const spinner = el('executeDeleteHistorySpinner');
+    const executeBtn = el('executeDeleteHistoryBtn');
+
+    if (executeBtn) executeBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      if (historyToDelete.length === 1) {
+        await API.del(`/remittances/${historyToDelete[0].id}`);
+      } else {
+        const remittance_ids = historyToDelete.map(r => r.id);
+        await API.post('/remittances/bulk-delete', { remittance_ids });
+      }
+
+      hideDeleteHistoryModal();
+      selectedRemittanceIds.clear();
+      updateBulkBar();
+      await loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to delete transaction history record(s).');
+    } finally {
+      if (executeBtn) executeBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
     }
   }
 
@@ -647,6 +755,7 @@ const HistoryScreen = (() => {
     toggleRowSelection,
     insertPlaceholder,
     openHistoryBreakdownModal,
+    openConfirmDeleteSingleHistory,
   };
 })();
 
