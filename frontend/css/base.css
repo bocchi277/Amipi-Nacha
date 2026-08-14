@@ -128,6 +128,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-md, 16px);
+  overflow-x: hidden;
   overflow-y: auto;
   box-sizing: border-box;
 }
@@ -143,8 +144,9 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   border: 1px solid var(--color-border, #e2e8f0);
   width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
+  max-width: 760px;
+  max-height: 85vh;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -594,7 +596,8 @@ code, pre {
    ================================================================ */
 
 .main-container {
-  max-width: 1180px;
+  max-width: 1440px;
+  width: 95%;
   margin: var(--space-xl) auto;
   padding: 0 var(--space-base);
 }
