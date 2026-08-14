@@ -130,6 +130,7 @@ const API = (() => {
   function get(path, query)         { return request('GET', path, { query }); }
   function post(path, body)         { return request('POST', path, { body }); }
   function put(path, body)          { return request('PUT', path, { body }); }
+  function patch(path, body)        { return request('PATCH', path, { body }); }
   function del(path)                { return request('DELETE', path); }
   function postForm(path, formData) { return request('POST', path, { formData }); }
 
@@ -183,7 +184,7 @@ const API = (() => {
     getToken, setToken, clearToken, getUser, setUser,
     isAuthenticated,
     // HTTP
-    get, post, put, del, postForm,
+    get, post, put, patch, del, postForm,
     // Auth
     login, register, logout, getProfile,
   };

@@ -243,6 +243,7 @@ async def bulk_resend_remittance_emails(
 
 
 @router.patch("/{remittance_id}/email", response_model=RemittanceResponseSchema)
+@router.put("/{remittance_id}/email", response_model=RemittanceResponseSchema)
 async def update_remittance_email(
     remittance_id: uuid.UUID,
     payload: UpdateRemittanceEmailRequest,
