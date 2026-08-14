@@ -638,28 +638,34 @@ const HistoryScreen = (() => {
 
     if (!modal) return;
 
+    if (warningBox) warningBox.style.display = 'none';
+
+    const count = historyToDelete.length;
+    const vendorName = count === 1 ? historyToDelete[0].vendor_name : '';
     const hasPending = historyToDelete.some(r => String(r.status).toLowerCase() === 'pending');
 
-    if (hasPending) {
-      if (warningBox) warningBox.style.display = 'block';
-      if (titleEl) titleEl.textContent = '⚠️ WARNING: Deleting Pending Remittance';
-      if (msgEl) {
-        msgEl.textContent = historyToDelete.length === 1
-          ? `You are about to delete 1 PENDING transaction for "${historyToDelete[0].vendor_name}". If deleted, remittance advice emails will NEVER be sent to the vendor.`
-          : `You are about to delete ${historyToDelete.length} transactions including PENDING items. If deleted, remittance advice emails will NEVER be sent for these transactions.`;
+    if (titleEl) {
+      titleEl.textContent = count === 1 ? 'Delete Payment Record' : 'Delete Selected Records';
+    }
+
+    if (msgEl) {
+      let text = count === 1
+        ? `Are you sure you want to delete the payment record for <strong>${vendorName}</strong>?`
+        : `Are you sure you want to delete <strong>${count} selected payment records</strong>?`;
+
+      if (hasPending) {
+        text += ` <span style="color: #dc2626; font-size: 12px; font-weight: 500;">(Remittance email will not be sent).</span>`;
       }
-    } else {
-      if (warningBox) warningBox.style.display = 'none';
-      if (titleEl) titleEl.textContent = 'Confirm History Deletion';
-      if (msgEl) {
-        msgEl.textContent = historyToDelete.length === 1
-          ? `Are you sure you want to permanently delete transaction record for "${historyToDelete[0].vendor_name}"?`
-          : `Are you sure you want to permanently delete ${historyToDelete.length} transaction record(s) from payment history?`;
-      }
+      msgEl.innerHTML = text;
     }
 
     if (listEl) {
-      listEl.innerHTML = historyToDelete.map(r => `• ${r.vendor_name} | Amount: $${r.amount} | Ref: ${r.invoice_reference || '—'} | Status: ${r.status.toUpperCase()}`).join('<br/>');
+      if (count > 1) {
+        listEl.style.display = 'block';
+        listEl.innerHTML = historyToDelete.map(r => `• ${r.vendor_name} — $${r.amount}`).join('<br/>');
+      } else {
+        listEl.style.display = 'none';
+      }
     }
 
     modal.classList.add('active');
