@@ -435,17 +435,33 @@ const HistoryScreen = (() => {
         <td class="font-mono">${globalIdx}</td>
         <td class="font-mono text-xs">${formattedEffDate}</td>
         <td class="font-bold">${r.vendor_name}</td>
-        <td class="font-mono text-xs text-muted">${r.recipient_email}</td>
+        <td class="font-mono text-xs text-muted" id="email-cell-${r.id}">
+          <div id="email-display-${r.id}" style="display: inline-flex; align-items: center; gap: 6px;">
+            <span>${r.recipient_email}</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.editRowEmail('${r.id}')" style="padding: 1px 4px; font-size: 10px; line-height: 1;" title="Edit Recipient Email Address">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+            </button>
+          </div>
+          <div id="email-edit-${r.id}" style="display: none; align-items: center; gap: 4px;">
+            <input type="email" class="form-input form-input-sm" id="email-input-${r.id}" value="${r.recipient_email}" style="padding: 2px 6px; font-size: 11px; width: 175px;" onkeydown="if(event.key==='Enter'){HistoryScreen.saveRowEmail('${r.id}');}if(event.key==='Escape'){HistoryScreen.cancelRowEmailEdit('${r.id}');}" />
+            <button type="button" class="btn btn-primary btn-sm" onclick="HistoryScreen.saveRowEmail('${r.id}')" style="padding: 2px 6px; font-size: 10px;" title="Save Email">✓</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.cancelRowEmailEdit('${r.id}')" style="padding: 2px 6px; font-size: 10px;" title="Cancel">✕</button>
+          </div>
+        </td>
         <td class="font-mono font-bold">${amtFormatted} ${breakdownBadge}</td>
         <td class="font-mono text-xs">${r.invoice_reference || '—'}</td>
         <td class="font-mono text-xs"><span class="badge badge-secondary" style="background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; padding: 2px 6px;">${r.created_by_username || 'admin'}</span></td>
         <td>${statusBadge}</td>
         <td class="font-mono text-xs text-muted">${formattedSentDate}</td>
-        <td style="text-align: right;">
+        <td style="text-align: right; white-space: nowrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.sendSingleRemittanceEmail('${r.id}')" style="padding: 2px 6px; font-size: 10px; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px;" title="Send Remittance Email to ${r.recipient_email}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            <span>${isSent ? 'Resend' : 'Send'}</span>
+          </button>
           ${isAdmin() ? `
           <button type="button" class="btn btn-sm" onclick="HistoryScreen.openConfirmDeleteSingleHistory('${r.id}')" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 6px; font-weight: 600; font-size: 10px;" title="Delete Record (Admin Only)">
             🗑 Delete
-          </button>` : '—'}
+          </button>` : ''}
         </td>
       `;
 
@@ -857,6 +873,82 @@ const HistoryScreen = (() => {
     document.body.removeChild(link);
   }
 
+  // ── Inline Email Editing & Single Dispatch Handlers ─────────
+  function editRowEmail(id) {
+    const disp = el(`email-display-${id}`);
+    const edit = el(`email-edit-${id}`);
+    const input = el(`email-input-${id}`);
+    if (disp) disp.style.display = 'none';
+    if (edit) edit.style.display = 'inline-flex';
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  function cancelRowEmailEdit(id) {
+    const disp = el(`email-display-${id}`);
+    const edit = el(`email-edit-${id}`);
+    if (disp) disp.style.display = 'inline-flex';
+    if (edit) edit.style.display = 'none';
+  }
+
+  async function saveRowEmail(id) {
+    const input = el(`email-input-${id}`);
+    if (!input) return;
+    const newEmail = input.value.trim();
+
+    if (!newEmail || !newEmail.includes('@') || !newEmail.includes('.')) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      const updated = await API.patch(`/remittances/${id}/email`, { recipient_email: newEmail });
+      const item = allRemittances.find(r => r.id === id);
+      if (item) item.recipient_email = updated.recipient_email;
+      const filteredItem = filteredRemittances.find(r => r.id === id);
+      if (filteredItem) filteredItem.recipient_email = updated.recipient_email;
+
+      renderTable();
+
+      const globalAlert = el('historyGlobalAlert');
+      if (globalAlert) {
+        globalAlert.className = 'alert alert-success show';
+        globalAlert.textContent = `Email for "${updated.vendor_name}" updated to "${updated.recipient_email}".`;
+        globalAlert.style.display = 'block';
+        setTimeout(() => { globalAlert.style.display = 'none'; }, 3500);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update remittance email.');
+    }
+  }
+
+  async function sendSingleRemittanceEmail(id) {
+    const item = allRemittances.find(r => r.id === id);
+    if (!item) return;
+
+    if (!confirm(`Send remittance advice email to "${item.vendor_name}" at <${item.recipient_email}>?`)) return;
+
+    try {
+      const response = await API.post('/remittances/bulk-resend', {
+        remittance_ids: [id],
+      });
+
+      const globalAlert = el('historyGlobalAlert');
+      if (globalAlert) {
+        globalAlert.className = 'alert alert-success show';
+        globalAlert.textContent = response.message || `Remittance email successfully sent to ${item.vendor_name} <${item.recipient_email}>.`;
+        globalAlert.style.display = 'block';
+        setTimeout(() => { globalAlert.style.display = 'none'; }, 4000);
+      }
+
+      await loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to send remittance email.');
+    }
+  }
+
   return {
     init,
     loadData,
@@ -865,6 +957,10 @@ const HistoryScreen = (() => {
     openHistoryBreakdownModal,
     openConfirmDeleteSingleHistory,
     openLastNachaFileModal,
+    editRowEmail,
+    cancelRowEmailEdit,
+    saveRowEmail,
+    sendSingleRemittanceEmail,
   };
 })();
 

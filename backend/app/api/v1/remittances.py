@@ -62,6 +62,11 @@ class UpdateEmailTemplateRequest(BaseModel):
     body_template: str
 
 
+class UpdateRemittanceEmailRequest(BaseModel):
+    recipient_email: str
+    update_vendor_default: Optional[bool] = False
+
+
 @router.get("/template", response_model=EmailTemplateSchema)
 async def get_email_template(current_user: User = Depends(get_current_user)):
     """Fetch the active remittance email template and available dynamic placeholders."""
@@ -234,6 +239,77 @@ async def bulk_resend_remittance_emails(
         success_count=success_cnt,
         failed_count=fail_cnt,
         message=f"Successfully resent {success_cnt} of {len(payload.remittance_ids)} remittance email(s).",
+    )
+
+
+@router.patch("/{remittance_id}/email", response_model=RemittanceResponseSchema)
+async def update_remittance_email(
+    remittance_id: uuid.UUID,
+    payload: UpdateRemittanceEmailRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update recipient email address for a specific remittance record.
+    Optionally update vendor's primary email address if update_vendor_default is true.
+    """
+    new_email = payload.recipient_email.strip()
+    if not new_email or "@" not in new_email or "." not in new_email:
+        raise HTTPException(status_code=400, detail="Invalid email address format.")
+
+    stmt = (
+        select(VendorRemittance)
+        .where(VendorRemittance.id == remittance_id)
+        .options(
+            selectinload(VendorRemittance.payment),
+            selectinload(VendorRemittance.nacha_file).selectinload(NachaFileRecord.created_by_user),
+            selectinload(VendorRemittance.vendor),
+        )
+    )
+    res = await db.execute(stmt)
+    remittance = res.scalar_one_or_none()
+    if not remittance:
+        raise HTTPException(status_code=404, detail="Remittance record not found")
+
+    old_email = remittance.recipient_email
+    remittance.recipient_email = new_email
+
+    if payload.update_vendor_default and remittance.vendor:
+        remittance.vendor.email = new_email
+
+    audit_entry = AuditLog(
+        user_id=current_user.id,
+        action="UPDATE_REMITTANCE_EMAIL",
+        entity_type="VendorRemittance",
+        entity_id=str(remittance_id),
+        details={
+            "remittance_id": str(remittance_id),
+            "old_email": old_email,
+            "new_email": new_email,
+            "vendor_name": remittance.vendor_name,
+            "updated_by": current_user.username,
+        },
+    )
+    db.add(audit_entry)
+    await db.commit()
+    await db.refresh(remittance)
+
+    return RemittanceResponseSchema(
+        id=str(remittance.id),
+        vendor_id=str(remittance.vendor_id),
+        vendor_name=remittance.vendor_name,
+        recipient_email=remittance.recipient_email,
+        amount=str(remittance.amount),
+        effective_date=remittance.effective_date.isoformat(),
+        invoice_reference=remittance.invoice_reference,
+        subject=remittance.subject,
+        body_text=remittance.body_text,
+        status=remittance.status.value,
+        sent_at=remittance.sent_at.isoformat() if remittance.sent_at else None,
+        resend_count=remittance.resend_count,
+        created_at=remittance.created_at.isoformat(),
+        created_by_username=(remittance.nacha_file.created_by_user.username if (remittance.nacha_file and remittance.nacha_file.created_by_user) else "admin"),
+        invoice_breakdown=remittance.payment.invoice_breakdown if (remittance.payment and remittance.payment.invoice_breakdown) else None,
     )
 
 

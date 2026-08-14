@@ -190,6 +190,52 @@ async def test_bulk_resend_on_filtered_selection(db_session):
 
 
 @pytest.mark.asyncio
+async def test_update_remittance_email_endpoint(db_session):
+    """Test PATCH /api/v1/remittances/{id}/email endpoint."""
+    u = User(username="email_tester", email="emailtester@test.com", password_hash="hash", role="user")
+    v = Vendor(name="EMAIL TEST VENDOR", routing_number="021000021", account_number="999888", email="old_vendor@test.com")
+    db_session.add_all([u, v])
+    await db_session.commit()
+    await db_session.refresh(v)
+
+    remit = VendorRemittance(
+        vendor_id=v.id,
+        vendor_name=v.name,
+        recipient_email="old_remit@test.com",
+        amount="1200.00",
+        effective_date=date(2026, 8, 15),
+        subject="Advice",
+        body_text="Body",
+        status=RemittanceStatus.PENDING,
+    )
+    db_session.add(remit)
+    await db_session.commit()
+    await db_session.refresh(remit)
+
+    from app.core.security import create_access_token
+    token = create_access_token(data={"sub": str(u.id), "role": "user"})
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        resp = await client.patch(
+            f"/api/v1/remittances/{remit.id}/email",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"recipient_email": "new_manager_approved@test.com", "update_vendor_default": True},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["recipient_email"] == "new_manager_approved@test.com"
+
+    res_r = await db_session.execute(select(VendorRemittance).where(VendorRemittance.id == remit.id))
+    r_db = res_r.scalar_one()
+    assert r_db.recipient_email == "new_manager_approved@test.com"
+
+    res_v = await db_session.execute(select(Vendor).where(Vendor.id == v.id))
+    v_db = res_v.scalar_one()
+    assert v_db.email == "new_manager_approved@test.com"
+
+
+@pytest.mark.asyncio
 async def test_single_and_bulk_remittance_deletion(db_session):
     """Test single and bulk deletion of remittance transaction records by Admin."""
     admin = User(username="remit_admin", email="remitadmin@test.com", password_hash="hash", role="admin")

@@ -44,7 +44,7 @@ async def test_live_browser_e2e_full_workflow():
         breakdown_btn = await page.query_selector("#validPaymentsTableBody button, button:has-text('Invoices')")
         if breakdown_btn:
             await breakdown_btn.click()
-            await page.wait_for_selector("#invoiceBreakdownModal", timeout=5000)
+            await page.wait_for_selector("#invoiceBreakdownModal.active", timeout=10000)
             await page.wait_for_selector("#breakdownTableBody tr", timeout=5000)
             modal_visible = await page.is_visible("#invoiceBreakdownModal")
             assert modal_visible, "invoiceBreakdownModal is not visible"
