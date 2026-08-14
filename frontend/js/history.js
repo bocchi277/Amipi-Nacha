@@ -387,8 +387,9 @@ const HistoryScreen = (() => {
 
       let breakdownBadge = '';
       if (r.invoice_breakdown && r.invoice_breakdown.length > 1) {
-        breakdownBadge = `<button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openHistoryBreakdownModal(${globalIdx})" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; vertical-align: middle;" title="View itemized price breakdown">
-          ${r.invoice_breakdown.length} Invoices 🔍
+        breakdownBadge = `<button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openHistoryBreakdownModal(${globalIdx})" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; vertical-align: middle; display: inline-flex; align-items: center; gap: 3px;" title="View itemized price breakdown">
+          <span>${r.invoice_breakdown.length} Invoices</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </button>`;
       }
 
