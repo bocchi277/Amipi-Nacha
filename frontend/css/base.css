@@ -44,6 +44,8 @@
   --color-border:         #E5E7EB;  /* Gray-200 */
   --color-border-light:   #F3F4F6;  /* Gray-100 */
   --color-border-strong:  #D1D5DB;  /* Gray-300 */
+  --border-color:         #E2E8F0;  /* Alias for inline styles */
+  --bg-card-hover:        #F8FAFC;  /* Alias for hover state */
 
   /* Text colors — strong readability */
   --color-text:           #111827;  /* Gray-900 */

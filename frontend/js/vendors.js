@@ -36,6 +36,15 @@ const VendorsScreen = (() => {
       refreshBtn.addEventListener('click', loadData);
     }
 
+    // Auto-load when switching to vendors tab
+    document.querySelectorAll('#mainTabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.dataset.view === 'vendors') {
+          loadData();
+        }
+      });
+    });
+
     // View Mode Toggle Listeners
     const cardBtn = el('vendorCardViewBtn');
     const tableBtn = el('vendorTableViewBtn');
@@ -526,14 +535,6 @@ const VendorsScreen = (() => {
     }
   }
 
-  return {
-    init,
-    loadData,
-    openChangeModal,
-    openEditVendorModal,
-    openConfirmDeleteSingle,
-  };
-
 
   function setViewMode(mode) {
     currentViewMode = mode;
@@ -824,10 +825,12 @@ const VendorsScreen = (() => {
     el('reqModalSuccess').style.display = 'none';
 
     el('changeRequestModal').classList.add('active');
+    el('changeRequestModal').style.display = 'flex';
   }
 
   function hideModal() {
     el('changeRequestModal').classList.remove('active');
+    el('changeRequestModal').style.display = 'none';
   }
 
   async function handleSubmitChangeRequest(e) {
@@ -902,6 +905,9 @@ const VendorsScreen = (() => {
     loadData,
     openChangeModal,
     openEditVendorModal,
+    openAddVendorModal,
+    openConfirmDeleteSingle,
+    openConfirmDeleteSelection,
   };
 })();
 

@@ -131,12 +131,18 @@ const HistoryScreen = (() => {
       console.warn('Failed to load email template:', err);
     }
 
-    if (modal) modal.classList.add('active');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
   }
 
   function hideEmailTemplateModal() {
     const modal = el('emailTemplateModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   function insertPlaceholder(tag) {

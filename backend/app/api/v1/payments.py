@@ -11,6 +11,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
@@ -353,8 +354,10 @@ async def create_manual_payment_batch(
             is_duplicate_override=is_override,
         )
         db.add(payment)
+        await db.flush()
         created_payments.append(
             ParsedPaymentSchema(
+                payment_id=str(payment.id),
                 vendor_name=vp.vendor_name,
                 amount=str(vp.amount),
                 id_number=vp.id_number,
@@ -426,7 +429,9 @@ async def get_upload_batch(batch_id: str, db: AsyncSession = Depends(get_async_d
     if not batch:
         raise HTTPException(status_code=404, detail="Upload batch not found.")
 
-    res_payments = await db.execute(select(Payment).where(Payment.batch_id == batch.id))
+    res_payments = await db.execute(
+        select(Payment).options(selectinload(Payment.vendor)).where(Payment.batch_id == batch.id)
+    )
     payments = res_payments.scalars().all()
 
     return {
@@ -444,6 +449,7 @@ async def get_upload_batch(batch_id: str, db: AsyncSession = Depends(get_async_d
             {
                 "payment_id": str(p.id),
                 "vendor_id": str(p.vendor_id),
+                "vendor_name": p.vendor.name if p.vendor else "Unknown",
                 "amount": str(p.amount),
                 "id_number": p.id_number,
                 "effective_date": p.effective_date.isoformat(),

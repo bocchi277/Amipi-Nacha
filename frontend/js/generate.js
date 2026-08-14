@@ -214,10 +214,12 @@ const GenerateScreen = (() => {
     if (el('editPaymentModalError')) el('editPaymentModalError').style.display = 'none';
 
     el('editPaymentRowModal').classList.add('active');
+    el('editPaymentRowModal').style.display = 'flex';
   }
 
   function hideEditRowModal() {
     el('editPaymentRowModal').classList.remove('active');
+    el('editPaymentRowModal').style.display = 'none';
   }
 
   async function handleSaveEditPayment(e) {
@@ -250,6 +252,22 @@ const GenerateScreen = (() => {
     const p = lastUploadResponse.valid_payments[idx];
     const newAmount = parseFloat(newAmountVal);
 
+    // Sync update to backend PostgreSQL if payment_id is present BEFORE updating UI
+    if (paymentId) {
+      try {
+        await API.put(`/payments/${paymentId}`, {
+          amount: newAmount,
+          id_number: newRefVal,
+        });
+      } catch (err) {
+        if (errBox) {
+          errBox.textContent = err.message || 'Failed to update payment on backend server.';
+          errBox.style.display = 'block';
+        }
+        return;
+      }
+    }
+
     p.amount = newAmount.toFixed(2);
     p.id_number = newRefVal;
 
@@ -265,18 +283,6 @@ const GenerateScreen = (() => {
 
     // Re-render table
     renderValidPaymentsTable(lastUploadResponse.valid_payments, 'validPaymentsTableBody');
-
-    // Sync update to backend PostgreSQL if payment_id is present
-    if (paymentId) {
-      try {
-        await API.put(`/payments/${paymentId}`, {
-          amount: newAmount,
-          id_number: newRefVal,
-        });
-      } catch (err) {
-        console.warn('Failed to sync payment update to backend:', err);
-      }
-    }
 
     hideEditRowModal();
   }
@@ -456,7 +462,8 @@ const GenerateScreen = (() => {
       let breakdownBadge = '';
       if (p.invoice_breakdown && p.invoice_breakdown.length > 1) {
         breakdownBadge = `<button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openBreakdownModal(${idx})" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; vertical-align: middle;" title="View itemized price breakdown">
-          ${p.invoice_breakdown.length} Invoices 🔍
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search" style="vertical-align: middle; margin-right: 3px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span>${p.invoice_breakdown.length} Invoices</span>
         </button>`;
       }
 
@@ -691,8 +698,9 @@ const GenerateScreen = (() => {
   function checkNachaGenerateButtonState() {
     const btn = el('generateNachaBtn');
     if (!btn) return;
-    const hasBatches = !!(batch1Id || batch2Id);
-    btn.disabled = !hasBatches;
+    const hasBatch1Valid = batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0;
+    const hasBatch2Valid = batch2Id && manualDraftEntries && manualDraftEntries.length > 0;
+    btn.disabled = !(hasBatch1Valid || hasBatch2Valid);
   }
 
   // ── Phase 4: Combined NACHA File Generation & Download ──────

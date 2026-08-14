@@ -437,63 +437,6 @@ async def update_vendor(
 
 
 
-@router.post("", response_model=VendorResponseSchema, status_code=status.HTTP_201_CREATED)
-async def create_vendor(
-    payload: CreateVendorSchema,
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Create a new Vendor."""
-    rt = payload.routing_number.strip()
-    if len(rt) != 9 or not validate_routing_checksum(rt):
-        raise HTTPException(status_code=400, detail=f"Invalid 9-digit routing number '{rt}'.")
-
-    vendor = Vendor(
-        name=payload.name.strip(),
-        routing_number=rt,
-        account_number=payload.account_number.strip(),
-        account_type=payload.account_type,
-        default_id_number=payload.default_id_number,
-    )
-    db.add(vendor)
-    await db.commit()
-    await db.refresh(vendor)
-
-    return VendorResponseSchema(
-        id=str(vendor.id),
-        name=vendor.name,
-        routing_number=vendor.routing_number,
-        account_number=vendor.account_number,
-        account_type=_val(vendor.account_type),
-        default_id_number=vendor.default_id_number,
-        is_active=vendor.is_active,
-    )
-
-
-@router.get("/{vendor_id}", response_model=VendorResponseSchema)
-async def get_vendor(vendor_id: str, db: AsyncSession = Depends(get_async_db)):
-    """Fetch vendor by ID."""
-    try:
-        v_uuid = uuid.UUID(vendor_id.strip())
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=400, detail="Invalid vendor_id format.")
-
-    res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
-    vendor = res.scalar_one_or_none()
-    if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found.")
-
-    return VendorResponseSchema(
-        id=str(vendor.id),
-        name=vendor.name,
-        routing_number=vendor.routing_number,
-        account_number=vendor.account_number,
-        account_type=_val(vendor.account_type),
-        default_id_number=vendor.default_id_number,
-        is_active=vendor.is_active,
-    )
-
-
 @router.post("/{vendor_id}/change-requests", response_model=ChangeRequestResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_vendor_change_request(
     vendor_id: str,
