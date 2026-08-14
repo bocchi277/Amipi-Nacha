@@ -10,6 +10,7 @@ const VendorsScreen = (() => {
   let loadedChangeRequests = [];
   let activeVendorForRequest = null;
   let currentViewMode = 'card'; // 'card' or 'table'
+  let showFullAccountDetails = false;
   let selectedVendorIds = new Set();
   let vendorsToDelete = [];
 
