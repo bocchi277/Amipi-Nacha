@@ -627,11 +627,15 @@ const HistoryScreen = (() => {
     }
 
     modal.classList.add('active');
+    modal.style.display = 'flex';
   }
 
   function hideDeleteHistoryModal() {
     const modal = el('confirmDeleteHistoryModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   async function executeHistoryDeletion() {
@@ -700,12 +704,18 @@ const HistoryScreen = (() => {
 
     if (amtSpan) amtSpan.textContent = `$${totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    if (modal) modal.classList.add('active');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
   }
 
   function hideConfirmModal() {
     const modal = el('bulkResendConfirmModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   async function handleExecuteBulkResend() {

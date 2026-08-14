@@ -120,27 +120,48 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
-  z-index: var(--z-modal);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: var(--z-modal, 1000);
   display: none;
   align-items: center;
   justify-content: center;
-  padding: var(--space-md);
+  padding: var(--space-md, 16px);
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .modal-backdrop.active {
-  display: flex;
+  display: flex !important;
 }
 
 .modal-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: var(--space-xl);
-  box-shadow: var(--shadow-xl);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised, #ffffff);
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--space-xl, 24px);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--color-border, #e2e8f0);
   width: 100%;
-  max-width: 540px;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  animation: modalSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  margin: auto;
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 

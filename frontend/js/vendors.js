@@ -136,11 +136,17 @@ const VendorsScreen = (() => {
     if (el('editVendorError')) el('editVendorError').style.display = 'none';
     if (el('editVendorSuccess')) el('editVendorSuccess').style.display = 'none';
 
-    el('editVendorProfileModal').classList.add('active');
+    if (el('editVendorProfileModal')) {
+      el('editVendorProfileModal').classList.add('active');
+      el('editVendorProfileModal').style.display = 'flex';
+    }
   }
 
   function hideEditVendorModal() {
-    el('editVendorProfileModal').classList.remove('active');
+    if (el('editVendorProfileModal')) {
+      el('editVendorProfileModal').classList.remove('active');
+      el('editVendorProfileModal').style.display = 'none';
+    }
   }
 
   async function handleSaveVendorProfile(e) {
@@ -244,11 +250,17 @@ const VendorsScreen = (() => {
     if (el('addVendorForm')) el('addVendorForm').reset();
     if (el('bulkVendorForm')) el('bulkVendorForm').reset();
     switchAddVendorTab('single');
-    if (el('addVendorModal')) el('addVendorModal').classList.add('active');
+    if (el('addVendorModal')) {
+      el('addVendorModal').classList.add('active');
+      el('addVendorModal').style.display = 'flex';
+    }
   }
 
   function hideAddVendorModal() {
-    if (el('addVendorModal')) el('addVendorModal').classList.remove('active');
+    if (el('addVendorModal')) {
+      el('addVendorModal').classList.remove('active');
+      el('addVendorModal').style.display = 'none';
+    }
   }
 
   async function handleCreateSingleVendorSubmit(e) {
@@ -475,11 +487,15 @@ const VendorsScreen = (() => {
     }
 
     modal.classList.add('active');
+    modal.style.display = 'flex';
   }
 
   function hideDeleteModal() {
     const modal = el('confirmDeleteVendorModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   async function executeVendorDeletion() {
