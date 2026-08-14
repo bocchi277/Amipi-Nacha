@@ -898,6 +898,11 @@
                   <span>Export Excel</span>
                 </button>
 
+                <button type="button" class="btn btn-secondary btn-sm" id="historyViewLastNachaBtn" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; font-weight: 600; display: flex; align-items: center; gap: 6px;" title="View Recently Generated NACHA File">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-download"><path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></svg>
+                  <span>Last NACHA File</span>
+                </button>
+
                 <button type="button" class="btn btn-success btn-sm" id="historySaveJsonBtn" style="background: #10B981; color: white; border: none; font-weight: 600; display: flex; align-items: center; gap: 6px;">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/></svg>
                   <span>Save JSON</span>
@@ -1450,6 +1455,62 @@
             <span class="spinner" id="executeDeleteHistorySpinner" style="display: none;"></span>
             <span>Permanently Delete</span>
           </button>
+        </div>
+      </div>
+    <!-- Last Generated NACHA File Viewer Modal -->
+    <div class="modal-backdrop" id="lastNachaFileModal">
+      <div class="modal-card" style="max-width: 820px; border-top: 4px solid var(--color-primary);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <div>
+            <h3 class="card-title" style="margin-bottom: 2px;" id="lastNachaModalTitle">Last Generated NACHA ACH File</h3>
+            <div class="text-xs text-muted" id="lastNachaModalSubtitle">94-Character Line Formatted Chase ACH Flat File Payload</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeLastNachaModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <div class="alert alert-error" id="lastNachaModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+        <!-- Metadata Cards Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: var(--space-md); font-size: var(--text-xs);" id="lastNachaMetaGrid">
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px;">
+            <span style="color: #64748B; display: block; font-size: 10px; text-transform: uppercase;">File Name</span>
+            <strong id="lastNachaFilename" style="word-break: break-all;">—</strong>
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px;">
+            <span style="color: #64748B; display: block; font-size: 10px; text-transform: uppercase;">Creation Date/Time</span>
+            <strong id="lastNachaCreationDate">—</strong>
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px;">
+            <span style="color: #64748B; display: block; font-size: 10px; text-transform: uppercase;">Total Credits</span>
+            <strong id="lastNachaTotalAmount" style="color: #059669;">$0.00</strong>
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px;">
+            <span style="color: #64748B; display: block; font-size: 10px; text-transform: uppercase;">Entry Count</span>
+            <strong id="lastNachaEntryCount">0</strong>
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px;">
+            <span style="color: #64748B; display: block; font-size: 10px; text-transform: uppercase;">Entry Hash</span>
+            <strong id="lastNachaEntryHash" class="font-mono">—</strong>
+          </div>
+        </div>
+
+        <!-- Raw Content Code Box -->
+        <div style="background: #0F172A; color: #E2E8F0; font-family: monospace; font-size: var(--text-xs); line-height: 1.6; padding: 12px; border-radius: var(--radius-md, 8px); max-height: 320px; overflow-y: auto; white-space: pre; border: 1px solid #334155; margin-bottom: var(--space-md);" id="lastNachaRawContent">
+          Loading NACHA content...
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap;">
+          <div style="display: flex; gap: var(--space-xs);">
+            <button type="button" class="btn btn-secondary btn-sm" id="lastNachaCopyBtn" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              <span>Copy Payload</span>
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" id="lastNachaDownloadBtn" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download-icon lucide-download"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+              <span>Download .ach File</span>
+            </button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelLastNachaModalBtn">Close</button>
         </div>
       </div>
     </div>

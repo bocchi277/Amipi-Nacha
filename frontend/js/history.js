@@ -88,6 +88,19 @@ const HistoryScreen = (() => {
     if (cancelDeleteHistoryBtn) cancelDeleteHistoryBtn.addEventListener('click', hideDeleteHistoryModal);
     if (executeDeleteHistoryBtn) executeDeleteHistoryBtn.addEventListener('click', executeHistoryDeletion);
 
+    // Last NACHA File Viewer Modal Listeners
+    const viewLastNachaBtn = el('historyViewLastNachaBtn');
+    const closeLastNachaBtn = el('closeLastNachaModalBtn');
+    const cancelLastNachaBtn = el('cancelLastNachaModalBtn');
+    const copyLastNachaBtn = el('lastNachaCopyBtn');
+    const downloadLastNachaBtn = el('lastNachaDownloadBtn');
+
+    if (viewLastNachaBtn) viewLastNachaBtn.addEventListener('click', openLastNachaFileModal);
+    if (closeLastNachaBtn) closeLastNachaBtn.addEventListener('click', hideLastNachaFileModal);
+    if (cancelLastNachaBtn) cancelLastNachaBtn.addEventListener('click', hideLastNachaFileModal);
+    if (copyLastNachaBtn) copyLastNachaBtn.addEventListener('click', handleCopyLastNacha);
+    if (downloadLastNachaBtn) downloadLastNachaBtn.addEventListener('click', handleDownloadLastNacha);
+
     // Auto-load when switching to view-history tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -760,6 +773,84 @@ const HistoryScreen = (() => {
     }
   }
 
+  // ── Last NACHA File Modal Workflow ─────────────────────────────
+  let cachedLatestNacha = null;
+
+  async function openLastNachaFileModal() {
+    const modal = el('lastNachaFileModal');
+    const errBox = el('lastNachaModalError');
+    const rawBox = el('lastNachaRawContent');
+    const filenameEl = el('lastNachaFilename');
+    const dateEl = el('lastNachaCreationDate');
+    const amountEl = el('lastNachaTotalAmount');
+    const countEl = el('lastNachaEntryCount');
+    const hashEl = el('lastNachaEntryHash');
+
+    if (!modal) return;
+    if (errBox) errBox.style.display = 'none';
+    if (rawBox) rawBox.textContent = 'Loading latest NACHA file content...';
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+
+    try {
+      const latest = await API.get('/nacha/latest');
+      cachedLatestNacha = latest;
+
+      if (filenameEl) filenameEl.textContent = latest.filename || 'NACHA.ach';
+      if (dateEl) dateEl.textContent = `${latest.file_creation_date || ''} ${latest.file_creation_time || ''}`.trim() || '—';
+      if (amountEl) amountEl.textContent = `$${parseFloat(latest.total_credit_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (countEl) countEl.textContent = latest.total_entry_count || 0;
+      if (hashEl) hashEl.textContent = latest.entry_hash || '—';
+
+      if (rawBox && latest.raw_content) {
+        const lines = latest.raw_content.split('\n');
+        rawBox.textContent = lines.map((line, idx) => `${String(idx + 1).padStart(2, '0')}: ${line}`).join('\n');
+      }
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'No NACHA ACH files have been generated yet.';
+        errBox.style.display = 'block';
+      }
+      if (rawBox) rawBox.textContent = 'No NACHA file data available.';
+    }
+  }
+
+  function hideLastNachaFileModal() {
+    const modal = el('lastNachaFileModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  function handleCopyLastNacha() {
+    if (!cachedLatestNacha || !cachedLatestNacha.raw_content) return;
+    navigator.clipboard.writeText(cachedLatestNacha.raw_content).then(() => {
+      const copyBtn = el('lastNachaCopyBtn');
+      if (copyBtn) {
+        const origText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '✓ Copied!';
+        setTimeout(() => { copyBtn.innerHTML = origText; }, 2000);
+      }
+    }).catch(err => {
+      alert('Failed to copy to clipboard: ' + err);
+    });
+  }
+
+  function handleDownloadLastNacha() {
+    if (!cachedLatestNacha || !cachedLatestNacha.raw_content) return;
+    const blob = new Blob([cachedLatestNacha.raw_content], { type: 'text/plain;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', cachedLatestNacha.filename || 'NACHA_file.ach');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return {
     init,
     loadData,
@@ -767,6 +858,7 @@ const HistoryScreen = (() => {
     insertPlaceholder,
     openHistoryBreakdownModal,
     openConfirmDeleteSingleHistory,
+    openLastNachaFileModal,
   };
 })();
 

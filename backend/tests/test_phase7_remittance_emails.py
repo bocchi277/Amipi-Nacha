@@ -252,3 +252,33 @@ async def test_single_and_bulk_remittance_deletion(db_session):
         assert bulk_res.status_code == 200
         assert bulk_res.json()["deleted_count"] == 1
 
+
+@pytest.mark.asyncio
+async def test_get_latest_nacha_file(db_session):
+    """Test GET /api/v1/nacha/latest endpoint fetching the latest NACHA file record."""
+    from app.models import NachaFileRecord, NachaFileStatus
+    record = NachaFileRecord(
+        filename="TEST_LATEST.ach",
+        file_creation_date="260815",
+        file_creation_time="1200",
+        file_id_modifier="A",
+        total_credit_amount="1250.00",
+        total_entry_count=2,
+        total_batch_count=1,
+        total_block_count=1,
+        entry_hash="021000021",
+        raw_content="101 021000021 ...\n9000001000001...",
+        status=NachaFileStatus.GENERATED,
+    )
+    db_session.add(record)
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        res = await client.get("/api/v1/nacha/latest")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["filename"] == "TEST_LATEST.ach"
+        assert data["total_credit_amount"] == "1250.00"
+        assert data["entry_hash"] == "021000021"
+
+

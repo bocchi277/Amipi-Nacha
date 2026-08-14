@@ -51,6 +51,34 @@ async def get_next_trace_sequence_endpoint(db: AsyncSession = Depends(get_async_
     return {"next_trace_sequence": seq}
 
 
+@router.get("/latest", response_model=NachaFileResponse, status_code=status.HTTP_200_OK)
+async def get_latest_nacha_file_endpoint(db: AsyncSession = Depends(get_async_db)):
+    """Fetch the most recently generated NACHA file record from the database."""
+    from sqlalchemy import select
+    from app.models import NachaFileRecord
+
+    stmt = select(NachaFileRecord).order_by(NachaFileRecord.created_at.desc()).limit(1)
+    res = await db.execute(stmt)
+    latest = res.scalar_one_or_none()
+
+    if not latest:
+        raise HTTPException(status_code=404, detail="No NACHA files have been generated yet.")
+
+    return NachaFileResponse(
+        id=str(latest.id),
+        filename=latest.filename,
+        file_id_modifier=latest.file_id_modifier,
+        file_creation_date=latest.file_creation_date,
+        file_creation_time=latest.file_creation_time,
+        total_entry_count=latest.total_entry_count,
+        total_batch_count=latest.total_batch_count,
+        total_block_count=latest.total_block_count,
+        total_credit_amount=str(latest.total_credit_amount),
+        entry_hash=latest.entry_hash,
+        raw_content=latest.raw_content,
+    )
+
+
 @router.post("/generate", response_model=NachaFileResponse, status_code=status.HTTP_201_CREATED)
 
 async def generate_nacha_file_endpoint(
