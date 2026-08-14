@@ -10,7 +10,13 @@ const VendorsScreen = (() => {
   let loadedChangeRequests = [];
   let activeVendorForRequest = null;
   let currentViewMode = 'card'; // 'card' or 'table'
-  let showFullAccountDetails = false;
+  let selectedVendorIds = new Set();
+  let vendorsToDelete = [];
+
+  function isAdmin() {
+    const user = API.getUser();
+    return user && String(user.role).toLowerCase() === 'admin';
+  }
 
   function el(id) { return document.getElementById(id); }
 
@@ -90,6 +96,21 @@ const VendorsScreen = (() => {
     if (singleVendorForm) singleVendorForm.addEventListener('submit', handleCreateSingleVendorSubmit);
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
+
+    // Delete Vendor Event Listeners
+    const selectAllCb = el('vendorSelectAllCb');
+    const clearSelectionBtn = el('clearVendorSelectionBtn');
+    const bulkDeleteBtn = el('bulkDeleteVendorsBtn');
+    const closeDeleteBtn = el('closeDeleteModalBtn');
+    const cancelDeleteBtn = el('cancelDeleteModalBtn');
+    const executeDeleteBtn = el('executeDeleteVendorsBtn');
+
+    if (selectAllCb) selectAllCb.addEventListener('change', handleSelectAllVendors);
+    if (clearSelectionBtn) clearSelectionBtn.addEventListener('click', clearVendorSelection);
+    if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click', openConfirmDeleteSelection);
+    if (closeDeleteBtn) closeDeleteBtn.addEventListener('click', hideDeleteModal);
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', hideDeleteModal);
+    if (executeDeleteBtn) executeDeleteBtn.addEventListener('click', executeVendorDeletion);
 
     // Auto-reload when switching to view-vendors tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
@@ -361,11 +382,139 @@ const VendorsScreen = (() => {
     }
   }
 
+  // ── Selection & Deletion Management ─────────────────────────
+  function getFilteredVendors() {
+    const searchInput = el('vendorSearchInput');
+    const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    return loadedVendors.filter(v =>
+      v.name.toLowerCase().includes(term) ||
+      (v.routing_number && v.routing_number.includes(term)) ||
+      (v.account_number && v.account_number.includes(term))
+    );
+  }
+
+  function updateBulkDeleteBar() {
+    const bar = el('vendorBulkActionBar');
+    const countText = el('vendorSelectedCountText');
+    const deleteBtn = el('bulkDeleteVendorsBtn');
+
+    if (!bar) return;
+
+    if (isAdmin() && selectedVendorIds.size > 0) {
+      bar.style.display = 'block';
+      if (countText) countText.textContent = `${selectedVendorIds.size} Vendor(s) Selected`;
+      if (deleteBtn) {
+        const btnSpan = deleteBtn.querySelector('span:not(.spinner)');
+        if (btnSpan) btnSpan.textContent = `🗑 Delete Selected Vendors (${selectedVendorIds.size})`;
+      }
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  function clearVendorSelection() {
+    selectedVendorIds.clear();
+    const selectAllCb = el('vendorSelectAllCb');
+    if (selectAllCb) selectAllCb.checked = false;
+    document.querySelectorAll('.vendor-select-cb').forEach(cb => cb.checked = false);
+    updateBulkDeleteBar();
+  }
+
+  function handleSelectAllVendors(e) {
+    const isChecked = e.target.checked;
+    const currentFiltered = getFilteredVendors();
+    if (isChecked) {
+      currentFiltered.forEach(v => selectedVendorIds.add(v.id));
+    } else {
+      currentFiltered.forEach(v => selectedVendorIds.delete(v.id));
+    }
+    document.querySelectorAll('.vendor-select-cb').forEach(cb => {
+      cb.checked = isChecked;
+    });
+    updateBulkDeleteBar();
+  }
+
+  function toggleVendorSelection(vendorId, isChecked) {
+    if (isChecked) {
+      selectedVendorIds.add(vendorId);
+    } else {
+      selectedVendorIds.delete(vendorId);
+    }
+    updateBulkDeleteBar();
+  }
+
+  function openConfirmDeleteSingle(vendorId) {
+    const v = loadedVendors.find(item => item.id === vendorId);
+    if (!v) return;
+    vendorsToDelete = [v];
+    showDeleteConfirmationModal();
+  }
+
+  function openConfirmDeleteSelection() {
+    if (selectedVendorIds.size === 0) return;
+    vendorsToDelete = loadedVendors.filter(v => selectedVendorIds.has(v.id));
+    showDeleteConfirmationModal();
+  }
+
+  function showDeleteConfirmationModal() {
+    const modal = el('confirmDeleteVendorModal');
+    const msgEl = el('confirmDeleteMessage');
+    const listEl = el('deleteVendorsListText');
+
+    if (!modal) return;
+
+    if (msgEl) {
+      msgEl.textContent = vendorsToDelete.length === 1
+        ? `Are you sure you want to permanently delete vendor "${vendorsToDelete[0].name}" from the database?`
+        : `Are you sure you want to permanently delete ${vendorsToDelete.length} selected vendor(s) from the database?`;
+    }
+
+    if (listEl) {
+      listEl.innerHTML = vendorsToDelete.map(v => `• ${v.name} (Routing: ${v.routing_number}, Acct: ${maskAccount(v.account_number)})`).join('<br/>');
+    }
+
+    modal.classList.add('active');
+  }
+
+  function hideDeleteModal() {
+    const modal = el('confirmDeleteVendorModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  async function executeVendorDeletion() {
+    if (vendorsToDelete.length === 0) return;
+
+    const spinner = el('executeDeleteSpinner');
+    const executeBtn = el('executeDeleteVendorsBtn');
+
+    if (executeBtn) executeBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      if (vendorsToDelete.length === 1) {
+        await API.del(`/vendors/${vendorsToDelete[0].id}`);
+      } else {
+        const vendor_ids = vendorsToDelete.map(v => v.id);
+        await API.post('/vendors/bulk-delete', { vendor_ids });
+      }
+
+      hideDeleteModal();
+      clearVendorSelection();
+      await loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to delete vendor(s).');
+    } finally {
+      if (executeBtn) executeBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
   return {
     init,
     loadData,
     openChangeModal,
     openEditVendorModal,
+    openConfirmDeleteSingle,
   };
 
 
@@ -506,11 +655,16 @@ const VendorsScreen = (() => {
         `;
       }
 
+      const isChecked = selectedVendorIds.has(v.id);
+
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
-          <div>
-            <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${v.name}</h4>
-            <div class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</div>
+          <div style="display: flex; align-items: center; gap: var(--space-xs);">
+            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
+            <div>
+              <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${v.name}</h4>
+              <div class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</div>
+            </div>
           </div>
           <span class="badge badge-success">Active</span>
         </div>
@@ -536,15 +690,24 @@ const VendorsScreen = (() => {
 
         ${pendingNoticeHtml}
 
-        <div style="margin-top: var(--space-md); display: flex; gap: var(--space-xs); justify-content: flex-end;">
+        <div style="margin-top: var(--space-md); display: flex; gap: var(--space-xs); justify-content: flex-end; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openEditVendorModal('${v.id}')">
             Edit Profile
           </button>
           <button type="button" class="btn btn-secondary btn-sm req-change-btn" onclick="VendorsScreen.openChangeModal('${v.id}')">
             Request Bank Change
           </button>
+          ${isAdmin() ? `
+          <button type="button" class="btn btn-sm" onclick="VendorsScreen.openConfirmDeleteSingle('${v.id}')" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 4px 8px; font-weight: 600;" title="Delete Vendor (Admin Only)">
+            🗑 Delete
+          </button>` : ''}
         </div>
       `;
+
+      const cb = card.querySelector('.vendor-select-cb');
+      if (cb) {
+        cb.addEventListener('change', (e) => toggleVendorSelection(v.id, e.target.checked));
+      }
 
       container.appendChild(card);
     });
@@ -559,7 +722,7 @@ const VendorsScreen = (() => {
     if (vendors.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="7" style="padding: 24px; text-align: center; color: var(--color-text-muted);">
+          <td colspan="8" style="padding: 24px; text-align: center; color: var(--color-text-muted);">
             No vendors found in directory.
           </td>
         </tr>
@@ -583,8 +746,12 @@ const VendorsScreen = (() => {
       }
 
       const displayEmail = v.email || ('ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
+      const isChecked = selectedVendorIds.has(v.id);
 
       tr.innerHTML = `
+        <td style="padding: 12px 16px; text-align: center;">
+          ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} style="cursor: pointer;" />` : '—'}
+        </td>
         <td style="padding: 12px 16px;">
           <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
           <span class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</span>
@@ -595,17 +762,25 @@ const VendorsScreen = (() => {
         <td style="padding: 12px 16px;" class="font-mono">${(v.account_type || 'checking').toUpperCase()}</td>
         <td style="padding: 12px 16px;">${statusBadge}</td>
         <td style="padding: 12px 16px; text-align: right;">
-          <div style="display: flex; gap: var(--space-xs); justify-content: flex-end;">
+          <div style="display: flex; gap: var(--space-xs); justify-content: flex-end; flex-wrap: wrap;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openEditVendorModal('${v.id}')">
               Edit Profile
             </button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openChangeModal('${v.id}')">
               Request Bank Change
             </button>
+            ${isAdmin() ? `
+            <button type="button" class="btn btn-sm" onclick="VendorsScreen.openConfirmDeleteSingle('${v.id}')" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 4px 8px; font-weight: 600;" title="Delete Vendor (Admin Only)">
+              🗑 Delete
+            </button>` : ''}
           </div>
         </td>
       `;
 
+      const cb = tr.querySelector('.vendor-select-cb');
+      if (cb) {
+        cb.addEventListener('change', (e) => toggleVendorSelection(v.id, e.target.checked));
+      }
 
       tbody.appendChild(tr);
     });

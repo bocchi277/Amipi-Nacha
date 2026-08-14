@@ -39,6 +39,15 @@ class BulkVendorUploadResponseSchema(BaseModel):
     errors: list[dict[str, Any]]
 
 
+class BulkDeleteVendorsSchema(BaseModel):
+    vendor_ids: list[uuid.UUID]
+
+
+class BulkDeleteVendorsResponseSchema(BaseModel):
+    deleted_count: int
+    message: str
+
+
 class UpdateVendorSchema(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
@@ -718,4 +727,79 @@ async def reject_vendor_change_request(
         status=req.status.value,
         requested_by_user_id=str(req.requested_by_user_id) if req.requested_by_user_id else None,
         reviewed_by_user_id=str(req.reviewed_by_user_id) if req.reviewed_by_user_id else None,
+    )
+
+
+@router.delete("/{vendor_id}", status_code=status.HTTP_200_OK)
+async def delete_single_vendor(
+    vendor_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
+):
+    """Delete a single vendor by ID (ADMIN ONLY)."""
+    try:
+        v_uuid = uuid.UUID(vendor_id.strip())
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid vendor_id format.")
+
+    res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
+    vendor = res.scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found.")
+
+    v_name = vendor.name
+
+    await db.delete(vendor)
+
+    audit = AuditLog(
+        user_id=admin_user.id,
+        action="DELETE_VENDOR",
+        entity_type="Vendor",
+        entity_id=str(v_uuid),
+        details={"vendor_name": v_name, "deleted_by": admin_user.username},
+    )
+    db.add(audit)
+    await db.commit()
+
+    return {"message": f"Vendor '{v_name}' successfully deleted.", "vendor_id": str(v_uuid)}
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteVendorsResponseSchema, status_code=status.HTTP_200_OK)
+async def bulk_delete_vendors(
+    payload: BulkDeleteVendorsSchema,
+    db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
+):
+    """Delete multiple selected vendors by ID array (ADMIN ONLY)."""
+    if not payload.vendor_ids:
+        raise HTTPException(status_code=400, detail="No vendor IDs provided for bulk deletion.")
+
+    deleted_count = 0
+    deleted_names = []
+
+    for v_id in payload.vendor_ids:
+        res = await db.execute(select(Vendor).where(Vendor.id == v_id))
+        vendor = res.scalar_one_or_none()
+        if vendor:
+            deleted_names.append(vendor.name)
+            await db.delete(vendor)
+            deleted_count += 1
+
+    if deleted_count > 0:
+        audit = AuditLog(
+            user_id=admin_user.id,
+            action="BULK_DELETE_VENDORS",
+            entity_type="Vendor",
+            details={
+                "deleted_count": deleted_count,
+                "deleted_names": deleted_names,
+                "deleted_by": admin_user.username,
+            },
+        )
+        db.add(audit)
+        await db.commit()
+
+    return BulkDeleteVendorsResponseSchema(
+        deleted_count=deleted_count,
+        message=f"Successfully deleted {deleted_count} vendor(s) from database.",
     )
