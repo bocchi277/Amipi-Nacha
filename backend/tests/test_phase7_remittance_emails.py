@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.main import app
-from app.models import AuditLog, RemittanceStatus, User, Vendor, VendorRemittance
+from app.models import AuditLog, RemittanceStatus, User, UserRole, Vendor, VendorRemittance
 
 
 @pytest.mark.asyncio
@@ -326,5 +326,66 @@ async def test_get_latest_nacha_file(db_session):
         assert data["filename"] == "TEST_LATEST.ach"
         assert data["total_credit_amount"] == "1250.00"
         assert data["entry_hash"] == "021000021"
+
+
+@pytest.mark.asyncio
+async def test_tabular_remittance_email_template_rendering_and_preview(db_session):
+    """Test tabular remittance email template rendering, HTML table generation, and live preview endpoint."""
+    from app.core.email_templates import render_email_template
+
+    sample_invoices = [
+        {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
+        {"method": "ACH/Wire", "invoice_date": "05-21-2026", "invoice_number": "128779", "amount": 31318.24},
+    ]
+
+    subj, text, html = render_email_template(
+        "Payment Remittance Advice — {{vendor_name}} (${{amount}})",
+        "Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: ${{amount}}\n\nInvoices applied:",
+        {
+            "vendor_name": "AMIPI INC",
+            "amount": "53,413.06",
+            "invoice_ref": "INV-128753",
+            "effective_date": "05-19-2026",
+            "company_name": "AMIPI INC",
+            "payment_method": "ACH/Wire",
+            "deposit_ref": "12970",
+            "deposit_source": "Sunrise",
+        },
+        invoice_items=sample_invoices,
+    )
+
+    assert "53,413.06" in subj
+    assert "2 Payment Transaction records" in html
+    assert "128753" in html
+    assert "128779" in html
+    assert "$22,094.82" in html
+    assert "$31,318.24" in html
+    assert "TOT" in html
+    assert "$53,413.06" in html
+
+    # Test Live Preview Endpoint
+    user = User(username="tmpl_user", email="tmpl@test.com", password_hash="hashed", role=UserRole.USER)
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    from app.core.security import create_access_token
+    token = create_access_token(data={"sub": str(user.id)})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        prev_res = await client.post(
+            "/api/v1/remittances/template/preview",
+            headers=headers,
+            json={
+                "subject_template": "Custom Remittance — {{vendor_name}}",
+                "body_template": "Hello {{vendor_name}},\n\nPayment processed of ${{amount}}.",
+            },
+        )
+        assert prev_res.status_code == 200
+        data = prev_res.json()
+        assert "Custom Remittance — AMIPI INC" in data["subject"]
+        assert "2 Payment Transaction records" in data["body_html"]
+        assert "TOT" in data["body_html"]
 
 

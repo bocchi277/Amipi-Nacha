@@ -31,6 +31,7 @@ class RemittanceResponseSchema(BaseModel):
     invoice_reference: Optional[str] = None
     subject: str
     body_text: str
+    body_html: Optional[str] = None
     status: str
     sent_at: Optional[str] = None
     resend_count: int
@@ -55,11 +56,23 @@ class EmailTemplateSchema(BaseModel):
     subject_template: str
     body_template: str
     available_placeholders: list[dict[str, str]]
+    preview_html: Optional[str] = None
 
 
 class UpdateEmailTemplateRequest(BaseModel):
     subject_template: str
     body_template: str
+
+
+class EmailTemplatePreviewRequest(BaseModel):
+    subject_template: Optional[str] = None
+    body_template: Optional[str] = None
+
+
+class EmailTemplatePreviewResponse(BaseModel):
+    subject: str
+    body_text: str
+    body_html: str
 
 
 class UpdateRemittanceEmailRequest(BaseModel):
@@ -70,11 +83,65 @@ class UpdateRemittanceEmailRequest(BaseModel):
 @router.get("/template", response_model=EmailTemplateSchema)
 async def get_email_template(current_user: User = Depends(get_current_user)):
     """Fetch the active remittance email template and available dynamic placeholders."""
-    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS
+    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS, render_email_template
+    subj, txt, html = render_email_template(
+        ACTIVE_TEMPLATE["subject"],
+        ACTIVE_TEMPLATE["body"],
+        {
+            "vendor_name": "AMIPI INC",
+            "amount": "53,413.06",
+            "invoice_ref": "INV-128753",
+            "effective_date": "05-19-2026",
+            "company_name": "AMIPI INC",
+            "payment_method": "ACH/Wire",
+            "deposit_ref": "12970",
+            "deposit_source": "Sunrise",
+        },
+        invoice_items=[
+            {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
+            {"method": "ACH/Wire", "invoice_date": "05-21-2026", "invoice_number": "128779", "amount": 31318.24},
+        ],
+    )
     return EmailTemplateSchema(
         subject_template=ACTIVE_TEMPLATE["subject"],
         body_template=ACTIVE_TEMPLATE["body"],
         available_placeholders=AVAILABLE_PLACEHOLDERS,
+        preview_html=html,
+    )
+
+
+@router.post("/template/preview", response_model=EmailTemplatePreviewResponse)
+async def preview_email_template(
+    payload: EmailTemplatePreviewRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a live HTML preview of the customized email template with sample sub-invoices."""
+    from app.core.email_templates import ACTIVE_TEMPLATE, render_email_template
+    subj_tmpl = payload.subject_template or ACTIVE_TEMPLATE["subject"]
+    body_tmpl = payload.body_template or ACTIVE_TEMPLATE["body"]
+
+    subj, txt, html = render_email_template(
+        subj_tmpl,
+        body_tmpl,
+        {
+            "vendor_name": "AMIPI INC",
+            "amount": "53,413.06",
+            "invoice_ref": "INV-128753",
+            "effective_date": "05-19-2026",
+            "company_name": "AMIPI INC",
+            "payment_method": "ACH/Wire",
+            "deposit_ref": "12970",
+            "deposit_source": "Sunrise",
+        },
+        invoice_items=[
+            {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
+            {"method": "ACH/Wire", "invoice_date": "05-21-2026", "invoice_number": "128779", "amount": 31318.24},
+        ],
+    )
+    return EmailTemplatePreviewResponse(
+        subject=subj,
+        body_text=txt,
+        body_html=html,
     )
 
 
@@ -84,21 +151,95 @@ async def update_email_template(
     current_user: User = Depends(get_current_user),
 ):
     """Update active remittance email template."""
-    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS
+    from app.core.email_templates import ACTIVE_TEMPLATE, AVAILABLE_PLACEHOLDERS, render_email_template
     if payload.subject_template and payload.subject_template.strip():
         ACTIVE_TEMPLATE["subject"] = payload.subject_template.strip()
     if payload.body_template and payload.body_template.strip():
         ACTIVE_TEMPLATE["body"] = payload.body_template.strip()
 
+    subj, txt, html = render_email_template(
+        ACTIVE_TEMPLATE["subject"],
+        ACTIVE_TEMPLATE["body"],
+        {
+            "vendor_name": "AMIPI INC",
+            "amount": "53,413.06",
+            "invoice_ref": "INV-128753",
+            "effective_date": "05-19-2026",
+            "company_name": "AMIPI INC",
+            "payment_method": "ACH/Wire",
+            "deposit_ref": "12970",
+            "deposit_source": "Sunrise",
+        },
+        invoice_items=[
+            {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
+            {"method": "ACH/Wire", "invoice_date": "05-21-2026", "invoice_number": "128779", "amount": 31318.24},
+        ],
+    )
+
     return EmailTemplateSchema(
         subject_template=ACTIVE_TEMPLATE["subject"],
         body_template=ACTIVE_TEMPLATE["body"],
         available_placeholders=AVAILABLE_PLACEHOLDERS,
+        preview_html=html,
+    )
+
+
+def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
+    from app.core.email_templates import render_email_template
+    from sqlalchemy.inspection import inspect
+
+    insp = inspect(r)
+    breakdown = None
+    created_by_user = "admin"
+
+    if "payment" in insp.dict and r.payment is not None:
+        breakdown = getattr(r.payment, "invoice_breakdown", None)
+
+    if "nacha_file" in insp.dict and r.nacha_file is not None:
+        nf_insp = inspect(r.nacha_file)
+        if "created_by_user" in nf_insp.dict and r.nacha_file.created_by_user is not None:
+            created_by_user = r.nacha_file.created_by_user.username
+
+    html_content = getattr(r, "body_html", None)
+    if not html_content:
+        eff_str = r.effective_date.strftime("%m-%d-%Y") if hasattr(r.effective_date, "strftime") else str(r.effective_date)
+        _, _, html_content = render_email_template(
+            r.subject,
+            r.body_text,
+            {
+                "vendor_name": r.vendor_name,
+                "amount": f"{float(r.amount):,.2f}",
+                "invoice_ref": r.invoice_reference or "N/A",
+                "effective_date": eff_str,
+                "company_name": "AMIPI INC",
+                "payment_method": "ACH/Wire",
+                "deposit_ref": str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970",
+                "deposit_source": "Sunrise",
+            },
+            invoice_items=breakdown,
+        )
+
+    return RemittanceResponseSchema(
+        id=str(r.id),
+        vendor_id=str(r.vendor_id),
+        vendor_name=r.vendor_name,
+        recipient_email=r.recipient_email,
+        amount=str(r.amount),
+        effective_date=r.effective_date.isoformat(),
+        invoice_reference=r.invoice_reference,
+        subject=r.subject,
+        body_text=r.body_text,
+        body_html=html_content,
+        status=r.status.value,
+        sent_at=r.sent_at.isoformat() if r.sent_at else None,
+        resend_count=r.resend_count,
+        created_at=r.created_at.isoformat(),
+        created_by_username=created_by_user,
+        invoice_breakdown=breakdown,
     )
 
 
 @router.get("", response_model=list[RemittanceResponseSchema])
-
 async def list_remittances(
     remittance_status: Optional[RemittanceStatus] = Query(None, alias="status"),
     vendor_id: Optional[uuid.UUID] = Query(None),
@@ -145,27 +286,7 @@ async def list_remittances(
     res = await db.execute(stmt)
     remittances = res.scalars().all()
 
-    return [
-        RemittanceResponseSchema(
-            id=str(r.id),
-            vendor_id=str(r.vendor_id),
-            vendor_name=r.vendor_name,
-            recipient_email=r.recipient_email,
-            amount=str(r.amount),
-            effective_date=r.effective_date.isoformat(),
-            invoice_reference=r.invoice_reference,
-            subject=r.subject,
-            body_text=r.body_text,
-            status=r.status.value,
-            sent_at=r.sent_at.isoformat() if r.sent_at else None,
-            resend_count=r.resend_count,
-            created_at=r.created_at.isoformat(),
-            created_by_username=(r.nacha_file.created_by_user.username if (r.nacha_file and r.nacha_file.created_by_user) else "admin"),
-            invoice_breakdown=r.payment.invoice_breakdown if (r.payment and r.payment.invoice_breakdown) else None,
-        )
-        for r in remittances
-    ]
-
+    return [_build_remittance_response(r) for r in remittances]
 
 
 @router.post("/send", response_model=list[RemittanceResponseSchema])
@@ -179,7 +300,10 @@ async def dispatch_pending_remittances(
 
     Updates status from PENDING to SENT and populates sent_at timestamps.
     """
-    stmt = select(VendorRemittance).where(VendorRemittance.status == RemittanceStatus.PENDING)
+    stmt = select(VendorRemittance).options(
+        selectinload(VendorRemittance.payment),
+        selectinload(VendorRemittance.nacha_file).selectinload(NachaFileRecord.created_by_user)
+    ).where(VendorRemittance.status == RemittanceStatus.PENDING)
     if nacha_file_id:
         stmt = stmt.where(VendorRemittance.nacha_file_id == nacha_file_id)
 
@@ -193,24 +317,7 @@ async def dispatch_pending_remittances(
 
     await db.commit()
 
-    return [
-        RemittanceResponseSchema(
-            id=str(r.id),
-            vendor_id=str(r.vendor_id),
-            vendor_name=r.vendor_name,
-            recipient_email=r.recipient_email,
-            amount=str(r.amount),
-            effective_date=r.effective_date.isoformat(),
-            invoice_reference=r.invoice_reference,
-            subject=r.subject,
-            body_text=r.body_text,
-            status=r.status.value,
-            sent_at=r.sent_at.isoformat() if r.sent_at else None,
-            resend_count=r.resend_count,
-            created_at=r.created_at.isoformat(),
-        )
-        for r in dispatched
-    ]
+    return [_build_remittance_response(r) for r in dispatched]
 
 
 @router.post("/bulk-resend", response_model=BulkResendResponseSchema)
@@ -295,23 +402,7 @@ async def update_remittance_email(
     await db.commit()
     await db.refresh(remittance)
 
-    return RemittanceResponseSchema(
-        id=str(remittance.id),
-        vendor_id=str(remittance.vendor_id),
-        vendor_name=remittance.vendor_name,
-        recipient_email=remittance.recipient_email,
-        amount=str(remittance.amount),
-        effective_date=remittance.effective_date.isoformat(),
-        invoice_reference=remittance.invoice_reference,
-        subject=remittance.subject,
-        body_text=remittance.body_text,
-        status=remittance.status.value,
-        sent_at=remittance.sent_at.isoformat() if remittance.sent_at else None,
-        resend_count=remittance.resend_count,
-        created_at=remittance.created_at.isoformat(),
-        created_by_username=(remittance.nacha_file.created_by_user.username if (remittance.nacha_file and remittance.nacha_file.created_by_user) else "admin"),
-        invoice_breakdown=remittance.payment.invoice_breakdown if (remittance.payment and remittance.payment.invoice_breakdown) else None,
-    )
+    return _build_remittance_response(remittance)
 
 
 class BulkDeleteRemittancesRequest(BaseModel):

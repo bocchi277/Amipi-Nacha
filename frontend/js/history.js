@@ -50,11 +50,24 @@ const HistoryScreen = (() => {
     const closeTmplBtn = el('closeEmailTemplateModalBtn');
     const resetTmplBtn = el('resetDefaultTmplBtn');
     const tmplForm = el('emailTemplateForm');
+    const tmplTabEdit = el('tmplTabEditBtn');
+    const tmplTabPreview = el('tmplTabPreviewBtn');
 
     if (openTmplBtn) openTmplBtn.addEventListener('click', openEmailTemplateModal);
     if (closeTmplBtn) closeTmplBtn.addEventListener('click', hideEmailTemplateModal);
     if (resetTmplBtn) resetTmplBtn.addEventListener('click', resetEmailTemplateToDefault);
     if (tmplForm) tmplForm.addEventListener('submit', handleSaveEmailTemplate);
+    if (tmplTabEdit) tmplTabEdit.addEventListener('click', () => switchTmplTab('edit'));
+    if (tmplTabPreview) tmplTabPreview.addEventListener('click', () => switchTmplTab('preview'));
+
+    // View Email Modal listeners
+    const closeViewEmailBtn = el('closeViewEmailModalBtn');
+    const cancelViewEmailBtn = el('cancelViewEmailModalBtn');
+    const resendFromViewBtn = el('resendFromViewEmailBtn');
+
+    if (closeViewEmailBtn) closeViewEmailBtn.addEventListener('click', hideViewEmailModal);
+    if (cancelViewEmailBtn) cancelViewEmailBtn.addEventListener('click', hideViewEmailModal);
+    if (resendFromViewBtn) resendFromViewBtn.addEventListener('click', handleResendFromViewModal);
 
     const prevBtn = el('prevHistoryPageBtn');
     const nextBtn = el('nextHistoryPageBtn');
@@ -124,8 +137,10 @@ const HistoryScreen = (() => {
 
   // ── Email Template Management ──────────────────────────────────
   let activeTemplateData = null;
+  let viewingRemittanceItem = null;
 
   async function openEmailTemplateModal() {
+    switchTmplTab('edit');
     const modal = el('emailTemplateModal');
     const errBox = el('emailTmplError');
     const succBox = el('emailTmplSuccess');
@@ -137,6 +152,10 @@ const HistoryScreen = (() => {
       activeTemplateData = data;
       if (el('tmplSubjectInput')) el('tmplSubjectInput').value = data.subject_template || '';
       if (el('tmplBodyInput')) el('tmplBodyInput').value = data.body_template || '';
+      if (el('tmplPreviewSubject')) el('tmplPreviewSubject').textContent = data.subject_template || 'Payment Remittance Advice';
+      if (el('tmplPreviewHtmlContainer') && data.preview_html) {
+        el('tmplPreviewHtmlContainer').innerHTML = data.preview_html;
+      }
     } catch (err) {
       console.warn('Failed to load email template:', err);
     }
@@ -155,11 +174,43 @@ const HistoryScreen = (() => {
     }
   }
 
+  async function switchTmplTab(tabName) {
+    const editTab = el('emailTmplEditTab');
+    const previewTab = el('emailTmplPreviewTab');
+    const editBtn = el('tmplTabEditBtn');
+    const previewBtn = el('tmplTabPreviewBtn');
+
+    if (tabName === 'edit') {
+      if (editTab) editTab.style.display = 'block';
+      if (previewTab) previewTab.style.display = 'none';
+      if (editBtn) { editBtn.className = 'btn btn-sm active'; }
+      if (previewBtn) { previewBtn.className = 'btn btn-sm btn-secondary'; }
+    } else {
+      if (editTab) editTab.style.display = 'none';
+      if (previewTab) previewTab.style.display = 'block';
+      if (editBtn) { editBtn.className = 'btn btn-sm btn-secondary'; }
+      if (previewBtn) { previewBtn.className = 'btn btn-sm active'; }
+
+      // Fetch live preview
+      const subj = el('tmplSubjectInput') ? el('tmplSubjectInput').value.trim() : '';
+      const body = el('tmplBodyInput') ? el('tmplBodyInput').value.trim() : '';
+      try {
+        const preview = await API.post('/remittances/template/preview', {
+          subject_template: subj,
+          body_template: body,
+        });
+        if (el('tmplPreviewSubject')) el('tmplPreviewSubject').textContent = preview.subject;
+        if (el('tmplPreviewHtmlContainer')) el('tmplPreviewHtmlContainer').innerHTML = preview.body_html;
+      } catch (err) {
+        console.warn('Failed to generate template preview:', err);
+      }
+    }
+  }
+
   function insertPlaceholder(tag) {
     const bodyInput = el('tmplBodyInput');
     const subjectInput = el('tmplSubjectInput');
     
-    // Insert into focused input, defaulting to body textarea
     const activeEl = document.activeElement === subjectInput ? subjectInput : bodyInput;
     if (!activeEl) return;
 
@@ -177,7 +228,7 @@ const HistoryScreen = (() => {
       el('tmplSubjectInput').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('tmplBodyInput')) {
-      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nPlease be advised that an ACH payment of \${{amount}} has been scheduled for effective date {{effective_date}}.\n\nPayment Details:\n• Payee / Vendor Name: {{vendor_name}}\n• Payment Amount ($):  \${{amount}}\n• Invoice Reference:   {{invoice_ref}}\n• Effective Date:      {{effective_date}}\n\nIf you have any questions regarding this remittance, please contact Accounts Payable.\n\nThank you,\n{{company_name}} Accounts Payable`;
+      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\n\nInvoices applied:`;
     }
   }
 
@@ -228,6 +279,56 @@ const HistoryScreen = (() => {
       if (saveBtn) saveBtn.disabled = false;
       if (spinner) spinner.style.display = 'none';
     }
+  }
+
+  // ── Specific Remittance Email Viewer Modal ──────────────────────
+  function openViewEmailModal(id) {
+    const item = allRemittances.find(r => r.id === id);
+    if (!item) return;
+
+    viewingRemittanceItem = item;
+
+    if (el('viewEmailRecipientSub')) el('viewEmailRecipientSub').textContent = `Recipient: ${item.vendor_name} <${item.recipient_email}>`;
+    if (el('viewEmailToAddress')) el('viewEmailToAddress').textContent = `${item.vendor_name} <${item.recipient_email}>`;
+    if (el('viewEmailSubject')) el('viewEmailSubject').textContent = item.subject;
+    
+    const badge = el('viewEmailStatusBadge');
+    if (badge) {
+      const isSent = (item.status || '').toLowerCase() === 'sent';
+      badge.className = isSent ? 'badge badge-success' : 'badge badge-warning';
+      badge.textContent = isSent ? `Sent (x${item.resend_count || 1})` : 'Pending Dispatch';
+    }
+
+    const container = el('viewEmailHtmlBody');
+    if (container) {
+      if (item.body_html) {
+        container.innerHTML = item.body_html;
+      } else {
+        container.innerHTML = `<div style="font-family: monospace; white-space: pre-wrap; font-size: 12px; color: #334155;">${item.body_text}</div>`;
+      }
+    }
+
+    const modal = el('viewRemittanceEmailModal');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function hideViewEmailModal() {
+    viewingRemittanceItem = null;
+    const modal = el('viewRemittanceEmailModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  async function handleResendFromViewModal() {
+    if (!viewingRemittanceItem) return;
+    const item = viewingRemittanceItem;
+    hideViewEmailModal();
+    await sendSingleRemittanceEmail(item.id);
   }
 
 
@@ -540,6 +641,10 @@ const HistoryScreen = (() => {
         <td>${statusBadge}</td>
         <td class="font-mono text-xs text-muted">${formattedSentDate}</td>
         <td style="text-align: right; white-space: nowrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openViewEmailModal('${r.id}')" style="padding: 2px 6px; font-size: 10px; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px;" title="View Rendered Tabular Email">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>View</span>
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.sendSingleRemittanceEmail('${r.id}')" style="padding: 2px 6px; font-size: 10px; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px;" title="Send Remittance Email to ${r.recipient_email}">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
             <span>${isSent ? 'Resend' : 'Send'}</span>
@@ -1049,6 +1154,8 @@ const HistoryScreen = (() => {
     openHistoryBreakdownModal,
     openConfirmDeleteSingleHistory,
     openLastNachaFileModal,
+    openViewEmailModal,
+    switchTmplTab,
     editRowEmail,
     cancelRowEmailEdit,
     saveRowEmail,

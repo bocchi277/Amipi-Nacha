@@ -37,6 +37,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await session.execute(
             text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;")
         )
+        await session.execute(
+            text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS body_html TEXT;")
+        )
         # Truncate tables for test isolation
         await session.execute(
             text("TRUNCATE TABLE audit_logs, payments, nacha_files, vendors, upload_batches, users CASCADE;")

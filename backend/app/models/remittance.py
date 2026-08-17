@@ -40,6 +40,7 @@ class VendorRemittance(Base):
     invoice_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[RemittanceStatus] = mapped_column(
         SQLEnum(RemittanceStatus, name="remittancestatus", create_type=True),
         nullable=False,

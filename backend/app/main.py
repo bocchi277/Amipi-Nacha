@@ -33,6 +33,7 @@ async def on_startup():
         async with async_engine.begin() as conn:
             await conn.execute(text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;"))
             await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
+            await conn.execute(text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS body_html TEXT;"))
     except Exception as err:
         print(f"Startup DB migration warning: {err}")
 

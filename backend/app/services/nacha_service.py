@@ -204,16 +204,20 @@ async def combine_batches_and_generate_nacha(
 
         from app.core.email_templates import ACTIVE_TEMPLATE, render_email_template
 
-        subj, body = render_email_template(
+        subj, body_text, body_html = render_email_template(
             ACTIVE_TEMPLATE["subject"],
             ACTIVE_TEMPLATE["body"],
             {
                 "vendor_name": vendor_obj.name,
-                "amount": f"{p.amount:.2f}",
+                "amount": f"{p.amount:,.2f}",
                 "invoice_ref": p.id_number or "N/A",
-                "effective_date": p.effective_date.isoformat(),
+                "effective_date": p.effective_date.strftime("%m-%d-%Y") if hasattr(p.effective_date, "strftime") else str(p.effective_date),
                 "company_name": company_name,
+                "payment_method": "ACH/Wire",
+                "deposit_ref": str(nacha_record.id)[:8],
+                "deposit_source": ACTIVE_TEMPLATE.get("deposit_source", "Sunrise"),
             },
+            invoice_items=p.invoice_breakdown,
         )
 
         remittance = VendorRemittance(
@@ -226,7 +230,8 @@ async def combine_batches_and_generate_nacha(
             effective_date=p.effective_date,
             invoice_reference=p.id_number,
             subject=subj,
-            body_text=body,
+            body_text=body_text,
+            body_html=body_html,
             status=RemittanceStatus.PENDING,
         )
         db_session.add(remittance)
