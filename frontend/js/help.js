@@ -97,10 +97,10 @@ const HelpScreen = (() => {
     const bodyVal = el('helpTmplBody') ? el('helpTmplBody').value : '';
 
     const sampleContext = {
-      '{{vendor_name}}': 'ARTN DESIGN INC',
-      '{{amount}}': '700.75',
-      '{{invoice_ref}}': 'ACH/1139',
-      '{{effective_date}}': '2026-08-12',
+      '{{vendor_name}}': 'AMIPI INC',
+      '{{amount}}': '53,413.06',
+      '{{invoice_ref}}': 'INV-128753',
+      '{{effective_date}}': '05-19-2026',
       '{{company_name}}': 'AMIPI INC',
     };
 
@@ -113,8 +113,66 @@ const HelpScreen = (() => {
       renderedBody = renderedBody.replaceAll(key, val);
     });
 
-    if (el('previewSubject')) el('previewSubject').textContent = renderedSubj || '—';
+    if (el('previewSubject')) el('previewSubject').textContent = renderedSubj || 'Payment Remittance Advice — AMIPI INC ($53,413.06)';
     if (el('previewBody')) el('previewBody').textContent = renderedBody || '—';
+
+    // Format paragraphs
+    const paragraphs = (renderedBody || '').split('\n\n');
+    const htmlParagraphs = paragraphs
+      .filter(p => p.trim())
+      .map(p => `<p style="margin: 0 0 10px 0; font-size: 13px; line-height: 1.5; color: #1e293b;">${p.replace(/\n/g, '<br/>')}</p>`)
+      .join('');
+
+    // Generate Tabular Section matching sample template
+    const sampleTableHtml = `
+      <div style="margin-top: 14px; margin-bottom: 16px;">
+        <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
+          <span style="background-color: #fef08a; padding: 1px 4px; border-radius: 2px;">Sunrise:</span> Check/Wire Deposits (Deposit #12970)
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 12px; border: 1px solid #94a3b8;">
+          <thead>
+            <tr style="background-color: #8bbcdb; color: #0f172a;">
+              <th colspan="4" style="text-align: right; padding: 6px 10px; font-weight: 600; font-size: 12px; border-bottom: 1px solid #64748b;">
+                2 Payment Transaction records
+              </th>
+            </tr>
+            <tr style="background-color: #e2e8f0; color: #1e293b; text-align: left; font-size: 11px;">
+              <th style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%; font-weight: 600;">Method of Payment</th>
+              <th style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%; font-weight: 600;">Invoice Date</th>
+              <th style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%; font-weight: 600;">Invoice #</th>
+              <th style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%; text-align: right; font-weight: 600;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background-color: #ffffff;">
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #334155;">ACH/Wire</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #334155;">05-19-2026</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #1d4ed8; font-weight: 600;">128753</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #0f172a;">$22,094.82</td>
+            </tr>
+            <tr style="background-color: #f8fafc;">
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #334155;">ACH/Wire</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #334155;">05-21-2026</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #1d4ed8; font-weight: 600;">128779</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #0f172a;">$31,318.24</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #64748b;">
+              <td colspan="3" style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 700; color: #0f172a;">TOT</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #0f172a; font-size: 12px; font-weight: 700;">$53,413.06</td>
+            </tr>
+          </tfoot>
+        </table>
+        <p style="margin: 16px 0 4px 0; font-size: 12px; color: #64748b;">If you have any questions regarding this payment remittance, please contact Accounts Payable.</p>
+        <p style="margin: 0; font-size: 12px; color: #334155; font-weight: 600;">AMIPI INC Accounts Payable</p>
+      </div>
+    `;
+
+    const previewContainer = el('helpPreviewHtmlContainer');
+    if (previewContainer) {
+      previewContainer.innerHTML = htmlParagraphs + sampleTableHtml;
+    }
   }
 
   function resetToDefault() {
@@ -122,7 +180,7 @@ const HelpScreen = (() => {
       el('helpTmplSubject').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('helpTmplBody')) {
-      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nPlease be advised that an ACH payment of \${{amount}} has been scheduled for effective date {{effective_date}}.\n\nPayment Details:\n• Payee / Vendor Name: {{vendor_name}}\n• Payment Amount ($):  \${{amount}}\n• Invoice Reference:   {{invoice_ref}}\n• Effective Date:      {{effective_date}}\n\nIf you have any questions regarding this remittance, please contact Accounts Payable.\n\nThank you,\n{{company_name}} Accounts Payable`;
+      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\n\nInvoices applied:`;
     }
     updateLivePreview();
   }

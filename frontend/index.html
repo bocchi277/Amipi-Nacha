@@ -1165,13 +1165,16 @@
               <div>
                 <form id="helpTemplateForm" onsubmit="event.preventDefault();">
                   <div class="form-group" style="margin-bottom: var(--space-md);">
-                    <label class="form-label" for="helpTmplSubject">Email Subject Line</label>
-                    <input type="text" class="form-input" id="helpTmplSubject" required placeholder="e.g. Payment Remittance Advice — {{vendor_name}}" />
+                    <label class="form-label" for="helpTmplSubject">Email Subject Line Template</label>
+                    <input type="text" class="form-input" id="helpTmplSubject" required placeholder="Payment Remittance Advice — {{vendor_name}} (${{amount}})" />
                   </div>
 
                   <div class="form-group" style="margin-bottom: var(--space-xs);">
-                    <label class="form-label" for="helpTmplBody">Email Message Content</label>
-                    <textarea class="form-input font-mono" id="helpTmplBody" rows="10" style="font-size: var(--text-xs); line-height: 1.5;" required></textarea>
+                    <label class="form-label" for="helpTmplBody">Email Message Content (Intro & Paragraphs)</label>
+                    <textarea class="form-input font-mono" id="helpTmplBody" rows="7" style="font-size: var(--text-xs); line-height: 1.5;" required></textarea>
+                    <div class="text-xs text-muted" style="margin-top: 6px;">
+                      Note: The <strong>Tabular Form Method of Payment & Sub-Invoices Table</strong> with itemized breakdown is automatically appended at the bottom of the email.
+                    </div>
                   </div>
                 </form>
               </div>
@@ -1180,17 +1183,18 @@
               <div>
                 <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
                   <span>Live Email Preview (Sample Vendor View)</span>
-                  <span class="badge badge-success" style="font-size: 10px;">Real-time Preview</span>
+                  <span class="badge badge-success" style="font-size: 10px;">Real-time Corporate Preview</span>
                 </label>
-                <div style="background: #ffffff; border: 1px solid var(--border-color, #e2e8f0); border-radius: var(--radius-md); padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-size: var(--text-xs);">
+                <div style="background: #ffffff; border: 1px solid var(--border-color, #e2e8f0); border-radius: var(--radius-md); padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-size: var(--text-xs); max-height: 480px; overflow-y: auto;">
                   <!-- Sample Email Header -->
                   <div style="border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px; line-height: 1.6;">
-                    <div><span class="text-muted">From:</span> <strong>ap@amipi.com</strong></div>
-                    <div><span class="text-muted">To:</span> <strong>ap@artndesign.com</strong></div>
-                    <div><span class="text-muted">Subject:</span> <strong id="previewSubject" style="color: var(--color-primary);">—</strong></div>
+                    <div><span class="text-muted">From:</span> <strong>ap-remittance@amipi.com</strong></div>
+                    <div><span class="text-muted">To:</span> <strong>ap@amipi.com</strong></div>
+                    <div><span class="text-muted">Subject:</span> <strong id="previewSubject" style="color: var(--color-primary);">Payment Remittance Advice — AMIPI INC ($53,413.06)</strong></div>
                   </div>
-                  <!-- Sample Email Body Content -->
-                  <div id="previewBody" style="white-space: pre-wrap; color: #334155; line-height: 1.6; font-family: inherit;">—</div>
+                  <!-- Sample Email Body Content with Tabular Breakdown -->
+                  <div id="helpPreviewHtmlContainer" style="color: #334155; line-height: 1.5;">—</div>
+                  <div id="previewBody" style="display: none;"></div>
                 </div>
               </div>
             </div>

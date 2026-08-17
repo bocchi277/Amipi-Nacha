@@ -9,6 +9,7 @@ Tests:
 3. Real Vendor Template File Download: Triggers download vendor template button, captures real file download,
    and verifies CSV header structure matches vendor import specs.
 """
+import re
 import uuid
 import pytest
 from playwright.sync_api import Page, expect
@@ -83,3 +84,24 @@ def test_help_screen_content_rendering_and_template_downloads(page: Page, base_u
 
     assert "name,routing,account,type,email" in ven_csv_text
     assert "ACME SUPPLIES,021000021,999888777666,Checking,ap@acmesupplies.com" in ven_csv_text
+
+    # Step 6: Test Remittance Advice Email Template Editor & Corporate Tabular Preview
+    expect(page.locator("#view-help")).to_contain_text("Remittance Advice Email Template")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("2 Payment Transaction records")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("Method of Payment")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("Invoice Date")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("Invoice #")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("Amount")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("TOT")
+    expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("$53,413.06")
+
+    # Test Reset to Default
+    page.click("#resetHelpTmplBtn")
+    expect(page.locator("#helpTmplBody")).to_have_value(
+        re.compile("We would like to inform you that we have processed the following payment")
+    )
+
+    # Test Saving Template
+    page.click("#saveHelpTmplBtn")
+    expect(page.locator("#helpTmplSuccess")).to_be_visible()
+    expect(page.locator("#helpTmplSuccess")).to_contain_text("Remittance email template saved successfully")
