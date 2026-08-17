@@ -55,6 +55,6 @@ class VendorRemittance(Base):
     )
 
     # Relationships
-    vendor = relationship("Vendor", lazy="selectin")
+    vendor = relationship("Vendor", back_populates="remittances", lazy="selectin")
     nacha_file = relationship("NachaFileRecord", lazy="select")
     payment = relationship("Payment", lazy="select")

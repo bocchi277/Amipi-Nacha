@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
-from app.models import AccountType, AuditLog, ChangeRequestStatus, User, UserRole, Vendor, VendorChangeRequest
+from app.models import AccountType, AuditLog, ChangeRequestStatus, Payment, User, UserRole, Vendor, VendorChangeRequest
 from app.nacha.validation import validate_routing_checksum
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
@@ -1097,6 +1097,15 @@ async def delete_single_vendor(
 
     v_name = vendor.name
 
+    # Check if vendor has associated payment records
+    stmt_pmt = select(func.count(Payment.id)).where(Payment.vendor_id == v_uuid)
+    pmt_cnt = (await db.execute(stmt_pmt)).scalar() or 0
+    if pmt_cnt > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete vendor '{v_name}' because it has {pmt_cnt} payment transaction(s) recorded in Payment History. Please delete or reassign those payment records before deleting this vendor.",
+        )
+
     await db.delete(vendor)
 
     audit = AuditLog(
@@ -1124,14 +1133,27 @@ async def bulk_delete_vendors(
 
     deleted_count = 0
     deleted_names = []
+    blocked_vendors = []
 
     for v_id in payload.vendor_ids:
         res = await db.execute(select(Vendor).where(Vendor.id == v_id))
         vendor = res.scalar_one_or_none()
         if vendor:
-            deleted_names.append(vendor.name)
-            await db.delete(vendor)
-            deleted_count += 1
+            # Check if vendor has associated payment records
+            stmt_pmt = select(func.count(Payment.id)).where(Payment.vendor_id == v_id)
+            pmt_cnt = (await db.execute(stmt_pmt)).scalar() or 0
+            if pmt_cnt > 0:
+                blocked_vendors.append(f"{vendor.name} ({pmt_cnt} payment(s))")
+            else:
+                deleted_names.append(vendor.name)
+                await db.delete(vendor)
+                deleted_count += 1
+
+    if deleted_count == 0 and blocked_vendors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete selected vendor(s) because they are referenced by payment history records: {', '.join(blocked_vendors)}. Please delete the associated payments first.",
+        )
 
     if deleted_count > 0:
         audit = AuditLog(
@@ -1141,13 +1163,20 @@ async def bulk_delete_vendors(
             details={
                 "deleted_count": deleted_count,
                 "deleted_names": deleted_names,
+                "blocked_count": len(blocked_vendors),
+                "blocked_vendors": blocked_vendors,
                 "deleted_by": admin_user.username,
             },
         )
         db.add(audit)
         await db.commit()
 
+    if blocked_vendors:
+        msg = f"Successfully deleted {deleted_count} vendor(s). {len(blocked_vendors)} vendor(s) could not be deleted because they have associated payments: {', '.join(blocked_vendors)}."
+    else:
+        msg = f"Successfully deleted {deleted_count} vendor(s) from database."
+
     return BulkDeleteVendorsResponseSchema(
         deleted_count=deleted_count,
-        message=f"Successfully deleted {deleted_count} vendor(s) from database.",
+        message=msg,
     )

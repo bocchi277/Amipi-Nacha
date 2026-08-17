@@ -47,4 +47,7 @@ class Vendor(Base):
     )
 
     # Relationships
-    payments = relationship("Payment", back_populates="vendor", lazy="selectin")
+    payments = relationship("Payment", back_populates="vendor", lazy="selectin", passive_deletes=True)
+    change_requests = relationship("VendorChangeRequest", back_populates="vendor", cascade="all, delete-orphan", passive_deletes=True)
+    remittances = relationship("VendorRemittance", back_populates="vendor", cascade="all, delete-orphan", passive_deletes=True)
+

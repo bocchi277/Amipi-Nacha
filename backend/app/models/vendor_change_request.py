@@ -55,6 +55,6 @@ class VendorChangeRequest(Base):
     )
 
     # Relationships
-    vendor = relationship("Vendor", lazy="selectin")
+    vendor = relationship("Vendor", back_populates="change_requests", lazy="selectin")
     requested_by_user = relationship("User", foreign_keys=[requested_by_user_id], lazy="select")
     reviewed_by_user = relationship("User", foreign_keys=[reviewed_by_user_id], lazy="select")

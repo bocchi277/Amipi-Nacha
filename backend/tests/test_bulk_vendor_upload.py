@@ -233,3 +233,52 @@ async def test_bulk_vendor_preview_and_confirm_workflow(db_session):
         confirm_data = confirm_res.json()
         assert confirm_data["inserted_count"] == 1
         assert confirm_data["updated_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_vendor_with_payments_returns_clean_400_error(db_session):
+    """Deleting a vendor with payments via API returns clean 400 error instead of 500 DB crash."""
+    from datetime import date
+    from decimal import Decimal
+    from app.models import Payment
+
+    admin = User(username="del_admin", email="del_admin@test.com", password_hash="hashed", role=UserRole.ADMIN)
+    v_with_payment = Vendor(name="VENDOR WITH PAYMENT", routing_number="021000021", account_number="111222")
+    v_without_payment = Vendor(name="VENDOR WITHOUT PAYMENT", routing_number="021000021", account_number="333444")
+    db_session.add_all([admin, v_with_payment, v_without_payment])
+    await db_session.commit()
+    await db_session.refresh(admin)
+    await db_session.refresh(v_with_payment)
+    await db_session.refresh(v_without_payment)
+
+    pmt = Payment(
+        vendor_id=v_with_payment.id,
+        amount=Decimal("12.00"),
+        id_number="INV-12",
+        effective_date=date(2026, 7, 20),
+    )
+    db_session.add(pmt)
+    await db_session.commit()
+
+    token = create_access_token(data={"sub": str(admin.id)})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        # Single delete of vendor with payments -> 400 Bad Request
+        res_single = await client.delete(f"/api/v1/vendors/{v_with_payment.id}", headers=headers)
+        assert res_single.status_code == 400
+        assert "Cannot delete vendor" in res_single.json()["detail"]
+        assert "payment transaction(s) recorded in Payment History" in res_single.json()["detail"]
+
+        # Bulk delete: 1 with payment (blocked), 1 without payment (deleted)
+        res_bulk = await client.post(
+            "/api/v1/vendors/bulk-delete",
+            json={"vendor_ids": [str(v_with_payment.id), str(v_without_payment.id)]},
+            headers=headers,
+        )
+        assert res_bulk.status_code == 200
+        data_bulk = res_bulk.json()
+        assert data_bulk["deleted_count"] == 1
+        assert "Successfully deleted 1 vendor(s)" in data_bulk["message"]
+        assert "could not be deleted because they have associated payments" in data_bulk["message"]
+

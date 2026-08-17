@@ -735,16 +735,27 @@ const VendorsScreen = (() => {
     if (spinner) spinner.style.display = 'inline-block';
 
     try {
+      let res;
       if (vendorsToDelete.length === 1) {
-        await API.del(`/vendors/${vendorsToDelete[0].id}`);
+        res = await API.del(`/vendors/${vendorsToDelete[0].id}`);
       } else {
         const vendor_ids = vendorsToDelete.map(v => v.id);
-        await API.post('/vendors/bulk-delete', { vendor_ids });
+        res = await API.post('/vendors/bulk-delete', { vendor_ids });
       }
 
       hideDeleteModal();
       clearVendorSelection();
       await loadData();
+
+      if (res && res.message) {
+        const alertBox = el('vendorListAlert');
+        if (alertBox) {
+          alertBox.className = 'alert alert-success show';
+          alertBox.textContent = res.message;
+          alertBox.style.display = 'block';
+          setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
+        }
+      }
     } catch (err) {
       alert(err.message || 'Failed to delete vendor(s).');
     } finally {
