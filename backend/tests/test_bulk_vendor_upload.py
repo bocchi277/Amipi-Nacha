@@ -270,10 +270,10 @@ async def test_delete_vendor_with_payments_returns_clean_400_error(db_session):
         assert "Cannot delete vendor" in res_single.json()["detail"]
         assert "payment transaction(s) recorded in Payment History" in res_single.json()["detail"]
 
-        # Bulk delete: 1 with payment (blocked), 1 without payment (deleted)
+        # Bulk delete without cascade: 1 with payment (blocked), 1 without payment (deleted)
         res_bulk = await client.post(
             "/api/v1/vendors/bulk-delete",
-            json={"vendor_ids": [str(v_with_payment.id), str(v_without_payment.id)]},
+            json={"vendor_ids": [str(v_with_payment.id), str(v_without_payment.id)], "cascade_payments": False},
             headers=headers,
         )
         assert res_bulk.status_code == 200
@@ -281,4 +281,11 @@ async def test_delete_vendor_with_payments_returns_clean_400_error(db_session):
         assert data_bulk["deleted_count"] == 1
         assert "Successfully deleted 1 vendor(s)" in data_bulk["message"]
         assert "could not be deleted because they have associated payments" in data_bulk["message"]
+
+        # Single delete WITH cascade_payments=True -> 200 OK and deletes payment & vendor
+        res_cascade = await client.delete(f"/api/v1/vendors/{v_with_payment.id}?cascade_payments=true", headers=headers)
+        assert res_cascade.status_code == 200
+        assert "successfully deleted" in res_cascade.json()["message"]
+        assert "Removed 1 associated payment history transaction(s)" in res_cascade.json()["message"]
+
 
