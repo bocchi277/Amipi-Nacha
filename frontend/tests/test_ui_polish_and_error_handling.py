@@ -97,8 +97,7 @@ def test_empty_states_across_screens(page: Page, base_url: str):
     # 2. Payment History Empty State (with non-matching filter)
     page.click("button[data-view='history']")
     expect(page.locator("#view-history")).to_be_visible()
-    page.fill("#historySearchInput", "NON_EXISTENT_SEARCH_STRING_XYZ_99")
-    page.click("#applyHistoryFiltersBtn")
+    page.fill("#colFilterVendor", "NON_EXISTENT_SEARCH_STRING_XYZ_99")
 
     hist_tbody = page.locator("#historyTableBody")
     expect(hist_tbody).to_contain_text("No payment transactions or remittance records found matching the selected filters", timeout=5000)

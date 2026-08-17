@@ -111,24 +111,21 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
 
     # Step 4: Verify Filtering Functionality
     # Filter by Status: Pending
-    page.select_option("#historyStatusFilter", "pending")
-    page.click("#applyHistoryFiltersBtn")
+    page.select_option("#colFilterStatus", "pending")
 
     tbody = page.locator("#historyTableBody")
     expect(tbody).to_contain_text(v_name)
     expect(tbody).to_contain_text(inv1)
     expect(tbody).to_contain_text(inv2)
 
-    # Filter by Search Text
-    page.fill("#historySearchInput", inv1)
-    page.click("#applyHistoryFiltersBtn")
+    # Filter by Invoice Column
+    page.fill("#colFilterInvoice", inv1)
     expect(tbody).to_contain_text(inv1)
     expect(tbody).not_to_contain_text(inv2)
 
-    # Reset Filters & Filter by Test Vendor
-    page.click("#resetHistoryFiltersBtn")
-    page.fill("#historySearchInput", v_name)
-    page.click("#applyHistoryFiltersBtn")
+    # Reset Filters & Filter by Vendor Column
+    page.click("#clearAllColFilters")
+    page.fill("#colFilterVendor", v_name)
     expect(tbody).to_contain_text(inv1)
     expect(tbody).to_contain_text(inv2)
 

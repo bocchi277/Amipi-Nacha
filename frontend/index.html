@@ -942,44 +942,6 @@
                 <div style="font-size: var(--text-xs); color: #4338CA; font-weight: 500; margin-top: 2px;">Total paid</div>
               </div>
             </div>
-
-            <!-- Filter Inputs Row (Sleek Inline Prototype Style) -->
-            <div style="display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap;">
-              <div style="flex: 1; min-width: 140px;">
-                <select class="form-select" id="historyVendorFilter" style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;">
-                  <option value="">Vendor name...</option>
-                </select>
-              </div>
-
-              <div style="width: 120px;">
-                <input type="date" class="form-input" id="historyStartDate" title="Start Date" style="font-size: var(--text-xs); padding: 6px 8px; border-radius: 6px;" />
-              </div>
-
-              <div style="width: 120px;">
-                <input type="date" class="form-input" id="historyEndDate" title="End Date" style="font-size: var(--text-xs); padding: 6px 8px; border-radius: 6px;" />
-              </div>
-
-              <div style="flex: 1; min-width: 130px;">
-                <input type="text" class="form-input" id="historySearchInput" placeholder="Invoice / Ref..." style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;" />
-              </div>
-
-              <div style="width: 120px;">
-                <select class="form-select" id="historyStatusFilter" style="font-size: var(--text-xs); padding: 6px 10px; border-radius: 6px;">
-                  <option value="">All statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="sent">Sent</option>
-                </select>
-              </div>
-
-              <div style="display: flex; gap: 4px;">
-                <button type="button" class="btn btn-secondary btn-sm" id="resetHistoryFiltersBtn" style="font-size: var(--text-xs); padding: 6px 12px; border-radius: 6px; white-space: nowrap;">
-                  ✕ Clear filters
-                </button>
-                <button type="button" class="btn btn-primary btn-sm" id="applyHistoryFiltersBtn" style="font-size: var(--text-xs); padding: 6px 14px; border-radius: 6px; white-space: nowrap;">
-                  <span>Apply</span>
-                </button>
-              </div>
-            </div>
           </div>
 
 
@@ -1031,6 +993,43 @@
                     <th>Status</th>
                     <th>Sent Timestamp</th>
                     <th style="text-align: right; width: 100px;">Actions</th>
+                  </tr>
+                  <!-- Per-Column Filter Row -->
+                  <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0;">
+                    <th></th>
+                    <th></th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterEffDate" placeholder="Date..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterVendor" placeholder="Vendor..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterEmail" placeholder="Email..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterAmount" placeholder="Amount..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterInvoice" placeholder="Invoice..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterGeneratedBy" placeholder="User..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th>
+                      <select class="form-select" id="colFilterStatus" style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;">
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="sent">Sent</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    </th>
+                    <th>
+                      <input type="text" class="form-input" id="colFilterSentAt" placeholder="Sent at..." style="font-size: 11px; padding: 4px 6px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0; background: white;" />
+                    </th>
+                    <th style="text-align: right;">
+                      <button type="button" class="btn btn-secondary btn-sm" id="clearAllColFilters" style="font-size: 10px; padding: 3px 8px; border-radius: 4px; white-space: nowrap;" title="Clear all filters">✕ Clear</button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="historyTableBody"></tbody>

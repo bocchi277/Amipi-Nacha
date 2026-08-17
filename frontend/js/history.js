@@ -30,11 +30,6 @@ const HistoryScreen = (() => {
   }
 
   function bindEvents() {
-    const applyBtn = el('applyHistoryFiltersBtn');
-    if (applyBtn) applyBtn.addEventListener('click', loadData);
-
-    const resetBtn = el('resetHistoryFiltersBtn');
-    if (resetBtn) resetBtn.addEventListener('click', resetFilters);
 
     const selectAllCb = el('historySelectAllCb');
     if (selectAllCb) selectAllCb.addEventListener('change', handleSelectAll);
@@ -101,11 +96,26 @@ const HistoryScreen = (() => {
     if (copyLastNachaBtn) copyLastNachaBtn.addEventListener('click', handleCopyLastNacha);
     if (downloadLastNachaBtn) downloadLastNachaBtn.addEventListener('click', handleDownloadLastNacha);
 
+    // Per-column filter inputs — real-time filtering with debounce
+    const filterInputIds = [
+      'colFilterEffDate', 'colFilterVendor', 'colFilterEmail',
+      'colFilterAmount', 'colFilterInvoice', 'colFilterGeneratedBy',
+      'colFilterSentAt',
+    ];
+    filterInputIds.forEach(id => {
+      const input = el(id);
+      if (input) input.addEventListener('input', debounce(applyColumnFilters, 250));
+    });
+    const statusFilter = el('colFilterStatus');
+    if (statusFilter) statusFilter.addEventListener('change', applyColumnFilters);
+
+    const clearFiltersBtn = el('clearAllColFilters');
+    if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearColumnFilters);
+
     // Auto-load when switching to view-history tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
       tab.addEventListener('click', () => {
         if (tab.dataset.view === 'history') {
-          loadVendorsDropdown();
           loadData();
         }
       });
@@ -221,23 +231,69 @@ const HistoryScreen = (() => {
   }
 
 
-  async function loadVendorsDropdown() {
-    const select = el('historyVendorFilter');
-    if (!select || select.options.length > 1) return;
+  // ── Debounce Utility ──────────────────────────────────────────
+  function debounce(fn, delay) {
+    let timer;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
 
-    try {
-      const vendors = await API.get('/vendors');
-      loadedVendors = vendors || [];
-      select.innerHTML = '<option value="">All Vendors</option>';
-      loadedVendors.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.id;
-        opt.textContent = v.name;
-        select.appendChild(opt);
-      });
-    } catch (err) {
-      console.warn('Failed to load vendors for history filter:', err);
-    }
+  // ── Per-Column Client-Side Filtering ────────────────────────────
+  function applyColumnFilters() {
+    const effDate = (el('colFilterEffDate') ? el('colFilterEffDate').value : '').trim().toLowerCase();
+    const vendor = (el('colFilterVendor') ? el('colFilterVendor').value : '').trim().toLowerCase();
+    const email = (el('colFilterEmail') ? el('colFilterEmail').value : '').trim().toLowerCase();
+    const amount = (el('colFilterAmount') ? el('colFilterAmount').value : '').trim().toLowerCase();
+    const invoice = (el('colFilterInvoice') ? el('colFilterInvoice').value : '').trim().toLowerCase();
+    const generatedBy = (el('colFilterGeneratedBy') ? el('colFilterGeneratedBy').value : '').trim().toLowerCase();
+    const status = (el('colFilterStatus') ? el('colFilterStatus').value : '').trim().toLowerCase();
+    const sentAt = (el('colFilterSentAt') ? el('colFilterSentAt').value : '').trim().toLowerCase();
+
+    filteredRemittances = allRemittances.filter(r => {
+      if (effDate && !(r.effective_date || '').toLowerCase().includes(effDate)) return false;
+      if (vendor && !(r.vendor_name || '').toLowerCase().includes(vendor)) return false;
+      if (email && !(r.recipient_email || '').toLowerCase().includes(email)) return false;
+      if (amount) {
+        const cleanTerm = amount.replace(/[$, ]/g, '');
+        const rawAmt = String(r.amount || '');
+        const formattedAmt = parseFloat(r.amount || 0).toFixed(2);
+        if (!rawAmt.includes(cleanTerm) && !formattedAmt.includes(cleanTerm)) return false;
+      }
+      if (invoice) {
+        const mainMatch = (r.invoice_reference || '').toLowerCase().includes(invoice);
+        const breakdownMatch = Array.isArray(r.invoice_breakdown) && r.invoice_breakdown.some(item => (item.invoice_number || '').toLowerCase().includes(invoice));
+        if (!mainMatch && !breakdownMatch) return false;
+      }
+      if (generatedBy && !(r.created_by_username || '').toLowerCase().includes(generatedBy)) return false;
+      if (status && (r.status || '').toLowerCase() !== status) return false;
+      if (sentAt && !(r.sent_at || '').toLowerCase().includes(sentAt)) return false;
+      return true;
+    });
+
+    currentPage = 1;
+    selectedRemittanceIds.clear();
+    updateBulkBar();
+    updateKPIs();
+    renderTable();
+  }
+
+  function clearColumnFilters() {
+    ['colFilterEffDate', 'colFilterVendor', 'colFilterEmail',
+     'colFilterAmount', 'colFilterInvoice', 'colFilterGeneratedBy',
+     'colFilterSentAt'].forEach(id => {
+      const input = el(id);
+      if (input) input.value = '';
+    });
+    const statusSel = el('colFilterStatus');
+    if (statusSel) statusSel.value = '';
+
+    applyColumnFilters();
+  }
+
+  async function loadVendorsDropdown() {
+    // No longer needed — vendor filter is now a text search input in the table header
   }
 
   async function loadData() {
@@ -247,36 +303,15 @@ const HistoryScreen = (() => {
     selectedRemittanceIds.clear();
     updateBulkBar();
 
-    const vendorId = el('historyVendorFilter') ? el('historyVendorFilter').value : '';
-    const statusVal = el('historyStatusFilter') ? el('historyStatusFilter').value : '';
-    let startDate = el('historyStartDate') ? el('historyStartDate').value : '';
-    const endDate = el('historyEndDate') ? el('historyEndDate').value : '';
-    const search = el('historySearchInput') ? el('historySearchInput').value.trim() : '';
-
-    // Default to 12 months ago if no start date is specified
-    if (!startDate) {
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-      startDate = twelveMonthsAgo.toISOString().substring(0, 10);
-      if (el('historyStartDate')) el('historyStartDate').value = startDate;
-    }
-
-    const params = new URLSearchParams();
-    if (vendorId) params.append('vendor_id', vendorId);
-    if (statusVal) params.append('status', statusVal);
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
-    if (search) params.append('search', search);
-
-    const queryString = params.toString() ? `?${params.toString()}` : '';
+    // Fetch all data with a 12-month lookback from the server
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    const startDate = twelveMonthsAgo.toISOString().substring(0, 10);
 
     try {
-      const data = await API.get(`/remittances${queryString}`);
+      const data = await API.get(`/remittances?start_date=${startDate}`);
       allRemittances = data || [];
-      filteredRemittances = [...allRemittances];
-      currentPage = 1;
-      updateKPIs();
-      renderTable();
+      applyColumnFilters();
     } catch (err) {
       console.warn('Failed to load remittance payment history:', err);
       renderEmptyTable(err.message || 'Failed to load transaction history.');
@@ -429,14 +464,7 @@ const HistoryScreen = (() => {
     document.body.removeChild(link);
   }
 
-  function resetFilters() {
-    if (el('historyVendorFilter')) el('historyVendorFilter').value = '';
-    if (el('historyStatusFilter')) el('historyStatusFilter').value = '';
-    if (el('historyStartDate')) el('historyStartDate').value = '';
-    if (el('historyEndDate')) el('historyEndDate').value = '';
-    if (el('historySearchInput')) el('historySearchInput').value = '';
-    loadData();
-  }
+
 
   function setLoading(loading) {
     const spinner = el('historySpinner');

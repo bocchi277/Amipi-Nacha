@@ -207,8 +207,7 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
     expect(page.locator("#view-history")).to_be_visible()
 
     # Filter by vendor name
-    page.fill("#historySearchInput", v_name)
-    page.click("#applyHistoryFiltersBtn")
+    page.fill("#colFilterVendor", v_name)
 
     tbody = page.locator("#historyTableBody")
     expect(tbody).to_contain_text(inv1)
