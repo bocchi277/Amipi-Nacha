@@ -12,12 +12,12 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
-from app.models import AccountType, AuditLog, ChangeRequestStatus, User, Vendor, VendorChangeRequest
+from app.models import AccountType, AuditLog, ChangeRequestStatus, User, UserRole, Vendor, VendorChangeRequest
 from app.nacha.validation import validate_routing_checksum
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
@@ -30,6 +30,8 @@ class CreateVendorSchema(BaseModel):
     account_type: AccountType = AccountType.CHECKING
     default_id_number: Optional[str] = None
     email: Optional[str] = None
+    allow_update: Optional[bool] = False
+    allow_bank_update: Optional[bool] = False
 
 
 class BulkVendorUploadResponseSchema(BaseModel):
@@ -37,6 +39,32 @@ class BulkVendorUploadResponseSchema(BaseModel):
     imported_count: int
     skipped_count: int
     errors: list[dict[str, Any]]
+
+
+class BulkVendorPreviewResponseSchema(BaseModel):
+    total_rows: int
+    new_count: int
+    update_count: int
+    unchanged_count: int
+    error_count: int
+    new_vendors: list[dict[str, Any]]
+    updated_vendors: list[dict[str, Any]]
+    unchanged_vendors: list[dict[str, Any]]
+    errors: list[dict[str, Any]]
+
+
+class BulkVendorConfirmRequestSchema(BaseModel):
+    new_vendors: list[dict[str, Any]] = []
+    updated_vendors: list[dict[str, Any]] = []
+    apply_updates: bool = True
+    allow_bank_updates: bool = False
+
+
+class BulkVendorConfirmResponseSchema(BaseModel):
+    inserted_count: int
+    updated_count: int
+    skipped_count: int
+    message: str
 
 
 class BulkDeleteVendorsSchema(BaseModel):
@@ -182,18 +210,145 @@ async def create_vendor(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new Vendor."""
-    rt = payload.routing_number.strip()
-    if len(rt) != 9 or not validate_routing_checksum(rt):
-        raise HTTPException(status_code=400, detail=f"Invalid 9-digit routing number '{rt}'.")
+    """
+    Create a new Vendor or update existing vendor upon confirmation.
+    
+    If duplicate detected:
+    - If exact match: returns 409 Conflict with exact_match=True
+    - If differences: returns 409 Conflict with diff details if allow_update=False
+    - If allow_update=True: updates existing vendor (admin permission required for bank details).
+    """
+    name_clean = payload.name.strip()[:22]
+    rt = "".join(filter(str.isdigit, payload.routing_number.strip()))
+    acc = payload.account_number.strip()
 
+    if len(rt) != 9 or not validate_routing_checksum(rt):
+        raise HTTPException(status_code=400, detail=f"Invalid 9-digit ABA routing number '{payload.routing_number}'.")
+
+    if not acc:
+        raise HTTPException(status_code=400, detail="Account number is required.")
+
+    # Check for existing vendor by name or bank details
+    res = await db.execute(
+        select(Vendor).where(
+            (func.upper(Vendor.name) == name_clean.upper()) |
+            ((Vendor.routing_number == rt) & (Vendor.account_number == acc))
+        )
+    )
+    existing = res.scalar_one_or_none()
+
+    if existing:
+        new_email = payload.email.strip() if payload.email and payload.email.strip() else None
+        new_ref = payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else None
+        new_type = payload.account_type.value if hasattr(payload.account_type, "value") else str(payload.account_type)
+        existing_type = existing.account_type.value if hasattr(existing.account_type, "value") else str(existing.account_type)
+
+        changes = {}
+        if (existing.email or None) != new_email:
+            changes["email"] = {"old": existing.email or "None", "new": new_email or "None"}
+        if (existing.default_id_number or None) != new_ref:
+            changes["default_id_number"] = {"old": existing.default_id_number or "None", "new": new_ref or "None"}
+        if existing.name.upper() != name_clean.upper():
+            changes["name"] = {"old": existing.name, "new": name_clean}
+
+        has_bank_change = False
+        if existing.routing_number != rt:
+            changes["routing_number"] = {"old": existing.routing_number, "new": rt}
+            has_bank_change = True
+        if existing.account_number != acc:
+            changes["account_number"] = {"old": existing.account_number, "new": acc}
+            has_bank_change = True
+        if existing_type.lower() != new_type.lower():
+            changes["account_type"] = {"old": existing_type, "new": new_type}
+            has_bank_change = True
+
+        if not changes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": f"Vendor '{existing.name}' already exists with identical details.",
+                    "duplicate": True,
+                    "exact_match": True,
+                    "vendor_id": str(existing.id),
+                    "vendor_name": existing.name,
+                },
+            )
+
+        if not payload.allow_update:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": f"Existing vendor '{existing.name}' detected with modified details.",
+                    "duplicate": True,
+                    "exact_match": False,
+                    "vendor_id": str(existing.id),
+                    "vendor_name": existing.name,
+                    "has_bank_change": has_bank_change,
+                    "changes": changes,
+                },
+            )
+
+        # Apply updates
+        is_admin = (current_user.role == UserRole.ADMIN)
+        if has_bank_change:
+            if not is_admin:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only Administrators can directly update vendor banking details. Standard users must submit a Bank Change Request.",
+                )
+            if not payload.allow_bank_update:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Explicit bank change authorization (allow_bank_update=True) is required to overwrite banking details.",
+                )
+            existing.routing_number = rt
+            existing.account_number = acc
+            existing.account_type = payload.account_type
+
+        if "name" in changes:
+            existing.name = name_clean
+        if "email" in changes:
+            existing.email = new_email
+        if "default_id_number" in changes:
+            existing.default_id_number = new_ref
+
+        action_type = "VENDOR_DIRECT_BANK_AND_PROFILE_UPDATE" if has_bank_change else "VENDOR_PROFILE_UPDATED"
+        audit = AuditLog(
+            user_id=current_user.id,
+            action=action_type,
+            entity_type="Vendor",
+            entity_id=str(existing.id),
+            details={
+                "vendor_name": existing.name,
+                "changes": changes,
+                "updated_by": current_user.username,
+                "is_admin": is_admin,
+            },
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(existing)
+
+        return VendorResponseSchema(
+            id=str(existing.id),
+            name=existing.name,
+            routing_number=existing.routing_number,
+            account_number=existing.account_number,
+            account_type=_val(existing.account_type),
+            default_id_number=existing.default_id_number,
+            email=existing.email,
+            is_active=existing.is_active,
+        )
+
+    # New Vendor
     vendor = Vendor(
-        name=payload.name.strip()[:22],
+        name=name_clean,
         routing_number=rt,
-        account_number=payload.account_number.strip(),
+        account_number=acc,
         account_type=payload.account_type,
-        default_id_number=payload.default_id_number,
+        default_id_number=payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else None,
         email=payload.email.strip() if payload.email and payload.email.strip() else None,
+        is_active=True,
     )
     db.add(vendor)
     await db.commit()
@@ -222,23 +377,11 @@ async def download_vendor_sample_template():
     )
 
 
-@router.post("/bulk-upload", response_model=BulkVendorUploadResponseSchema, status_code=status.HTTP_201_CREATED)
-async def bulk_upload_vendors(
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Bulk import vendors from a CSV or Excel (.xlsx) file.
-    Validates mandatory fields, ABA routing checksums, and filters out duplicates.
-    """
+def _parse_vendor_file_bytes(filename: str, content_bytes: bytes) -> tuple[list[tuple[int, dict]], list[dict]]:
+    """Helper to parse Excel or CSV bytes into normalized dictionary rows."""
     import openpyxl
-    filename = file.filename or ""
-    content_bytes = await file.read()
-    if not content_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
     rows_to_process = []
+    errors = []
 
     if filename.lower().endswith((".xlsx", ".xls")):
         try:
@@ -246,7 +389,8 @@ async def bulk_upload_vendors(
             ws = wb.active
             rows = list(ws.iter_rows(values_only=True))
             if not rows:
-                raise HTTPException(status_code=400, detail="Excel sheet contains no data.")
+                errors.append({"row": 0, "error": "Excel sheet contains no data."})
+                return [], errors
 
             headers = [str(cell or "").strip().lower() for cell in rows[0]]
             for row_idx, row in enumerate(rows[1:], start=2):
@@ -258,9 +402,9 @@ async def bulk_upload_vendors(
                     row_dict[h] = val
                 rows_to_process.append((row_idx, row_dict))
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+            errors.append({"row": 0, "error": f"Error reading Excel file: {str(e)}"})
+            return [], errors
     else:
-        # CSV parsing
         try:
             text_data = content_bytes.decode("utf-8-sig", errors="ignore")
             reader = csv.DictReader(io.StringIO(text_data))
@@ -270,12 +414,274 @@ async def bulk_upload_vendors(
                 clean_row = {str(k or "").strip().lower(): str(v or "").strip() for k, v in row.items() if k}
                 rows_to_process.append((row_idx, clean_row))
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+            errors.append({"row": 0, "error": f"Error reading CSV file: {str(e)}"})
+            return [], errors
 
-    if not rows_to_process:
+    return rows_to_process, errors
+
+
+@router.post("/bulk-preview", response_model=BulkVendorPreviewResponseSchema)
+async def bulk_preview_vendors(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Dry-run analysis of a bulk vendor file (.csv, .xlsx).
+    Returns classified new vendors, updated vendors with field diffs, unchanged vendors, and errors.
+    """
+    filename = file.filename or ""
+    content_bytes = await file.read()
+    if not content_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    rows_to_process, parse_errors = _parse_vendor_file_bytes(filename, content_bytes)
+    if parse_errors:
+        return BulkVendorPreviewResponseSchema(
+            total_rows=0,
+            new_count=0,
+            update_count=0,
+            unchanged_count=0,
+            error_count=len(parse_errors),
+            new_vendors=[],
+            updated_vendors=[],
+            unchanged_vendors=[],
+            errors=parse_errors,
+        )
+
+    # Fetch existing vendors
+    res = await db.execute(select(Vendor))
+    existing_vendors = res.scalars().all()
+    existing_by_name = {v.name.strip().upper(): v for v in existing_vendors}
+    existing_by_bank = {(v.routing_number.strip(), v.account_number.strip()): v for v in existing_vendors}
+
+    new_vendors = []
+    updated_vendors = []
+    unchanged_vendors = []
+    errors = []
+
+    seen_in_batch = set()
+
+    for row_idx, r in rows_to_process:
+        name = r.get("vendor name") or r.get("name") or r.get("vendor_name") or r.get("vendor") or ""
+        routing = r.get("routing number") or r.get("routing_number") or r.get("routing") or r.get("aba") or ""
+        account = r.get("account number") or r.get("account_number") or r.get("account") or r.get("acct") or ""
+        acct_type_str = r.get("account type") or r.get("account_type") or r.get("type") or "checking"
+        default_ref = r.get("invoice ref") or r.get("invoice_ref") or r.get("default_id_number") or r.get("ref") or None
+        email = r.get("email") or r.get("vendor email") or r.get("vendor_email") or None
+
+        name_clean = name.strip()[:22]
+        routing_clean = "".join(filter(str.isdigit, routing.strip()))
+        account_clean = account.strip()
+
+        if not name_clean:
+            errors.append({"row": row_idx, "error": "Vendor name is required."})
+            continue
+
+        if not routing_clean or len(routing_clean) != 9 or not validate_routing_checksum(routing_clean):
+            errors.append({"row": row_idx, "error": f"Invalid 9-digit ABA routing number '{routing}' for '{name_clean}'."})
+            continue
+
+        if not account_clean:
+            errors.append({"row": row_idx, "error": f"Account number is required for '{name_clean}'."})
+            continue
+
+        batch_key = name_clean.upper()
+        if batch_key in seen_in_batch:
+            # Duplicate inside same upload batch
+            continue
+        seen_in_batch.add(batch_key)
+
+        acct_type = AccountType.SAVINGS if "sav" in acct_type_str.lower() else AccountType.CHECKING
+        acct_type_val = acct_type.value
+
+        existing = existing_by_name.get(name_clean.upper()) or existing_by_bank.get((routing_clean, account_clean))
+
+        if existing:
+            # Check differences
+            changes = {}
+            new_email_clean = email.strip() if email and email.strip() else None
+            new_ref_clean = default_ref.strip() if default_ref and default_ref.strip() else None
+            existing_type_val = existing.account_type.value if hasattr(existing.account_type, "value") else str(existing.account_type)
+
+            if (existing.email or None) != new_email_clean:
+                changes["email"] = {"old": existing.email or "None", "new": new_email_clean or "None"}
+            if (existing.default_id_number or None) != new_ref_clean:
+                changes["default_id_number"] = {"old": existing.default_id_number or "None", "new": new_ref_clean or "None"}
+            if existing.name.upper() != name_clean.upper():
+                changes["name"] = {"old": existing.name, "new": name_clean}
+
+            has_bank_change = False
+            if existing.routing_number != routing_clean:
+                changes["routing_number"] = {"old": existing.routing_number, "new": routing_clean}
+                has_bank_change = True
+            if existing.account_number != account_clean:
+                changes["account_number"] = {"old": existing.account_number, "new": account_clean}
+                has_bank_change = True
+            if existing_type_val.lower() != acct_type_val.lower():
+                changes["account_type"] = {"old": existing_type_val, "new": acct_type_val}
+                has_bank_change = True
+
+            if changes:
+                updated_vendors.append({
+                    "vendor_id": str(existing.id),
+                    "vendor_name": existing.name,
+                    "has_bank_change": has_bank_change,
+                    "changes": changes,
+                    "new_data": {
+                        "name": name_clean,
+                        "routing_number": routing_clean,
+                        "account_number": account_clean,
+                        "account_type": acct_type_val,
+                        "default_id_number": new_ref_clean,
+                        "email": new_email_clean,
+                    },
+                })
+            else:
+                unchanged_vendors.append({
+                    "vendor_id": str(existing.id),
+                    "vendor_name": existing.name,
+                    "routing_number": existing.routing_number,
+                    "account_number": existing.account_number,
+                })
+        else:
+            new_vendors.append({
+                "name": name_clean,
+                "routing_number": routing_clean,
+                "account_number": account_clean,
+                "account_type": acct_type_val,
+                "default_id_number": default_ref.strip() if default_ref and default_ref.strip() else None,
+                "email": email.strip() if email and email.strip() else None,
+            })
+
+    return BulkVendorPreviewResponseSchema(
+        total_rows=len(rows_to_process),
+        new_count=len(new_vendors),
+        update_count=len(updated_vendors),
+        unchanged_count=len(unchanged_vendors),
+        error_count=len(errors),
+        new_vendors=new_vendors,
+        updated_vendors=updated_vendors,
+        unchanged_vendors=unchanged_vendors,
+        errors=errors,
+    )
+
+
+@router.post("/bulk-confirm", response_model=BulkVendorConfirmResponseSchema)
+async def bulk_confirm_vendors(
+    payload: BulkVendorConfirmRequestSchema,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Execute batch vendor insertions and updates after user review in the diff modal.
+    """
+    is_admin = (current_user.role == UserRole.ADMIN)
+    inserted_count = 0
+    updated_count = 0
+    skipped_count = 0
+
+    # 1. Insert new vendors
+    for nv in payload.new_vendors:
+        rt = "".join(filter(str.isdigit, str(nv.get("routing_number", "")).strip()))
+        acc = str(nv.get("account_number", "")).strip()
+        name_clean = str(nv.get("name", "")).strip()[:22]
+        if not name_clean or not rt or not acc:
+            continue
+        acct_type = AccountType.SAVINGS if "sav" in str(nv.get("account_type", "")).lower() else AccountType.CHECKING
+        v = Vendor(
+            name=name_clean,
+            routing_number=rt,
+            account_number=acc,
+            account_type=acct_type,
+            default_id_number=nv.get("default_id_number") or None,
+            email=nv.get("email") or None,
+            is_active=True,
+        )
+        db.add(v)
+        inserted_count += 1
+
+    # 2. Update existing vendors if apply_updates is True
+    if payload.apply_updates:
+        for uv in payload.updated_vendors:
+            v_id_str = uv.get("vendor_id")
+            if not v_id_str:
+                continue
+            try:
+                v_uuid = uuid.UUID(str(v_id_str).strip())
+            except ValueError:
+                continue
+
+            res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
+            vendor = res.scalar_one_or_none()
+            if not vendor:
+                continue
+
+            changes = uv.get("changes", {})
+            has_bank_change = uv.get("has_bank_change", False)
+            new_data = uv.get("new_data", {})
+
+            if "name" in changes and new_data.get("name"):
+                vendor.name = str(new_data["name"]).strip()[:22]
+            if "email" in changes:
+                vendor.email = str(new_data["email"]).strip() if new_data.get("email") else None
+            if "default_id_number" in changes:
+                vendor.default_id_number = str(new_data["default_id_number"]).strip() if new_data.get("default_id_number") else None
+
+            if has_bank_change and payload.allow_bank_updates and is_admin:
+                if "routing_number" in changes and new_data.get("routing_number"):
+                    vendor.routing_number = "".join(filter(str.isdigit, str(new_data["routing_number"])))
+                if "account_number" in changes and new_data.get("account_number"):
+                    vendor.account_number = str(new_data["account_number"]).strip()
+                if "account_type" in changes and new_data.get("account_type"):
+                    vendor.account_type = AccountType.SAVINGS if "sav" in str(new_data["account_type"]).lower() else AccountType.CHECKING
+
+            updated_count += 1
+    else:
+        skipped_count += len(payload.updated_vendors)
+
+    if inserted_count > 0 or updated_count > 0:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="BULK_IMPORT_AND_UPDATE_VENDORS",
+            entity_type="Vendor",
+            details={
+                "inserted_count": inserted_count,
+                "updated_count": updated_count,
+                "skipped_count": skipped_count,
+                "bank_updates_applied": bool(payload.allow_bank_updates and is_admin),
+                "admin_username": current_user.username,
+            },
+        )
+        db.add(audit)
+        await db.commit()
+
+    return BulkVendorConfirmResponseSchema(
+        inserted_count=inserted_count,
+        updated_count=updated_count,
+        skipped_count=skipped_count,
+        message=f"Successfully added {inserted_count} new vendor(s) and updated {updated_count} existing vendor(s).",
+    )
+
+
+@router.post("/bulk-upload", response_model=BulkVendorUploadResponseSchema, status_code=status.HTTP_201_CREATED)
+async def bulk_upload_vendors(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Bulk import vendors from a CSV or Excel (.xlsx) file (legacy direct upload endpoint).
+    """
+    filename = file.filename or ""
+    content_bytes = await file.read()
+    if not content_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    rows_to_process, errors = _parse_vendor_file_bytes(filename, content_bytes)
+    if not rows_to_process and not errors:
         raise HTTPException(status_code=400, detail="No vendor data rows found in uploaded file.")
 
-    # Fetch existing vendors for duplicate checking
     res = await db.execute(select(Vendor))
     existing_vendors = res.scalars().all()
     existing_names = {v.name.strip().upper() for v in existing_vendors}
@@ -283,7 +689,6 @@ async def bulk_upload_vendors(
 
     imported_count = 0
     skipped_count = 0
-    errors = []
 
     for row_idx, r in rows_to_process:
         name = r.get("vendor name") or r.get("name") or r.get("vendor_name") or r.get("vendor") or ""

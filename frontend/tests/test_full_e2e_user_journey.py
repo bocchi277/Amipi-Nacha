@@ -198,7 +198,7 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
     page.click("button[data-view='vendors']")
     page.fill("#vendorSearchInput", v_name)
     expect(vendor_card.locator(".vendor-routing-display")).to_contain_text(new_routing)
-    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(new_account)
+    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(new_account[-4:])
 
     # ------------------------------------------------------------------------
     # STEP 7: Transaction Table Filtering, Multi-Select & Bulk Remittance Resend

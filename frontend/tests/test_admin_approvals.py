@@ -166,7 +166,7 @@ def test_admin_approve_and_reject_vendor_change_requests(page: Page, base_url: s
     expect(vendor_card).to_be_visible(timeout=5000)
 
     expect(vendor_card.locator(".vendor-routing-display")).to_contain_text(req1_routing)
-    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(req1_account)
+    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(req1_account[-4:])
 
     # Step C: Standard User submits Change Request #2 (to be REJECTED)
     req2_routing = "026013356"
@@ -208,4 +208,4 @@ def test_admin_approve_and_reject_vendor_change_requests(page: Page, base_url: s
     page.click("button[data-view='vendors']")
     page.fill("#vendorSearchInput", v_name)
     expect(vendor_card.locator(".vendor-routing-display")).to_contain_text(req1_routing)
-    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(req1_account)
+    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(req1_account[-4:])

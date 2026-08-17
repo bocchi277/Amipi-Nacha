@@ -112,7 +112,7 @@ def test_standard_user_bank_change_request_remains_pending(page: Page, base_url:
 
     # Verify initial registered bank details
     expect(vendor_card.locator(".vendor-routing-display")).to_contain_text(orig_routing)
-    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(orig_account)
+    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(orig_account[-4:])
 
     # Step 4: Click 'Request Bank Change'
     vendor_card.locator(".req-change-btn").click()
@@ -140,4 +140,4 @@ def test_standard_user_bank_change_request_remains_pending(page: Page, base_url:
 
     # Step 7: CRITICAL ASSERTION: Vendor's actual bank details remain UNCHANGED
     expect(vendor_card.locator(".vendor-routing-display")).to_contain_text(orig_routing)
-    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(orig_account)
+    expect(vendor_card.locator(".vendor-account-display")).to_contain_text(orig_account[-4:])

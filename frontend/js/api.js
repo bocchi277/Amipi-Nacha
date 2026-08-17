@@ -115,11 +115,16 @@ const API = (() => {
           errMsg = data.detail;
         } else if (Array.isArray(data.detail)) {
           errMsg = data.detail.map(e => e.msg || e.detail || 'Validation error').join('; ');
+        } else if (typeof data.detail === 'object' && data.detail && data.detail.message) {
+          errMsg = data.detail.message;
         } else if (typeof data.message === 'string') {
           errMsg = data.message;
         }
       }
-      throw new Error(errMsg);
+      const err = new Error(errMsg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
 
     return data;

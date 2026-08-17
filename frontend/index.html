@@ -1416,6 +1416,120 @@
       </div>
     </div>
 
+    <!-- Duplicate Vendor Single Add Confirmation Modal -->
+    <div class="modal-backdrop" id="duplicateVendorConfirmModal">
+      <div class="modal-card" style="max-width: 600px; width: 100%; border-top: 4px solid var(--color-warning, #f59e0b);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="background: #FEF3C7; color: #D97706; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px;">⚠️ Duplicate Detected</span>
+            <h3 class="card-title" style="margin-bottom: 0;" id="dupConfirmModalTitle">Update Existing Vendor?</h3>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeDupConfirmModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <div class="alert alert-warning show" id="dupConfirmAlert" style="margin-bottom: var(--space-md); font-size: var(--text-xs);">
+          An existing record was found in the Vendor Book for <strong id="dupVendorNameDisplay">—</strong> with modified details.
+        </div>
+
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 12px; margin-bottom: var(--space-md);">
+          <div style="font-weight: 600; font-size: 11px; text-transform: uppercase; color: #64748B; margin-bottom: 8px;">Proposed Field Changes:</div>
+          <div id="dupChangesList" style="font-size: var(--text-xs); line-height: 1.6;"></div>
+        </div>
+
+        <div id="dupBankWarningBox" style="display: none; background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; padding: 10px; border-radius: 6px; font-size: var(--text-xs); margin-bottom: var(--space-md);">
+          <strong>Admin Authorization:</strong> Overwriting sensitive banking details (routing/account) will update the vendor directly and generate an immutable audit log entry.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelDupConfirmModalBtn">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="executeDupUpdateBtn" style="font-weight: 600;">
+            <span class="spinner" id="dupUpdateSpinner" style="display: none;"></span>
+            <span>Confirm & Update Existing Vendor</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Vendor Diff Preview Modal -->
+    <div class="modal-backdrop" id="bulkVendorDiffModal">
+      <div class="modal-card" style="max-width: 850px; width: 100%; border-top: 4px solid var(--color-primary);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <div>
+            <h3 class="card-title" style="margin-bottom: 2px;">Review Bulk Vendor Import</h3>
+            <div class="text-xs text-muted">Review detected new vendors and proposed updates to existing vendor master records.</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeBulkDiffModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <!-- 4 Summary Counter Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md);">
+          <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 6px; padding: 10px 14px;">
+            <div style="font-size: var(--text-xl); font-weight: 700; color: #166534;" id="bulkDiffNewCount">0</div>
+            <div style="font-size: 11px; color: #15803D; font-weight: 600;">New Vendors</div>
+          </div>
+          <div style="background: #FEFCE8; border: 1px solid #FEF08A; border-radius: 6px; padding: 10px 14px;">
+            <div style="font-size: var(--text-xl); font-weight: 700; color: #854D0E;" id="bulkDiffUpdateCount">0</div>
+            <div style="font-size: 11px; color: #A16207; font-weight: 600;">Existing Updates</div>
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px;">
+            <div style="font-size: var(--text-xl); font-weight: 700; color: #475569;" id="bulkDiffUnchangedCount">0</div>
+            <div style="font-size: 11px; color: #64748B; font-weight: 600;">Unchanged (Skipped)</div>
+          </div>
+          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px; padding: 10px 14px;">
+            <div style="font-size: var(--text-xl); font-weight: 700; color: #991B1B;" id="bulkDiffErrorCount">0</div>
+            <div style="font-size: 11px; color: #B91C1C; font-weight: 600;">Row Errors</div>
+          </div>
+        </div>
+
+        <div class="alert alert-danger" id="bulkDiffErrorAlert" style="display: none; margin-bottom: var(--space-md); font-size: var(--text-xs);"></div>
+
+        <!-- Detailed Changes Diff Section -->
+        <div style="margin-bottom: var(--space-md);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <strong style="font-size: var(--text-xs); text-transform: uppercase; color: #475569;">Detected Modifications:</strong>
+            <span class="text-xs text-muted" id="bulkDiffModSubtext">Changes to existing vendors</span>
+          </div>
+
+          <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 6px;">
+            <table class="data-table" style="font-size: var(--text-xs); margin: 0; width: 100%;">
+              <thead>
+                <tr style="background: #F8FAFC;">
+                  <th style="padding: 6px 10px;">Vendor Name</th>
+                  <th style="padding: 6px 10px;">Field</th>
+                  <th style="padding: 6px 10px;">Current Value</th>
+                  <th style="padding: 6px 10px;">New Value</th>
+                  <th style="padding: 6px 10px; width: 90px; text-align: center;">Type</th>
+                </tr>
+              </thead>
+              <tbody id="bulkDiffTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Options Bar -->
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; margin-bottom: var(--space-md);">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); cursor: pointer; margin-bottom: 6px;">
+            <input type="checkbox" id="bulkDiffApplyUpdatesCb" checked />
+            <span><strong>Update existing vendor profiles</strong> (emails and default invoice references)</span>
+          </label>
+          <div id="bulkDiffBankSection" style="display: none; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #CBD5E1;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); cursor: pointer; color: #991B1B;">
+              <input type="checkbox" id="bulkDiffAllowBankCb" />
+              <span><strong>Authorize bank detail overwrites</strong> (Admin Confirmation required)</span>
+            </label>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelBulkDiffModalBtn">Cancel & Back</button>
+          <button type="button" class="btn btn-primary btn-sm" id="executeBulkDiffConfirmBtn" style="font-weight: 600;">
+            <span class="spinner" id="bulkDiffSpinner" style="display: none;"></span>
+            <span id="bulkDiffConfirmBtnText">Confirm & Apply Changes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Confirm Delete Vendor Modal -->
     <div class="modal-backdrop" id="confirmDeleteVendorModal">
       <div class="modal-card" style="max-width: 650px; border-top: 4px solid var(--color-danger);">

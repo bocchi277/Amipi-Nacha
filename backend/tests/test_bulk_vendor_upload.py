@@ -105,3 +105,131 @@ async def test_single_and_bulk_vendor_deletion(db_session):
         )
         assert bulk_res.status_code == 200
         assert bulk_res.json()["deleted_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_single_vendor_duplicate_detection_and_update(db_session):
+    admin = User(
+        username="dup_admin",
+        email="dupadmin@test.com",
+        password_hash="hashed",
+        role=UserRole.ADMIN,
+    )
+    v_orig = Vendor(
+        name="TEST DUP VENDOR",
+        routing_number="021000021",
+        account_number="123456",
+        email="old@test.com",
+    )
+    db_session.add_all([admin, v_orig])
+    await db_session.commit()
+    await db_session.refresh(admin)
+    await db_session.refresh(v_orig)
+
+    token = create_access_token(data={"sub": str(admin.id)})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        # 1. Exact duplicate -> 409 Conflict with exact_match=True
+        exact_res = await client.post(
+            "/api/v1/vendors",
+            json={
+                "name": "TEST DUP VENDOR",
+                "routing_number": "021000021",
+                "account_number": "123456",
+                "email": "old@test.com",
+            },
+            headers=headers,
+        )
+        assert exact_res.status_code == 409
+        exact_data = exact_res.json()
+        assert exact_data["detail"]["exact_match"] is True
+
+        # 2. Duplicate with modified email -> 409 Conflict with diff details
+        diff_res = await client.post(
+            "/api/v1/vendors",
+            json={
+                "name": "TEST DUP VENDOR",
+                "routing_number": "021000021",
+                "account_number": "123456",
+                "email": "new_email@test.com",
+            },
+            headers=headers,
+        )
+        assert diff_res.status_code == 409
+        diff_data = diff_res.json()
+        assert diff_data["detail"]["duplicate"] is True
+        assert diff_data["detail"]["exact_match"] is False
+        assert "email" in diff_data["detail"]["changes"]
+
+        # 3. Allow update with confirmation -> 201 Created/Updated
+        confirm_res = await client.post(
+            "/api/v1/vendors",
+            json={
+                "name": "TEST DUP VENDOR",
+                "routing_number": "021000021",
+                "account_number": "123456",
+                "email": "new_email@test.com",
+                "allow_update": True,
+            },
+            headers=headers,
+        )
+        assert confirm_res.status_code == 201
+        assert confirm_res.json()["email"] == "new_email@test.com"
+
+
+@pytest.mark.asyncio
+async def test_bulk_vendor_preview_and_confirm_workflow(db_session):
+    admin = User(
+        username="bulk_flow_admin",
+        email="bulkflow@test.com",
+        password_hash="hashed",
+        role=UserRole.ADMIN,
+    )
+    v_existing = Vendor(
+        name="EXISTING BULK VENDOR",
+        routing_number="021000021",
+        account_number="555555",
+        email="old_ap@test.com",
+    )
+    db_session.add_all([admin, v_existing])
+    await db_session.commit()
+    await db_session.refresh(admin)
+
+    token = create_access_token(data={"sub": str(admin.id)})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    csv_content = (
+        "Vendor Name,Routing Number,Account Number,Account Type,Invoice Ref,Email\n"
+        "EXISTING BULK VENDOR,021000021,555555,checking,REF-UPDATED,new_ap@test.com\n"
+        "BRAND NEW VENDOR,021000322,777777,checking,REF-NEW,brandnew@test.com\n"
+    )
+
+    files = {
+        "file": ("bulk_preview.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        # Step 1: Bulk Preview (dry run)
+        preview_res = await client.post("/api/v1/vendors/bulk-preview", headers=headers, files=files)
+        assert preview_res.status_code == 200
+        preview_data = preview_res.json()
+        assert preview_data["new_count"] == 1
+        assert preview_data["update_count"] == 1
+        assert preview_data["error_count"] == 0
+
+        # Step 2: Bulk Confirm (apply changes)
+        confirm_res = await client.post(
+            "/api/v1/vendors/bulk-confirm",
+            json={
+                "new_vendors": preview_data["new_vendors"],
+                "updated_vendors": preview_data["updated_vendors"],
+                "apply_updates": True,
+                "allow_bank_updates": True,
+            },
+            headers=headers,
+        )
+        assert confirm_res.status_code == 200
+        confirm_data = confirm_res.json()
+        assert confirm_data["inserted_count"] == 1
+        assert confirm_data["updated_count"] == 1

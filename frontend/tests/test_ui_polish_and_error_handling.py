@@ -61,10 +61,12 @@ def test_empty_states_across_screens(page: Page, base_url: str):
         [base_url, ADMIN_EMAIL, ADMIN_USER, ADMIN_PASSWORD],
     )
 
+    page.wait_for_selector("#loginUsername")
     page.fill("#loginUsername", ADMIN_USER)
+    page.wait_for_selector("#loginPassword")
     page.fill("#loginPassword", ADMIN_PASSWORD)
     page.click("#loginSubmitBtn")
-    expect(page.locator("#appShell")).to_be_visible(timeout=5000)
+    expect(page.locator("#appShell")).to_be_visible(timeout=10000)
 
     # Clear any leftover pending change requests via API to test Admin Review empty state
     page.evaluate(

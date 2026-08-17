@@ -13,6 +13,8 @@ const VendorsScreen = (() => {
   let showFullAccountDetails = false;
   let selectedVendorIds = new Set();
   let vendorsToDelete = [];
+  let pendingSingleVendorPayload = null;
+  let cachedBulkPreviewData = null;
 
   function isAdmin() {
     const user = API.getUser();
@@ -106,6 +108,24 @@ const VendorsScreen = (() => {
     if (singleVendorForm) singleVendorForm.addEventListener('submit', handleCreateSingleVendorSubmit);
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
+
+    // Duplicate Single Vendor Confirmation Modal Listeners
+    const closeDupModalBtn = el('closeDupConfirmModalBtn');
+    const cancelDupModalBtn = el('cancelDupConfirmModalBtn');
+    const executeDupUpdateBtn = el('executeDupUpdateBtn');
+
+    if (closeDupModalBtn) closeDupModalBtn.addEventListener('click', hideDupConfirmModal);
+    if (cancelDupModalBtn) cancelDupModalBtn.addEventListener('click', hideDupConfirmModal);
+    if (executeDupUpdateBtn) executeDupUpdateBtn.addEventListener('click', executeSingleVendorDuplicateUpdate);
+
+    // Bulk Vendor Diff Modal Listeners
+    const closeBulkDiffBtn = el('closeBulkDiffModalBtn');
+    const cancelBulkDiffBtn = el('cancelBulkDiffModalBtn');
+    const executeBulkDiffConfirmBtn = el('executeBulkDiffConfirmBtn');
+
+    if (closeBulkDiffBtn) closeBulkDiffBtn.addEventListener('click', hideBulkDiffModal);
+    if (cancelBulkDiffBtn) cancelBulkDiffBtn.addEventListener('click', hideBulkDiffModal);
+    if (executeBulkDiffConfirmBtn) executeBulkDiffConfirmBtn.addEventListener('click', executeBulkDiffConfirm);
 
     // Delete Vendor Event Listeners
     const selectAllCb = el('vendorSelectAllCb');
@@ -272,6 +292,41 @@ const VendorsScreen = (() => {
     }
   }
 
+  function hideDupConfirmModal() {
+    pendingSingleVendorPayload = null;
+    const modal = el('duplicateVendorConfirmModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  async function executeSingleVendorDuplicateUpdate() {
+    if (!pendingSingleVendorPayload) return;
+
+    const spinner = el('dupUpdateSpinner');
+    const btn = el('executeDupUpdateBtn');
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      await API.post('/vendors', {
+        ...pendingSingleVendorPayload,
+        allow_update: true,
+        allow_bank_update: isAdmin(),
+      });
+
+      hideDupConfirmModal();
+      hideAddVendorModal();
+      await loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to update existing vendor.');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
   async function handleCreateSingleVendorSubmit(e) {
     if (e) e.preventDefault();
 
@@ -301,22 +356,77 @@ const VendorsScreen = (() => {
     if (saveBtn) saveBtn.disabled = true;
     if (spinner) spinner.style.display = 'inline-block';
 
+    const payload = {
+      name,
+      routing_number,
+      account_number,
+      account_type,
+      default_id_number,
+      email,
+    };
+
     try {
-      await API.post('/vendors', {
-        name,
-        routing_number,
-        account_number,
-        account_type,
-        default_id_number,
-        email,
-      });
+      await API.post('/vendors', payload);
 
       hideAddVendorModal();
       await loadData();
     } catch (err) {
-      if (errBox) {
-        errBox.textContent = err.message || 'Failed to create vendor.';
-        errBox.style.display = 'block';
+      const detailObj = (err.data && typeof err.data.detail === 'object') ? err.data.detail : null;
+      if (err.status === 409 && detailObj && detailObj.duplicate) {
+        if (detailObj.exact_match) {
+          if (errBox) {
+            errBox.textContent = detailObj.message || `Vendor '${name}' already exists with identical details in the Master Book.`;
+            errBox.style.display = 'block';
+          }
+        } else {
+          // Open duplicate confirm modal with field differences
+          pendingSingleVendorPayload = payload;
+          if (el('dupVendorNameDisplay')) el('dupVendorNameDisplay').textContent = detailObj.vendor_name || name;
+
+          const changesContainer = el('dupChangesList');
+          if (changesContainer && detailObj.changes) {
+            const fieldLabels = {
+              email: 'Email',
+              default_id_number: 'Default Invoice Ref',
+              name: 'Vendor Name',
+              routing_number: 'ABA Routing Number',
+              account_number: 'Account Number',
+              account_type: 'Account Type',
+            };
+
+            changesContainer.innerHTML = Object.entries(detailObj.changes).map(([field, ch]) => {
+              const label = fieldLabels[field] || field;
+              return `<div style="padding: 4px 0; border-bottom: 1px dashed #E2E8F0;">
+                • <strong>${label}:</strong> <span style="text-decoration: line-through; color: #94A3B8;">${ch.old}</span> → <strong style="color: #059669;">${ch.new}</strong>
+              </div>`;
+            }).join('');
+          }
+
+          const bankBox = el('dupBankWarningBox');
+          if (bankBox) {
+            if (detailObj.has_bank_change) {
+              bankBox.style.display = 'block';
+              if (!isAdmin()) {
+                bankBox.textContent = 'Note: You are logged in as a Standard User. Only profile details (email/reference) will be updated. Banking details require Admin privileges or a Bank Change Request.';
+              } else {
+                bankBox.textContent = 'Admin Authorization: Overwriting banking details (routing/account) directly. This action is permanently logged in the audit trail.';
+              }
+            } else {
+              bankBox.style.display = 'none';
+            }
+          }
+
+          const dupModal = el('duplicateVendorConfirmModal');
+          if (dupModal) {
+            dupModal.classList.add('active');
+            dupModal.style.display = 'flex';
+          }
+        }
+      } else {
+        if (errBox) {
+          errBox.textContent = err.message || 'Failed to create vendor.';
+          errBox.style.display = 'block';
+        }
       }
     } finally {
       if (saveBtn) saveBtn.disabled = false;
@@ -337,19 +447,26 @@ const VendorsScreen = (() => {
     document.body.removeChild(link);
   }
 
+  function hideBulkDiffModal() {
+    cachedBulkPreviewData = null;
+    const modal = el('bulkVendorDiffModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
   async function handleUploadBulkVendorsSubmit(e) {
     if (e) e.preventDefault();
 
     const fileInput = el('bulkVendorFileInput');
     const errBox = el('addVendorError');
     const succBox = el('addVendorSuccess');
-    const summaryBox = el('bulkVendorResultSummary');
     const spinner = el('bulkVendorSpinner');
     const uploadBtn = el('uploadBulkVendorBtn');
 
     if (errBox) errBox.style.display = 'none';
     if (succBox) succBox.style.display = 'none';
-    if (summaryBox) summaryBox.style.display = 'none';
 
     if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
       if (errBox) {
@@ -367,39 +484,140 @@ const VendorsScreen = (() => {
     if (spinner) spinner.style.display = 'inline-block';
 
     try {
-      const result = await API.postForm('/vendors/bulk-upload', formData);
+      const preview = await API.postForm('/vendors/bulk-preview', formData);
+      cachedBulkPreviewData = preview;
 
-      let summaryHtml = `<div class="card" style="padding: 12px; background: var(--color-surface-alt, #f8fafc); border-left: 4px solid var(--color-primary);">
-        <strong style="font-size: var(--text-xs); color: var(--color-primary);">Bulk Import Complete:</strong>
-        <ul style="margin: 4px 0 0 16px; padding: 0; font-size: var(--text-xs);">
-          <li><strong>${result.imported_count}</strong> new vendor(s) imported successfully</li>
-          <li><strong>${result.skipped_count}</strong> duplicate vendor(s) skipped</li>
-          <li><strong>${result.errors ? result.errors.length : 0}</strong> row error(s)</li>
-        </ul>
-      </div>`;
+      // Populate counters
+      if (el('bulkDiffNewCount')) el('bulkDiffNewCount').textContent = preview.new_count || 0;
+      if (el('bulkDiffUpdateCount')) el('bulkDiffUpdateCount').textContent = preview.update_count || 0;
+      if (el('bulkDiffUnchangedCount')) el('bulkDiffUnchangedCount').textContent = preview.unchanged_count || 0;
+      if (el('bulkDiffErrorCount')) el('bulkDiffErrorCount').textContent = preview.error_count || 0;
 
-      if (result.errors && result.errors.length > 0) {
-        summaryHtml += `<div class="alert alert-danger" style="margin-top: 8px; font-size: var(--text-xs); max-height: 120px; overflow-y: auto;">
-          <strong>Row Validation Warnings:</strong><br/>
-          ${result.errors.map(err => `Row ${err.row}: ${err.error}`).join('<br/>')}
-        </div>`;
+      // Error banner
+      const errorAlert = el('bulkDiffErrorAlert');
+      if (errorAlert) {
+        if (preview.errors && preview.errors.length > 0) {
+          errorAlert.innerHTML = `<strong>${preview.errors.length} Row Validation Warning(s):</strong><br/>` +
+            preview.errors.map(err => `Row ${err.row}: ${err.error}`).join('<br/>');
+          errorAlert.style.display = 'block';
+        } else {
+          errorAlert.style.display = 'none';
+        }
       }
 
-      if (summaryBox) {
-        summaryBox.innerHTML = summaryHtml;
-        summaryBox.style.display = 'block';
+      // Render Diff Table
+      const tbody = el('bulkDiffTableBody');
+      const modSubtext = el('bulkDiffModSubtext');
+      if (tbody) {
+        tbody.innerHTML = '';
+        if (preview.updated_vendors && preview.updated_vendors.length > 0) {
+          if (modSubtext) modSubtext.textContent = `${preview.updated_vendors.length} vendor(s) have updated details`;
+          preview.updated_vendors.forEach(uv => {
+            const changes = uv.changes || {};
+            const fieldLabels = {
+              email: 'Email',
+              default_id_number: 'Invoice Ref',
+              name: 'Vendor Name',
+              routing_number: 'ABA Routing',
+              account_number: 'Account Number',
+              account_type: 'Account Type',
+            };
+
+            Object.entries(changes).forEach(([field, ch]) => {
+              const tr = document.createElement('tr');
+              tr.style.borderBottom = '1px solid #E2E8F0';
+              const isBank = ['routing_number', 'account_number', 'account_type'].includes(field);
+              const badge = isBank
+                ? `<span class="badge badge-danger" style="font-size: 10px;">Bank Detail</span>`
+                : `<span class="badge badge-primary" style="font-size: 10px;">Profile</span>`;
+
+              tr.innerHTML = `
+                <td style="padding: 6px 10px;"><strong>${uv.vendor_name}</strong></td>
+                <td style="padding: 6px 10px; font-weight: 500;">${fieldLabels[field] || field}</td>
+                <td style="padding: 6px 10px; font-family: monospace; color: #64748B;">${ch.old}</td>
+                <td style="padding: 6px 10px; font-family: monospace; color: #059669; font-weight: bold;">${ch.new}</td>
+                <td style="padding: 6px 10px; text-align: center;">${badge}</td>
+              `;
+              tbody.appendChild(tr);
+            });
+          });
+        } else {
+          if (modSubtext) modSubtext.textContent = 'No modifications to existing vendors detected';
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" class="text-center text-muted" style="padding: 16px;">
+                All matching existing vendors have identical details. ${preview.new_count} new vendor(s) ready to insert.
+              </td>
+            </tr>
+          `;
+        }
       }
 
-      if (result.imported_count > 0) {
-        await loadData();
+      // Bank update options
+      const hasAnyBankChange = preview.updated_vendors && preview.updated_vendors.some(uv => uv.has_bank_change);
+      const bankSec = el('bulkDiffBankSection');
+      const allowBankCb = el('bulkDiffAllowBankCb');
+      if (allowBankCb) allowBankCb.checked = false;
+
+      if (bankSec) {
+        if (hasAnyBankChange && isAdmin()) {
+          bankSec.style.display = 'block';
+        } else {
+          bankSec.style.display = 'none';
+        }
+      }
+
+      // Update button text
+      const confirmBtnText = el('bulkDiffConfirmBtnText');
+      if (confirmBtnText) {
+        confirmBtnText.textContent = `Confirm & Apply (${preview.new_count} New, ${preview.update_count} Updates)`;
+      }
+
+      // Open diff modal
+      const diffModal = el('bulkVendorDiffModal');
+      if (diffModal) {
+        diffModal.classList.add('active');
+        diffModal.style.display = 'flex';
       }
     } catch (err) {
       if (errBox) {
-        errBox.textContent = err.message || 'Failed to upload bulk vendors file.';
+        errBox.textContent = err.message || 'Failed to analyze vendor spreadsheet.';
         errBox.style.display = 'block';
       }
     } finally {
       if (uploadBtn) uploadBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  async function executeBulkDiffConfirm() {
+    if (!cachedBulkPreviewData) return;
+
+    const applyUpdates = el('bulkDiffApplyUpdatesCb') ? el('bulkDiffApplyUpdatesCb').checked : true;
+    const allowBankUpdates = el('bulkDiffAllowBankCb') ? el('bulkDiffAllowBankCb').checked : false;
+
+    const spinner = el('bulkDiffSpinner');
+    const confirmBtn = el('executeBulkDiffConfirmBtn');
+
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      const result = await API.post('/vendors/bulk-confirm', {
+        new_vendors: cachedBulkPreviewData.new_vendors || [],
+        updated_vendors: cachedBulkPreviewData.updated_vendors || [],
+        apply_updates: applyUpdates,
+        allow_bank_updates: allowBankUpdates && isAdmin(),
+      });
+
+      hideBulkDiffModal();
+      hideAddVendorModal();
+      await loadData();
+      alert(result.message || 'Bulk vendor import and update completed successfully.');
+    } catch (err) {
+      alert(err.message || 'Failed to apply bulk vendor import.');
+    } finally {
+      if (confirmBtn) confirmBtn.disabled = false;
       if (spinner) spinner.style.display = 'none';
     }
   }

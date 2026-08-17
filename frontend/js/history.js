@@ -96,7 +96,7 @@ const HistoryScreen = (() => {
     if (copyLastNachaBtn) copyLastNachaBtn.addEventListener('click', handleCopyLastNacha);
     if (downloadLastNachaBtn) downloadLastNachaBtn.addEventListener('click', handleDownloadLastNacha);
 
-    // Per-column filter inputs — real-time filtering with debounce
+    // Per-column filter inputs — instant client-side filtering
     const filterInputIds = [
       'colFilterEffDate', 'colFilterVendor', 'colFilterEmail',
       'colFilterAmount', 'colFilterInvoice', 'colFilterGeneratedBy',
@@ -104,7 +104,7 @@ const HistoryScreen = (() => {
     ];
     filterInputIds.forEach(id => {
       const input = el(id);
-      if (input) input.addEventListener('input', debounce(applyColumnFilters, 250));
+      if (input) input.addEventListener('input', applyColumnFilters);
     });
     const statusFilter = el('colFilterStatus');
     if (statusFilter) statusFilter.addEventListener('change', applyColumnFilters);
