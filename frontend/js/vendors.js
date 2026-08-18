@@ -171,7 +171,9 @@ const VendorsScreen = (() => {
     const vendor = loadedVendors.find(v => v.id === vendorId);
     if (!vendor) return;
 
-    const defaultIdVal = vendor.default_id_number || (vendor.account_number && vendor.account_number.length >= 4 ? vendor.account_number.slice(-4) : (vendor.account_number || ''));
+    const defaultIdVal = (vendor.account_number && vendor.account_number.length >= 4)
+      ? vendor.account_number.slice(-4)
+      : (vendor.default_id_number || vendor.account_number || '');
 
     el('editVendorId').value = vendor.id;
     el('editVendorModalTitle').textContent = `Edit Vendor Profile — ${vendor.name}`;
@@ -930,9 +932,9 @@ const VendorsScreen = (() => {
       }
 
       const isChecked = selectedVendorIds.has(v.id);
-      const vendorIdDisplay = (v.default_id_number && v.default_id_number.trim())
-        ? v.default_id_number.trim()
-        : (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
+      const vendorIdDisplay = (v.account_number && v.account_number.length >= 4)
+        ? v.account_number.slice(-4)
+        : (v.default_id_number || v.account_number || '—');
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
@@ -1024,9 +1026,9 @@ const VendorsScreen = (() => {
 
       const displayEmail = v.email || ('ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
       const isChecked = selectedVendorIds.has(v.id);
-      const vendorIdDisplay = (v.default_id_number && v.default_id_number.trim())
-        ? v.default_id_number.trim()
-        : (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
+      const vendorIdDisplay = (v.account_number && v.account_number.length >= 4)
+        ? v.account_number.slice(-4)
+        : (v.default_id_number || v.account_number || '—');
 
       tr.innerHTML = `
         <td style="padding: 12px 16px; text-align: center;">

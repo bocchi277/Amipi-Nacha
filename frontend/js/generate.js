@@ -69,7 +69,7 @@ const GenerateScreen = (() => {
       loadedVendors.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v.id;
-        const vId = v.default_id_number || (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
+        const vId = (v.account_number && v.account_number.length >= 4) ? v.account_number.slice(-4) : (v.default_id_number || '—');
         opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
         select.appendChild(opt);
       });
@@ -155,7 +155,7 @@ const GenerateScreen = (() => {
         const vObj = loadedVendors.find(v => v.id === vId);
         const idInput = el('manualIdNumber');
         if (vObj && idInput) {
-          idInput.value = vObj.default_id_number || (vObj.account_number && vObj.account_number.length >= 4 ? vObj.account_number.slice(-4) : '');
+          idInput.value = (vObj.account_number && vObj.account_number.length >= 4) ? vObj.account_number.slice(-4) : (vObj.default_id_number || '');
         }
       });
     }
@@ -568,7 +568,7 @@ const GenerateScreen = (() => {
     if (!vendorObj) return showManualError('Selected vendor invalid.');
 
     if (!idNum) {
-      idNum = vendorObj.default_id_number || (vendorObj.account_number && vendorObj.account_number.length >= 4 ? vendorObj.account_number.slice(-4) : 'EPAY');
+      idNum = (vendorObj.account_number && vendorObj.account_number.length >= 4) ? vendorObj.account_number.slice(-4) : (vendorObj.default_id_number || 'EPAY');
     }
 
     manualDraftEntries.push({

@@ -74,7 +74,11 @@ async def seed_vendors():
             res = await db.execute(select(Vendor).where(Vendor.name == name_clean))
             existing = res.scalar_one_or_none()
 
+            def_id = acct[-4:] if len(acct) >= 4 else acct
             if existing:
+                if not existing.default_id_number or existing.default_id_number == "ABC":
+                    existing.default_id_number = def_id
+                    updated_count += 1
                 if not validate_routing_checksum(existing.routing_number) or existing.routing_number != rt:
                     existing.routing_number = rt
                     updated_count += 1
@@ -85,6 +89,7 @@ async def seed_vendors():
                 routing_number=rt,
                 account_number=acct,
                 account_type=AccountType.CHECKING,
+                default_id_number=def_id,
                 is_active=True,
             )
             db.add(vendor)

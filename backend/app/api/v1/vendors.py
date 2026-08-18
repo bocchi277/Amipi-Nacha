@@ -179,14 +179,20 @@ async def seed_sample_vendors(
     added = 0
     for v_data in SAMPLE_VENDORS:
         name_clean = v_data["name"].strip()
+        acc = v_data["account"]
+        def_id = acc[-4:] if len(acc) >= 4 else acc
         res = await db.execute(select(Vendor).where(Vendor.name == name_clean))
-        if res.scalar_one_or_none():
+        existing_v = res.scalar_one_or_none()
+        if existing_v:
+            if not existing_v.default_id_number or existing_v.default_id_number == "ABC":
+                existing_v.default_id_number = def_id
             continue
         vendor = Vendor(
             name=name_clean[:22],
             routing_number=v_data["routing"],
-            account_number=v_data["account"],
+            account_number=acc,
             account_type=AccountType.CHECKING,
+            default_id_number=def_id,
             is_active=True,
         )
         db.add(vendor)
@@ -207,7 +213,7 @@ async def list_vendors(db: AsyncSession = Depends(get_async_db)):
             routing_number=v.routing_number,
             account_number=v.account_number,
             account_type=_val(v.account_type),
-            default_id_number=v.default_id_number,
+            default_id_number=v.default_id_number or (v.account_number[-4:] if v.account_number and len(v.account_number) >= 4 else v.account_number),
             email=v.email,
             is_active=v.is_active,
         )
