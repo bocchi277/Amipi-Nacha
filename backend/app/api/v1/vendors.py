@@ -91,6 +91,7 @@ class UpdateVendorSchema(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     default_id_number: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class VendorResponseSchema(BaseModel):
@@ -828,6 +829,8 @@ async def update_vendor(
         vendor.email = payload.email.strip() if payload.email.strip() else None
     if payload.default_id_number is not None:
         vendor.default_id_number = payload.default_id_number.strip() if payload.default_id_number.strip() else None
+    if payload.is_active is not None:
+        vendor.is_active = payload.is_active
 
     # Audit Log
     audit_entry = AuditLog(
@@ -838,6 +841,7 @@ async def update_vendor(
         details={
             "vendor_name": vendor.name,
             "updated_email": vendor.email,
+            "is_active": vendor.is_active,
             "updated_by_user": current_user.username,
         },
     )

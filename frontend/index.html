@@ -758,9 +758,18 @@
                   <span class="form-hint">Used automatically for sending payment confirmation remittance advice emails.</span>
                 </div>
 
-                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <div class="form-group" style="margin-bottom: var(--space-md);">
                   <label class="form-label" for="editVendorRef">Default Payee ID / Invoice Ref</label>
                   <input type="text" class="form-input font-mono" id="editVendorRef" placeholder="e.g. Last 4 digits of Account (e.g. 7265)" />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                  <label class="form-label" for="editVendorStatus">Vendor Status</label>
+                  <select class="form-select" id="editVendorStatus">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                  <span class="form-hint">Set status to Active or Inactive. Inactive vendors are preserved in directory for history and audit tracking.</span>
                 </div>
 
                 <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
@@ -1173,7 +1182,7 @@
 
                   <div class="form-group" style="margin-bottom: var(--space-xs);">
                     <label class="form-label" for="helpTmplBody">Email Message Content (Intro & Paragraphs)</label>
-                    <textarea class="form-input font-mono" id="helpTmplBody" rows="7" style="font-size: var(--text-xs); line-height: 1.5;" required></textarea>
+                    <textarea class="form-input font-mono" id="helpTmplBody" rows="12" style="font-size: var(--text-xs); line-height: 1.6; min-height: 260px; resize: vertical;" required></textarea>
                     <div class="text-xs text-muted" style="margin-top: 6px;">
                       Note: The <strong>Tabular Form Method of Payment & Sub-Invoices Table</strong> with itemized breakdown is automatically appended at the bottom of the email.
                     </div>
@@ -1682,7 +1691,7 @@
 
             <div class="form-group" style="margin-bottom: var(--space-md);">
               <label class="form-label" for="tmplBodyInput">Email Message Body Template (Intro & Paragraphs)</label>
-              <textarea class="form-input font-mono" id="tmplBodyInput" rows="6" style="font-size: var(--text-xs); line-height: 1.5;" required></textarea>
+              <textarea class="form-input font-mono" id="tmplBodyInput" rows="12" style="font-size: var(--text-xs); line-height: 1.6; min-height: 240px; resize: vertical;" required></textarea>
               <div class="text-xs text-muted" style="margin-top: 4px;">
                 Note: The <strong>Tabular Form Method of Payment & Sub-Invoices Table</strong> is automatically appended at the bottom of the email.
               </div>

@@ -180,6 +180,7 @@ const VendorsScreen = (() => {
     el('editVendorName').value = vendor.name;
     el('editVendorEmail').value = vendor.email || (`ap@${vendor.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`);
     el('editVendorRef').value = defaultIdVal;
+    if (el('editVendorStatus')) el('editVendorStatus').value = (vendor.is_active !== false) ? 'true' : 'false';
 
     if (el('editVendorError')) el('editVendorError').style.display = 'none';
     if (el('editVendorSuccess')) el('editVendorSuccess').style.display = 'none';
@@ -204,6 +205,7 @@ const VendorsScreen = (() => {
     const name = el('editVendorName').value.trim();
     const email = el('editVendorEmail').value.trim();
     const ref = el('editVendorRef').value.trim();
+    const is_active = el('editVendorStatus') ? (el('editVendorStatus').value === 'true') : true;
 
     const errBox = el('editVendorError');
     const succBox = el('editVendorSuccess');
@@ -233,10 +235,11 @@ const VendorsScreen = (() => {
         name,
         email,
         default_id_number: ref || undefined,
+        is_active,
       });
 
       if (succBox) {
-        succBox.textContent = 'Vendor profile updated successfully! Email saved to database.';
+        succBox.textContent = 'Vendor profile updated successfully! Status and details saved.';
         succBox.style.display = 'block';
       }
 
@@ -936,6 +939,10 @@ const VendorsScreen = (() => {
         ? v.account_number.slice(-4)
         : (v.default_id_number || v.account_number || '—');
 
+      const statusBadge = v.is_active === false
+        ? '<span class="badge" style="background: var(--color-surface-alt, #f1f5f9); color: var(--color-text-muted, #64748b); border: 1px solid #cbd5e1;">Inactive</span>'
+        : '<span class="badge badge-success">Active</span>';
+
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
           <div style="display: flex; align-items: center; gap: var(--space-xs);">
@@ -945,7 +952,7 @@ const VendorsScreen = (() => {
               <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
             </div>
           </div>
-          <span class="badge badge-success">Active</span>
+          ${statusBadge}
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs); font-size: var(--text-xs); margin-bottom: var(--space-md);">
@@ -1019,7 +1026,9 @@ const VendorsScreen = (() => {
         String(r.status).toLowerCase() === 'pending'
       );
 
-      let statusBadge = '<span class="badge badge-success">Active</span>';
+      let statusBadge = v.is_active === false
+        ? '<span class="badge" style="background: var(--color-surface-alt, #f1f5f9); color: var(--color-text-muted, #64748b); border: 1px solid #cbd5e1;">Inactive</span>'
+        : '<span class="badge badge-success">Active</span>';
       if (pendingReq) {
         statusBadge += ' <span class="badge badge-warning" title="Bank change request pending admin approval">Pending Change</span>';
       }

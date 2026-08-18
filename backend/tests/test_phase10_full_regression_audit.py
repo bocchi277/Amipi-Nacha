@@ -192,7 +192,7 @@ async def test_vendor_profile_email_update_endpoint(db_session: AsyncSession):
 
         res = await client.put(
             f"/api/v1/vendors/{v.id}",
-            json={"name": "PROFILE TEST UPDATED", "email": "accounts@profiletest.com", "default_id_number": "DEF-999"},
+            json={"name": "PROFILE TEST UPDATED", "email": "accounts@profiletest.com", "default_id_number": "DEF-999", "is_active": False},
             headers=headers,
         )
         assert res.status_code == 200
@@ -200,6 +200,16 @@ async def test_vendor_profile_email_update_endpoint(db_session: AsyncSession):
         assert data["name"] == "PROFILE TEST UPDATED"
         assert data["email"] == "accounts@profiletest.com"
         assert data["default_id_number"] == "DEF-999"
+        assert data["is_active"] is False
+
+        # Reactivate vendor
+        res_reactivate = await client.put(
+            f"/api/v1/vendors/{v.id}",
+            json={"is_active": True},
+            headers=headers,
+        )
+        assert res_reactivate.status_code == 200
+        assert res_reactivate.json()["is_active"] is True
 
 
 @pytest.mark.asyncio
