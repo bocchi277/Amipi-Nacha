@@ -91,9 +91,17 @@ async def test_upload_sample_excel_payments(db_session):
     assert len(data["valid_payments"]) == 19
     assert len(data["errors"]) == 0
 
-    # Total amount check ($154,006.57)
+    # Total amount check ($153,719.07 true banking paid sum)
     total_parsed = sum(Decimal(p["amount"]) for p in data["valid_payments"])
-    assert total_parsed == Decimal("154006.57")
+    assert total_parsed == Decimal("153719.07")
+
+    # Check that Diamond Days Promotion Inc (partial payment) parsed paid amount $50.00 not original $337.50
+    ddp_payment = next(p for p in data["valid_payments"] if "DIAMOND DAYS" in p["vendor_name"].upper())
+    assert Decimal(ddp_payment["amount"]) == Decimal("50.00")
+    assert ddp_payment["invoice_breakdown"] is not None
+    assert len(ddp_payment["invoice_breakdown"]) == 1
+    assert ddp_payment["invoice_breakdown"][0]["invoice_number"] == "25789"
+    assert Decimal(str(ddp_payment["invoice_breakdown"][0]["amount"])) == Decimal("50.00")
 
     # Verify DB persistence
     batch_id = data["batch_id"]
@@ -101,7 +109,7 @@ async def test_upload_sample_excel_payments(db_session):
     batch_in_db = res_batch.scalar_one_or_none()
     assert batch_in_db is not None
     assert batch_in_db.valid_rows_count == 19
-    assert batch_in_db.total_amount == Decimal("154006.57")
+    assert batch_in_db.total_amount == Decimal("153719.07")
 
     # Verify 19 Payment rows tied to batch_id
     res_pmts = await db_session.execute(select(Payment).where(Payment.batch_id == batch_id))
@@ -234,3 +242,85 @@ async def test_get_upload_batch_by_id(db_session):
     assert len(bdata["payments"]) == 1
     assert bdata["payments"][0]["amount"] == "800.00"
     assert bdata["payments"][0]["id_number"] == "INV-888"
+
+
+@pytest.mark.asyncio
+async def test_upload_partial_payment_qb_excel(db_session):
+    """
+    Test uploading a QuickBooks Excel format with partial payments where:
+    - Paid Amount differs from Original Amount
+    - Multiple sub-invoices exist
+    - TOTAL row has a different Original Amount
+    Asserts that:
+    1. Transaction total strictly equals the sum of Paid Amounts.
+    2. Sub-invoice breakdown amounts match the individual Paid Amounts.
+    3. Original Amount never overrides the actual cash payment.
+    """
+    v = Vendor(
+        name="ARTN DESIGN INC",
+        routing_number="021000021",
+        account_number="12345678",
+        account_type=AccountType.CHECKING,
+        is_active=True,
+    )
+    db_session.add(v)
+    await db_session.commit()
+
+    # Build mock QuickBooks workbook in-memory
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+
+    # Row 1: Header
+    ws.append([None, "Type", None, "Num", None, "Date", None, "Name", None, "Item", None, "Account", None, "Paid Amount", None, "Original Amount"])
+    # Row 2: Empty
+    ws.append([" "])
+    # Row 3: Bill Pmt -Check header
+    ws.append([None, "Bill Pmt -Check", None, "ACH", None, "2026-07-30", None, "ARTN DESIGN INC", None, None, None, "1002 · JPMC", None, None, None, -5000.00])
+    # Row 4: Empty
+    ws.append([" "])
+    # Row 5: Bill 1 (Original $10,000, Paid $3,000)
+    ws.append([None, "Bill", None, "INV-1001", None, "2026-05-01", None, None, None, None, None, "5012 · Diamonds", None, -3000.00, None, 10000.00])
+    # Row 6: Bill 2 (Original $6,231.11, Paid $2,000)
+    ws.append([None, "Bill", None, "INV-1002", None, "2026-05-02", None, None, None, None, None, "5012 · Diamonds", None, -2000.00, None, 6231.11])
+    # Row 7: TOTAL row (Paid Amount = -5000, Original Amount = 16231.11)
+    ws.append(["TOTAL", None, None, None, None, None, None, None, None, None, None, None, None, -5000.00, None, 16231.11])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    file_bytes = buf.getvalue()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/payments/upload",
+            files={"file": ("partial_pmt.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"batch_number": "1", "effective_date": "2026-07-30"},
+        )
+
+    assert response.status_code == 201, f"Response: {response.text}"
+    data = response.json()
+
+    assert data["summary"]["valid_rows"] == 1
+    assert data["summary"]["error_rows"] == 0
+    assert len(data["valid_payments"]) == 1
+
+    pmt = data["valid_payments"][0]
+    # Total MUST be $5000.00 (the paid sum), NOT $16,231.11 (the original amount)!
+    assert pmt["amount"] == "5000.00"
+    assert pmt["invoice_breakdown"] is not None
+    assert len(pmt["invoice_breakdown"]) == 2
+
+    # Check breakdown matches individual paid amounts
+    inv1 = next(i for i in pmt["invoice_breakdown"] if i["invoice_number"] == "INV-1001")
+    assert Decimal(str(inv1["amount"])) == Decimal("3000.00")
+
+    inv2 = next(i for i in pmt["invoice_breakdown"] if i["invoice_number"] == "INV-1002")
+    assert Decimal(str(inv2["amount"])) == Decimal("2000.00")
+
+    # Sum of sub-invoices must equal total payment
+    sub_sum = sum(Decimal(str(i["amount"])) for i in pmt["invoice_breakdown"])
+    assert sub_sum == Decimal(pmt["amount"]) == Decimal("5000.00")
+

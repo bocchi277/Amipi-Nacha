@@ -83,7 +83,7 @@ async def test_nacha_regression_single_and_combined_batches(db_session):
         data_g1 = res_g1.json()
         assert data_g1["total_batch_count"] == 1
         assert data_g1["total_entry_count"] == 19
-        assert data_g1["total_credit_amount"] == "154006.57"
+        assert data_g1["total_credit_amount"] == "153719.07"
 
         # Case B: Generate NACHA for Batch-2-only
         res_g2 = await client.post(
@@ -131,7 +131,7 @@ async def test_nacha_regression_single_and_combined_batches(db_session):
         data_gc = res_gc.json()
         assert data_gc["total_batch_count"] == 2
         assert data_gc["total_entry_count"] == 20
-        assert data_gc["total_credit_amount"] == "154506.57"  # 154006.57 + 500.00
+        assert data_gc["total_credit_amount"] == "154219.07"  # 153719.07 + 500.00
 
 
 @pytest.mark.asyncio

@@ -172,8 +172,11 @@ def _parse_excel(
         row_vals = [str(ws.cell(r, c).value or "").strip() for c in range(1, ws.max_column + 1)]
         headers_upper = [h.upper() for h in row_vals]
         
-        if "TYPE" in headers_upper and ("NAME" in headers_upper or "PAID AMOUNT" in headers_upper):
+        if "TYPE" in headers_upper and ("NAME" in headers_upper or any("PAID" in h for h in headers_upper)):
             header_row_idx = r
+            paid_col = None
+            orig_col = None
+            generic_amt_col = None
             for c, h in enumerate(headers_upper, 1):
                 if h == "TYPE":
                     col_idx_map["type"] = c
@@ -183,19 +186,31 @@ def _parse_excel(
                     col_idx_map["date"] = c
                 elif h == "NAME":
                     col_idx_map["name"] = c
-                elif "PAID" in h or "ORIGINAL" in h or "AMOUNT" in h:
-                    if "amount" not in col_idx_map:
-                        col_idx_map["amount"] = c
+                elif "PAID" in h:
+                    paid_col = c
+                elif "ORIGINAL" in h:
+                    orig_col = c
+                elif "AMOUNT" in h:
+                    generic_amt_col = c
+
+            col_idx_map["amount"] = paid_col or generic_amt_col or orig_col
             break
         
         # Standard table headers check
         if any(k in headers_upper for k in ("VENDOR", "VENDOR NAME", "PAYEE", "NAME")):
             header_row_idx = r
+            paid_col = None
+            orig_col = None
+            generic_amt_col = None
             for c, h in enumerate(headers_upper, 1):
                 if h in ("VENDOR", "VENDOR NAME", "PAYEE", "NAME"):
                     col_idx_map["name"] = c
-                elif h in ("AMOUNT", "PAID AMOUNT", "TRXN AMOUNT"):
-                    col_idx_map["amount"] = c
+                elif "PAID" in h:
+                    paid_col = c
+                elif "ORIGINAL" in h:
+                    orig_col = c
+                elif h in ("AMOUNT", "TRXN AMOUNT") or "AMOUNT" in h:
+                    generic_amt_col = c
                 elif h in ("NUM", "INVOICE", "ID NUMBER", "ID"):
                     col_idx_map["num"] = c
                 elif h in ("DATE", "EFFECTIVE DATE"):
@@ -204,6 +219,9 @@ def _parse_excel(
                     col_idx_map["routing"] = c
                 elif h in ("ACCOUNT", "ACCOUNT NUMBER", "ACCT NUMBER"):
                     col_idx_map["account"] = c
+
+            if paid_col or generic_amt_col or orig_col:
+                col_idx_map["amount"] = paid_col or generic_amt_col or orig_col
             break
 
     if header_row_idx and "type" in col_idx_map:
@@ -214,8 +232,8 @@ def _parse_excel(
         # Standard tabular Excel format parser
         return _parse_tabular_excel(ws, header_row_idx, col_idx_map, vendor_map, default_effective_date)
 
-    # Fallback: scan all rows as QuickBooks grouped format
-    return _parse_qb_excel(ws, 1, {"type": 2, "num": 4, "date": 6, "name": 8, "amount": 16}, vendor_map, default_effective_date)
+    # Fallback: scan all rows as QuickBooks grouped format (Paid Amount default at col 14)
+    return _parse_qb_excel(ws, 1, {"type": 2, "num": 4, "date": 6, "name": 8, "amount": 14}, vendor_map, default_effective_date)
 
 
 def _parse_qb_excel(
@@ -236,7 +254,7 @@ def _parse_qb_excel(
     num_col = col_map.get("num", 4)
     date_col = col_map.get("date", 6)
     name_col = col_map.get("name", 8)
-    amt_col = col_map.get("amount", 16)
+    amt_col = col_map.get("amount", 14)
 
     for r in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
@@ -244,16 +262,17 @@ def _parse_qb_excel(
 
         # Handle TOTAL row closing a vendor block
         if first_val.startswith("TOTAL"):
-            # Check if TOTAL row has an explicit total amount in Original Amount (idx 15) or rightmost cells
-            total_row_amt = None
-            for c in (15, len(row_vals) - 1, amt_col - 1, len(row_vals) - 3):
-                if 0 <= c < len(row_vals):
-                    parsed_a = _parse_amount(row_vals[c])
-                    if parsed_a is not None and parsed_a != Decimal("0"):
-                        total_row_amt = abs(parsed_a)
-                        break
-
-            final_amt = total_row_amt if total_row_amt is not None else abs(current_amount)
+            # The authoritative total amount is the sum of parsed bill lines (current_amount).
+            # If current_amount is 0 (e.g. file only has TOTAL row without individual bill lines),
+            # check the Paid Amount column on the TOTAL row or rightmost numeric cells.
+            final_amt = abs(current_amount)
+            if final_amt == Decimal("0"):
+                for c in (amt_col - 1, 13, len(row_vals) - 3, len(row_vals) - 1):
+                    if 0 <= c < len(row_vals):
+                        parsed_a = _parse_amount(row_vals[c])
+                        if parsed_a is not None and parsed_a != Decimal("0"):
+                            final_amt = abs(parsed_a)
+                            break
 
             if current_vendor:
                 _process_qb_vendor_block(
@@ -271,6 +290,21 @@ def _parse_qb_excel(
         row_num = str(row_vals[num_col - 1] or "").strip()
         row_date = _parse_date(row_vals[date_col - 1])
         row_amt = _parse_amount(row_vals[amt_col - 1] if len(row_vals) >= amt_col else None)
+
+        # If a new vendor block starts and we have accumulated sub-invoices/amounts from previous vendor, flush it
+        is_new_block_start = (
+            row_type.lower() in ("bill pmt -check", "check", "payment", "bill pmt", "ach")
+            or (row_name and current_vendor and row_name.upper() != current_vendor.upper())
+        )
+        if is_new_block_start and current_vendor and (current_amount > 0 or len(current_invoices) > 0):
+            _process_qb_vendor_block(
+                r - 1, current_vendor, abs(current_amount), current_invoices, current_date,
+                vendor_map, default_effective_date, result
+            )
+            current_vendor = None
+            current_invoices = []
+            current_amount = Decimal("0.00")
+            current_date = None
 
         if row_name:
             current_vendor = row_name
@@ -453,14 +487,22 @@ def _parse_csv(
         result.errors.append(ParsedRowError(row_number=0, raw_data={}, errors=[f"CSV parsing error: {e}"]))
         return result
 
-    # Normalize column names
+    # Normalize column names with explicit priority (Paid Amount > Amount > Original Amount)
     col_renames = {}
+    paid_col = None
+    amt_col = None
+    orig_col = None
+
     for col in df.columns:
         c_upper = str(col).strip().upper()
         if c_upper in ("VENDOR", "VENDOR NAME", "PAYEE", "NAME"):
             col_renames[col] = "name"
-        elif c_upper in ("AMOUNT", "PAID AMOUNT", "TRXN AMOUNT"):
-            col_renames[col] = "amount"
+        elif "PAID" in c_upper:
+            paid_col = col
+        elif "ORIGINAL" in c_upper:
+            orig_col = col
+        elif c_upper in ("AMOUNT", "TRXN AMOUNT") or "AMOUNT" in c_upper:
+            amt_col = col
         elif c_upper in ("NUM", "INVOICE", "ID NUMBER", "ID", "INVOICE NUMBER"):
             col_renames[col] = "num"
         elif c_upper in ("DATE", "EFFECTIVE DATE"):
@@ -469,6 +511,10 @@ def _parse_csv(
             col_renames[col] = "routing"
         elif c_upper in ("ACCOUNT", "ACCOUNT NUMBER", "ACCT NUMBER"):
             col_renames[col] = "account"
+
+    amount_chosen = paid_col or amt_col or orig_col
+    if amount_chosen:
+        col_renames[amount_chosen] = "amount"
 
     df = df.rename(columns=col_renames)
 

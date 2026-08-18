@@ -40,8 +40,8 @@ async def test_live_browser_e2e_full_workflow():
         rows = await page.query_selector_all("#validPaymentsTableBody tr")
         assert len(rows) > 0, "No valid payment rows parsed from spreadsheet"
 
-        # Check for 3 Invoices breakdown button
-        breakdown_btn = await page.query_selector("#validPaymentsTableBody button, button:has-text('Invoices')")
+        # Check for Invoices breakdown button
+        breakdown_btn = await page.query_selector("#validPaymentsTableBody button:has-text('Invoices')")
         if breakdown_btn:
             await breakdown_btn.click()
             await page.wait_for_selector("#invoiceBreakdownModal.active", timeout=10000)
