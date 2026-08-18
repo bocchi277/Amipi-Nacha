@@ -69,7 +69,8 @@ const GenerateScreen = (() => {
       loadedVendors.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v.id;
-        opt.textContent = `${v.name} (Routing: ${v.routing_number}, Acct: ...${v.account_number.slice(-4)})`;
+        const vId = v.default_id_number || (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
+        opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
         select.appendChild(opt);
       });
     } catch (err) {
@@ -145,6 +146,18 @@ const GenerateScreen = (() => {
     const addManualBtn = el('addManualEntryBtn');
     if (addManualBtn) {
       addManualBtn.addEventListener('click', handleAddManualEntry);
+    }
+
+    const manualVendorSelect = el('manualVendorSelect');
+    if (manualVendorSelect) {
+      manualVendorSelect.addEventListener('change', () => {
+        const vId = manualVendorSelect.value;
+        const vObj = loadedVendors.find(v => v.id === vId);
+        const idInput = el('manualIdNumber');
+        if (vObj && idInput) {
+          idInput.value = vObj.default_id_number || (vObj.account_number && vObj.account_number.length >= 4 ? vObj.account_number.slice(-4) : '');
+        }
+      });
     }
 
     const submitManualBtn = el('submitManualBatchBtn');
@@ -544,16 +557,19 @@ const GenerateScreen = (() => {
 
     const vendorId = vendorSelect ? vendorSelect.value : '';
     const amountVal = amtInput ? amtInput.value.trim() : '';
-    const idNum = idInput ? idInput.value.trim() : '';
+    let idNum = idInput ? idInput.value.trim() : '';
     const effDate = dateInput ? dateInput.value.trim() : '';
 
     if (!vendorId) return showManualError('Please select a vendor.');
     if (!amountVal || isNaN(amountVal) || parseFloat(amountVal) <= 0) return showManualError('Please enter a valid positive amount.');
-    if (!idNum) return showManualError('Invoice / ID Number is required.');
     if (!effDate) return showManualError('Effective date is required.');
 
     const vendorObj = loadedVendors.find(v => v.id === vendorId);
     if (!vendorObj) return showManualError('Selected vendor invalid.');
+
+    if (!idNum) {
+      idNum = vendorObj.default_id_number || (vendorObj.account_number && vendorObj.account_number.length >= 4 ? vendorObj.account_number.slice(-4) : 'EPAY');
+    }
 
     manualDraftEntries.push({
       vendor_id: vendorId,

@@ -352,12 +352,13 @@ async def create_vendor(
         )
 
     # New Vendor
+    def_id = payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else (acc[-4:] if len(acc) >= 4 else acc)
     vendor = Vendor(
         name=name_clean,
         routing_number=rt,
         account_number=acc,
         account_type=payload.account_type,
-        default_id_number=payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else None,
+        default_id_number=def_id,
         email=payload.email.strip() if payload.email and payload.email.strip() else None,
         is_active=True,
     )
@@ -556,12 +557,13 @@ async def bulk_preview_vendors(
                     "account_number": existing.account_number,
                 })
         else:
+            def_ref_clean = default_ref.strip() if default_ref and default_ref.strip() else (account_clean[-4:] if len(account_clean) >= 4 else account_clean)
             new_vendors.append({
                 "name": name_clean,
                 "routing_number": routing_clean,
                 "account_number": account_clean,
                 "account_type": acct_type_val,
-                "default_id_number": default_ref.strip() if default_ref and default_ref.strip() else None,
+                "default_id_number": def_ref_clean,
                 "email": email.strip() if email and email.strip() else None,
             })
 
@@ -600,12 +602,13 @@ async def bulk_confirm_vendors(
         if not name_clean or not rt or not acc:
             continue
         acct_type = AccountType.SAVINGS if "sav" in str(nv.get("account_type", "")).lower() else AccountType.CHECKING
+        def_id = str(nv.get("default_id_number", "")).strip() or (acc[-4:] if len(acc) >= 4 else acc)
         v = Vendor(
             name=name_clean,
             routing_number=rt,
             account_number=acc,
             account_type=acct_type,
-            default_id_number=nv.get("default_id_number") or None,
+            default_id_number=def_id,
             email=nv.get("email") or None,
             is_active=True,
         )

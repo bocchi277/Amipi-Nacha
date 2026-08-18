@@ -109,6 +109,21 @@ const VendorsScreen = (() => {
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
 
+    // Auto-fill ID with last 4 digits of account number
+    const addAcctInput = el('addVendorAccount');
+    const addRefInput = el('addVendorRef');
+    if (addAcctInput && addRefInput) {
+      addAcctInput.addEventListener('input', () => {
+        const cleanAcct = addAcctInput.value.replace(/\D/g, '');
+        if (cleanAcct.length >= 4 && (!addRefInput.dataset.manuallyEdited || !addRefInput.value)) {
+          addRefInput.value = cleanAcct.slice(-4);
+        }
+      });
+      addRefInput.addEventListener('input', () => {
+        addRefInput.dataset.manuallyEdited = 'true';
+      });
+    }
+
     // Duplicate Single Vendor Confirmation Modal Listeners
     const closeDupModalBtn = el('closeDupConfirmModalBtn');
     const cancelDupModalBtn = el('cancelDupConfirmModalBtn');
@@ -156,11 +171,13 @@ const VendorsScreen = (() => {
     const vendor = loadedVendors.find(v => v.id === vendorId);
     if (!vendor) return;
 
+    const defaultIdVal = vendor.default_id_number || (vendor.account_number && vendor.account_number.length >= 4 ? vendor.account_number.slice(-4) : (vendor.account_number || ''));
+
     el('editVendorId').value = vendor.id;
     el('editVendorModalTitle').textContent = `Edit Vendor Profile — ${vendor.name}`;
     el('editVendorName').value = vendor.name;
     el('editVendorEmail').value = vendor.email || (`ap@${vendor.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`);
-    el('editVendorRef').value = vendor.default_id_number || '';
+    el('editVendorRef').value = defaultIdVal;
 
     if (el('editVendorError')) el('editVendorError').style.display = 'none';
     if (el('editVendorSuccess')) el('editVendorSuccess').style.display = 'none';
@@ -334,7 +351,9 @@ const VendorsScreen = (() => {
     const routing_number = el('addVendorRouting') ? el('addVendorRouting').value.trim() : '';
     const account_number = el('addVendorAccount') ? el('addVendorAccount').value.trim() : '';
     const account_type = el('addVendorAccountType') ? el('addVendorAccountType').value : 'checking';
-    const default_id_number = el('addVendorRef') ? (el('addVendorRef').value.trim() || null) : null;
+    const default_id_number = (el('addVendorRef') && el('addVendorRef').value.trim())
+      ? el('addVendorRef').value.trim()
+      : (account_number.length >= 4 ? account_number.slice(-4) : (account_number || null));
     const email = el('addVendorEmail') ? (el('addVendorEmail').value.trim() || null) : null;
 
     const errBox = el('addVendorError');
@@ -911,6 +930,9 @@ const VendorsScreen = (() => {
       }
 
       const isChecked = selectedVendorIds.has(v.id);
+      const vendorIdDisplay = (v.default_id_number && v.default_id_number.trim())
+        ? v.default_id_number.trim()
+        : (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
@@ -918,7 +940,7 @@ const VendorsScreen = (() => {
             ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
             <div>
               <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${v.name}</h4>
-              <div class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</div>
+              <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
             </div>
           </div>
           <span class="badge badge-success">Active</span>
@@ -1002,6 +1024,9 @@ const VendorsScreen = (() => {
 
       const displayEmail = v.email || ('ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
       const isChecked = selectedVendorIds.has(v.id);
+      const vendorIdDisplay = (v.default_id_number && v.default_id_number.trim())
+        ? v.default_id_number.trim()
+        : (v.account_number && v.account_number.length >= 4 ? v.account_number.slice(-4) : (v.account_number || '—'));
 
       tr.innerHTML = `
         <td style="padding: 12px 16px; text-align: center;">
@@ -1009,7 +1034,7 @@ const VendorsScreen = (() => {
         </td>
         <td style="padding: 12px 16px;">
           <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
-          <span class="text-xs text-muted">ID: ${v.id.substring(0, 8)}...</span>
+          <span class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></span>
         </td>
         <td style="padding: 12px 16px;" class="font-mono text-xs">${displayEmail}</td>
         <td style="padding: 12px 16px;" class="font-mono">${v.routing_number}</td>
