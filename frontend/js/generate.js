@@ -62,11 +62,11 @@ const GenerateScreen = (() => {
     if (!select) return;
 
     try {
-      const vendors = await API.get('/vendors');
+      const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
 
       select.innerHTML = '<option value="">-- Select Vendor --</option>';
-      loadedVendors.forEach(v => {
+      loadedVendors.filter(v => v.is_active !== false).forEach(v => {
         const opt = document.createElement('option');
         opt.value = v.id;
         const vId = (v.account_number && v.account_number.length >= 4) ? v.account_number.slice(-4) : (v.default_id_number || '—');

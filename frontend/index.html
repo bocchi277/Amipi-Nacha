@@ -579,10 +579,16 @@
             <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap;">
               <div>
                 <div class="card-title" style="margin-bottom: 4px;">Vendor Directory & Bank Details</div>
-                <div class="text-xs text-muted">View active vendors and submit bank detail change requests for approval.</div>
+                <div class="text-xs text-muted">View registered vendors and submit bank detail change requests for approval.</div>
               </div>
               <div style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
                 <input type="text" class="form-input" id="vendorSearchInput" placeholder="Search vendor name or routing..." style="width: 220px; font-size: var(--text-xs);" />
+                
+                <select class="form-select" id="vendorStatusFilter" style="width: 125px; font-size: var(--text-xs); height: 32px; padding: 0 8px; border: 1px solid var(--border-color, #e2e8f0); border-radius: var(--radius-sm, 6px); background: var(--color-surface, #ffffff); cursor: pointer;">
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
                 
                 <!-- View Mode Toggle -->
                 <div style="display: flex; background: var(--color-surface-alt, #f1f5f9); padding: 3px; border-radius: var(--radius-sm, 6px); border: 1px solid var(--border-color, #e2e8f0);">

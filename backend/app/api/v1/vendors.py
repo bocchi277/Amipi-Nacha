@@ -203,9 +203,16 @@ async def seed_sample_vendors(
 
 
 @router.get("", response_model=list[VendorResponseSchema])
-async def list_vendors(db: AsyncSession = Depends(get_async_db)):
-    """List all active vendors."""
-    res = await db.execute(select(Vendor).where(Vendor.is_active == True).order_by(Vendor.name))
+async def list_vendors(
+    include_inactive: bool = Query(True, description="Include inactive vendors in the list"),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """List all vendors with optional inactive filtering."""
+    query = select(Vendor)
+    if not include_inactive:
+        query = query.where(Vendor.is_active == True)
+    query = query.order_by(Vendor.name)
+    res = await db.execute(query)
     vendors = res.scalars().all()
     return [
         VendorResponseSchema(

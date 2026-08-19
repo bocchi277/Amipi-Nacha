@@ -33,6 +33,11 @@ const VendorsScreen = (() => {
       searchInput.addEventListener('input', filterAndRenderVendors);
     }
 
+    const statusFilter = el('vendorStatusFilter');
+    if (statusFilter) {
+      statusFilter.addEventListener('change', filterAndRenderVendors);
+    }
+
     const refreshBtn = el('refreshVendorsBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', loadData);
@@ -650,11 +655,24 @@ const VendorsScreen = (() => {
   function getFilteredVendors() {
     const searchInput = el('vendorSearchInput');
     const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
-    return loadedVendors.filter(v =>
-      v.name.toLowerCase().includes(term) ||
-      (v.routing_number && v.routing_number.includes(term)) ||
-      (v.account_number && v.account_number.includes(term))
-    );
+    const statusFilter = el('vendorStatusFilter') ? el('vendorStatusFilter').value : 'all';
+
+    return loadedVendors.filter(v => {
+      const matchesSearch = !term ||
+        (v.name && v.name.toLowerCase().includes(term)) ||
+        (v.routing_number && v.routing_number.includes(term)) ||
+        (v.account_number && v.account_number.includes(term)) ||
+        (v.email && v.email.toLowerCase().includes(term));
+
+      let matchesStatus = true;
+      if (statusFilter === 'active') {
+        matchesStatus = (v.is_active !== false);
+      } else if (statusFilter === 'inactive') {
+        matchesStatus = (v.is_active === false);
+      }
+
+      return matchesSearch && matchesStatus;
+    });
   }
 
   function updateBulkDeleteBar() {
@@ -882,14 +900,7 @@ const VendorsScreen = (() => {
   }
 
   function filterAndRenderVendors() {
-    const searchInput = el('vendorSearchInput');
-    const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
-
-    const filtered = loadedVendors.filter(v =>
-      v.name.toLowerCase().includes(term) ||
-      (v.routing_number && v.routing_number.includes(term)) ||
-      (v.account_number && v.account_number.includes(term))
-    );
+    const filtered = getFilteredVendors();
 
     if (currentViewMode === 'card') {
       renderVendorCards(filtered);
@@ -914,9 +925,14 @@ const VendorsScreen = (() => {
     }
 
     vendors.forEach(v => {
+      const isInactive = v.is_active === false;
       const card = document.createElement('div');
-      card.className = 'card vendor-card';
+      card.className = `card vendor-card ${isInactive ? 'vendor-inactive' : ''}`;
       card.setAttribute('data-vendor-id', v.id);
+      if (isInactive) {
+        card.style.opacity = '0.85';
+        card.style.borderColor = '#cbd5e1';
+      }
 
       const pendingReq = loadedChangeRequests.find(r =>
         String(r.vendor_id).toLowerCase() === String(v.id).toLowerCase() &&
@@ -1017,16 +1033,20 @@ const VendorsScreen = (() => {
     }
 
     vendors.forEach((v, idx) => {
+      const isInactive = v.is_active === false;
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid var(--border-color, #e2e8f0)';
       tr.style.background = idx % 2 === 0 ? 'var(--color-surface, #ffffff)' : 'var(--color-surface-alt, #f8fafc)';
+      if (isInactive) {
+        tr.style.opacity = '0.85';
+      }
 
       const pendingReq = loadedChangeRequests.find(r =>
         String(r.vendor_id).toLowerCase() === String(v.id).toLowerCase() &&
         String(r.status).toLowerCase() === 'pending'
       );
 
-      let statusBadge = v.is_active === false
+      let statusBadge = isInactive
         ? '<span class="badge" style="background: var(--color-surface-alt, #f1f5f9); color: var(--color-text-muted, #64748b); border: 1px solid #cbd5e1;">Inactive</span>'
         : '<span class="badge badge-success">Active</span>';
       if (pendingReq) {
