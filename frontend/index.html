@@ -929,16 +929,6 @@
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail-plus"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="M19 16v6"/><path d="M16 19h6"/></svg>
                   <span>Email Template</span>
                 </button>
-
-                <button type="button" class="btn btn-success btn-sm" id="historySaveJsonBtn" style="background: #10B981; color: white; border: none; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-braces"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/></svg>
-                  <span>Save JSON</span>
-                </button>
-
-                <button type="button" class="btn btn-secondary btn-sm" id="historyLoadJsonBtn" style="background: #FFFBEB; border: 1px solid #FDE68A; color: #D97706; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-up"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></svg>
-                  <span>Load JSON</span>
-                </button>
               </div>
             </div>
 
@@ -957,6 +947,37 @@
               <div style="flex: 1; min-width: 180px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: var(--radius-md, 8px); padding: 14px 18px;">
                 <div style="font-size: var(--text-2xl); font-weight: 700; color: #3730A3;" id="kpiTotalAmount">$0.00</div>
                 <div style="font-size: var(--text-xs); color: #4338CA; font-weight: 500; margin-top: 2px;">Total paid</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Range Filtering Section (Month Range & Amount Range) -->
+          <div class="card" style="margin-bottom: var(--space-md); background: #F8FAFC; border: 1px solid #E2E8F0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-sm); flex-wrap: wrap; gap: var(--space-xs);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-horizontal"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+                <span style="font-weight: 700; font-size: var(--text-xs); color: #1E293B; text-transform: uppercase; letter-spacing: 0.5px;">Filter by Range (Months & Amount)</span>
+              </div>
+              <button type="button" class="btn btn-secondary btn-xs" id="resetRangeFiltersBtn" style="font-size: 11px; padding: 2px 8px;" title="Reset all range and column filters">
+                ✕ Reset Filters
+              </button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); align-items: end;">
+              <div>
+                <label class="form-label" for="filterMonthFrom" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">📅 Month Range (From):</label>
+                <input type="month" class="form-input" id="filterMonthFrom" style="font-size: 12px; padding: 5px 8px; background: white;" />
+              </div>
+              <div>
+                <label class="form-label" for="filterMonthTo" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">📅 Month Range (To):</label>
+                <input type="month" class="form-input" id="filterMonthTo" style="font-size: 12px; padding: 5px 8px; background: white;" />
+              </div>
+              <div>
+                <label class="form-label" for="filterAmountMin" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">💵 Min Amount ($):</label>
+                <input type="number" step="0.01" min="0" class="form-input" id="filterAmountMin" placeholder="0.00" style="font-size: 12px; padding: 5px 8px; background: white;" />
+              </div>
+              <div>
+                <label class="form-label" for="filterAmountMax" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">💵 Max Amount ($):</label>
+                <input type="number" step="0.01" min="0" class="form-input" id="filterAmountMax" placeholder="No limit" style="font-size: 12px; padding: 5px 8px; background: white;" />
               </div>
             </div>
           </div>

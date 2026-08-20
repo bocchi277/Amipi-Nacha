@@ -77,13 +77,9 @@ const HistoryScreen = (() => {
     // Prototype Top Action Bar Event Listeners
     const exportCsvBtn = el('historyExportCsvBtn');
     const exportExcelBtn = el('historyExportExcelBtn');
-    const saveJsonBtn = el('historySaveJsonBtn');
-    const loadJsonBtn = el('historyLoadJsonBtn');
 
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', handleExportCSV);
     if (exportExcelBtn) exportExcelBtn.addEventListener('click', handleExportExcel);
-    if (saveJsonBtn) saveJsonBtn.addEventListener('click', handleSaveJSON);
-    if (loadJsonBtn) loadJsonBtn.addEventListener('click', handleLoadJSON);
 
     // Delete History Modal Event Listeners
     const bulkDeleteHistoryBtn = el('bulkDeleteHistoryBtn');
@@ -108,6 +104,17 @@ const HistoryScreen = (() => {
     if (cancelLastNachaBtn) cancelLastNachaBtn.addEventListener('click', hideLastNachaFileModal);
     if (copyLastNachaBtn) copyLastNachaBtn.addEventListener('click', handleCopyLastNacha);
     if (downloadLastNachaBtn) downloadLastNachaBtn.addEventListener('click', handleDownloadLastNacha);
+
+    // Range Filter input listeners (Month Range & Amount Range)
+    ['filterMonthFrom', 'filterMonthTo', 'filterAmountMin', 'filterAmountMax'].forEach(id => {
+      const input = el(id);
+      if (input) {
+        input.addEventListener('input', applyColumnFilters);
+        input.addEventListener('change', applyColumnFilters);
+      }
+    });
+    const resetRangeBtn = el('resetRangeFiltersBtn');
+    if (resetRangeBtn) resetRangeBtn.addEventListener('click', clearColumnFilters);
 
     // Per-column filter inputs — instant client-side filtering
     const filterInputIds = [
@@ -341,7 +348,7 @@ const HistoryScreen = (() => {
     };
   }
 
-  // ── Per-Column Client-Side Filtering ────────────────────────────
+  // ── Per-Column & Range Client-Side Filtering ────────────────────
   function applyColumnFilters() {
     const effDate = (el('colFilterEffDate') ? el('colFilterEffDate').value : '').trim().toLowerCase();
     const vendor = (el('colFilterVendor') ? el('colFilterVendor').value : '').trim().toLowerCase();
@@ -352,15 +359,49 @@ const HistoryScreen = (() => {
     const status = (el('colFilterStatus') ? el('colFilterStatus').value : '').trim().toLowerCase();
     const sentAt = (el('colFilterSentAt') ? el('colFilterSentAt').value : '').trim().toLowerCase();
 
+    // Range filter values
+    const monthFrom = (el('filterMonthFrom') ? el('filterMonthFrom').value : '').trim();
+    const monthTo = (el('filterMonthTo') ? el('filterMonthTo').value : '').trim();
+    const amountMinVal = el('filterAmountMin') ? el('filterAmountMin').value.trim() : '';
+    const amountMaxVal = el('filterAmountMax') ? el('filterAmountMax').value.trim() : '';
+    const amountMin = amountMinVal !== '' ? parseFloat(amountMinVal) : null;
+    const amountMax = amountMaxVal !== '' ? parseFloat(amountMaxVal) : null;
+
     filteredRemittances = allRemittances.filter(r => {
+      // Month range filtering (From Month to Month)
+      if (r.effective_date) {
+        const rDate = String(r.effective_date).substring(0, 10);
+        const rMonth = rDate.substring(0, 7);
+        if (monthFrom && rMonth < monthFrom) return false;
+        if (monthTo && rMonth > monthTo) return false;
+      } else if (monthFrom || monthTo) {
+        return false;
+      }
+
+      // Amount range filtering (Min Amount to Max Amount)
+      const numAmt = parseFloat(r.amount) || 0;
+      if (amountMin !== null && !isNaN(amountMin) && numAmt < amountMin) return false;
+      if (amountMax !== null && !isNaN(amountMax) && numAmt > amountMax) return false;
+
+      // Column filters
       if (effDate && !(r.effective_date || '').toLowerCase().includes(effDate)) return false;
       if (vendor && !(r.vendor_name || '').toLowerCase().includes(vendor)) return false;
       if (email && !(r.recipient_email || '').toLowerCase().includes(email)) return false;
       if (amount) {
         const cleanTerm = amount.replace(/[$, ]/g, '');
-        const rawAmt = String(r.amount || '');
-        const formattedAmt = parseFloat(r.amount || 0).toFixed(2);
-        if (!rawAmt.includes(cleanTerm) && !formattedAmt.includes(cleanTerm)) return false;
+        if (cleanTerm.includes('-') || cleanTerm.includes('..') || cleanTerm.includes('to')) {
+          const parts = cleanTerm.split(/[-.to]+/).filter(Boolean);
+          if (parts.length === 2) {
+            const min = parseFloat(parts[0]);
+            const max = parseFloat(parts[1]);
+            if (!isNaN(min) && numAmt < min) return false;
+            if (!isNaN(max) && numAmt > max) return false;
+          }
+        } else {
+          const rawAmt = String(r.amount || '');
+          const formattedAmt = numAmt.toFixed(2);
+          if (!rawAmt.includes(cleanTerm) && !formattedAmt.includes(cleanTerm)) return false;
+        }
       }
       if (invoice) {
         const mainMatch = (r.invoice_reference || '').toLowerCase().includes(invoice);
@@ -383,7 +424,8 @@ const HistoryScreen = (() => {
   function clearColumnFilters() {
     ['colFilterEffDate', 'colFilterVendor', 'colFilterEmail',
      'colFilterAmount', 'colFilterInvoice', 'colFilterGeneratedBy',
-     'colFilterSentAt'].forEach(id => {
+     'colFilterSentAt', 'filterMonthFrom', 'filterMonthTo',
+     'filterAmountMin', 'filterAmountMax'].forEach(id => {
       const input = el(id);
       if (input) input.value = '';
     });
@@ -505,44 +547,6 @@ const HistoryScreen = (() => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Payment History');
     XLSX.writeFile(wb, 'payment_history_export.xlsx');
-  }
-
-  function handleSaveJSON() {
-    if (filteredRemittances.length === 0) {
-      alert('No history data available to save.');
-      return;
-    }
-    const jsonContent = JSON.stringify(filteredRemittances, null, 2);
-    downloadFile(jsonContent, 'amipi_payment_history.json', 'application/json;');
-  }
-
-  function handleLoadJSON() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.json';
-    fileInput.onchange = e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          const loadedData = JSON.parse(evt.target.result);
-          if (Array.isArray(loadedData)) {
-            allRemittances = loadedData;
-            filteredRemittances = [...allRemittances];
-            updateKPIs();
-            renderTable();
-            alert(`Loaded ${loadedData.length} records from backup JSON.`);
-          } else {
-            alert('Invalid JSON structure. Expected an array of payment records.');
-          }
-        } catch (err) {
-          alert('Failed to parse JSON file.');
-        }
-      };
-      reader.readAsText(file);
-    };
-    fileInput.click();
   }
 
   function handleClearHistory() {

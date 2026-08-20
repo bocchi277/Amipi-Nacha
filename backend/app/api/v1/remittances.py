@@ -5,6 +5,7 @@ Provides filterable table query, pending dispatch, and bulk resend endpoints.
 """
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -243,13 +244,15 @@ async def list_remittances(
     search: Optional[str] = Query(None, description="Search by vendor name, email, or invoice ref"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, description="Minimum remittance dollar amount"),
+    max_amount: Optional[Decimal] = Query(None, description="Maximum remittance dollar amount"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Fetch a filterable table of vendor remittance emails.
 
-    Supports filtering by status, vendor_id, nacha_file_id, date range, and text search.
+    Supports filtering by status, vendor_id, nacha_file_id, date range, amount range, and text search.
     """
     stmt = select(VendorRemittance).options(
         selectinload(VendorRemittance.payment),
@@ -266,6 +269,10 @@ async def list_remittances(
         stmt = stmt.where(VendorRemittance.effective_date >= start_date)
     if end_date:
         stmt = stmt.where(VendorRemittance.effective_date <= end_date)
+    if min_amount is not None:
+        stmt = stmt.where(VendorRemittance.amount >= min_amount)
+    if max_amount is not None:
+        stmt = stmt.where(VendorRemittance.amount <= max_amount)
 
     if search and search.strip():
         term = f"%{search.strip()}%"
