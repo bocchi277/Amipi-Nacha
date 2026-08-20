@@ -237,9 +237,10 @@ async def test_bulk_vendor_preview_and_confirm_workflow(db_session):
 
 @pytest.mark.asyncio
 async def test_delete_vendor_with_payments_returns_clean_400_error(db_session):
-    """Deleting a vendor with payments via API returns clean 400 error instead of 500 DB crash."""
+    """Deleting a vendor succeeds and preserves payment history records (vendor_id becomes NULL)."""
     from datetime import date
     from decimal import Decimal
+    from sqlalchemy import select
     from app.models import Payment
 
     admin = User(username="del_admin", email="del_admin@test.com", password_hash="hashed", role=UserRole.ADMIN)
@@ -259,33 +260,35 @@ async def test_delete_vendor_with_payments_returns_clean_400_error(db_session):
     )
     db_session.add(pmt)
     await db_session.commit()
+    await db_session.refresh(pmt)
 
     token = create_access_token(data={"sub": str(admin.id)})
     headers = {"Authorization": f"Bearer {token}"}
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        # Single delete of vendor with payments -> 400 Bad Request
+        # Single delete of vendor with payments -> 200 OK and safely preserves payment history
         res_single = await client.delete(f"/api/v1/vendors/{v_with_payment.id}", headers=headers)
-        assert res_single.status_code == 400
-        assert "Cannot delete vendor" in res_single.json()["detail"]
-        assert "payment transaction(s) recorded in Payment History" in res_single.json()["detail"]
+        assert res_single.status_code == 200
+        assert "successfully deleted" in res_single.json()["message"]
 
-        # Bulk delete without cascade: 1 with payment (blocked), 1 without payment (deleted)
+        # Verify vendor is deleted from Vendor table
+        v_check = (await db_session.execute(select(Vendor).where(Vendor.id == v_with_payment.id))).scalar_one_or_none()
+        assert v_check is None
+
+        # Verify payment still exists in DB with vendor_id set to None
+        await db_session.refresh(pmt)
+        assert pmt.vendor_id is None
+        assert pmt.amount == Decimal("12.00")
+
+        # Bulk delete deletes remaining vendor
         res_bulk = await client.post(
             "/api/v1/vendors/bulk-delete",
-            json={"vendor_ids": [str(v_with_payment.id), str(v_without_payment.id)], "cascade_payments": False},
+            json={"vendor_ids": [str(v_without_payment.id)]},
             headers=headers,
         )
         assert res_bulk.status_code == 200
         data_bulk = res_bulk.json()
         assert data_bulk["deleted_count"] == 1
         assert "Successfully deleted 1 vendor(s)" in data_bulk["message"]
-        assert "could not be deleted because they have associated payments" in data_bulk["message"]
-
-        # Single delete WITH cascade_payments=True -> 200 OK and deletes payment & vendor
-        res_cascade = await client.delete(f"/api/v1/vendors/{v_with_payment.id}?cascade_payments=true", headers=headers)
-        assert res_cascade.status_code == 200
-        assert "successfully deleted" in res_cascade.json()["message"]
-        assert "Removed 1 associated payment history transaction(s)" in res_cascade.json()["message"]
 
 

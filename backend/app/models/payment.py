@@ -29,8 +29,8 @@ class Payment(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    vendor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="RESTRICT"), nullable=False, index=True
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True, index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     id_number: Mapped[str] = mapped_column(String(15), nullable=False)  # Invoice ref or derived ID

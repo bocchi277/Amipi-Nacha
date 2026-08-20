@@ -1133,11 +1133,10 @@ async def reject_vendor_change_request(
 @router.delete("/{vendor_id}", status_code=status.HTTP_200_OK)
 async def delete_single_vendor(
     vendor_id: str,
-    cascade_payments: bool = Query(False, description="If true, cascade delete associated payments, remittances, and change requests"),
     db: AsyncSession = Depends(get_async_db),
     admin_user: User = Depends(require_admin),
 ):
-    """Delete a single vendor by ID (ADMIN ONLY)."""
+    """Delete a single vendor by ID (ADMIN ONLY). Payment history is safely preserved."""
     try:
         v_uuid = uuid.UUID(vendor_id.strip())
     except (ValueError, AttributeError):
@@ -1150,38 +1149,22 @@ async def delete_single_vendor(
 
     v_name = vendor.name
 
-    # Check if vendor has associated payment records
-    stmt_pmt = select(func.count(Payment.id)).where(Payment.vendor_id == v_uuid)
-    pmt_cnt = (await db.execute(stmt_pmt)).scalar() or 0
-    if pmt_cnt > 0 and not cascade_payments:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete vendor '{v_name}' because it has {pmt_cnt} payment transaction(s) recorded in Payment History. To delete this vendor along with its transaction history, check 'Force delete & remove all associated transaction history'.",
-        )
-
-    # If cascade_payments is requested and payments exist, clean up remittances & payments first
-    if pmt_cnt > 0 and cascade_payments:
-        await db.execute(delete(VendorRemittance).where(VendorRemittance.vendor_id == v_uuid))
-        await db.execute(delete(Payment).where(Payment.vendor_id == v_uuid))
-        await db.execute(delete(VendorChangeRequest).where(VendorChangeRequest.vendor_id == v_uuid))
-
     await db.delete(vendor)
 
     audit = AuditLog(
         user_id=admin_user.id,
-        action="DELETE_VENDOR" if pmt_cnt == 0 else "FORCE_DELETE_VENDOR",
+        action="DELETE_VENDOR",
         entity_type="Vendor",
         entity_id=str(v_uuid),
-        details={"vendor_name": v_name, "deleted_by": admin_user.username, "deleted_payments_count": pmt_cnt if cascade_payments else 0},
+        details={"vendor_name": v_name, "deleted_by": admin_user.username},
     )
     db.add(audit)
     await db.commit()
 
-    msg = f"Vendor '{v_name}' successfully deleted."
-    if pmt_cnt > 0 and cascade_payments:
-        msg += f" (Removed {pmt_cnt} associated payment history transaction(s))."
-
-    return {"message": msg, "vendor_id": str(v_uuid)}
+    return {
+        "message": f"Vendor '{v_name}' successfully deleted. Transaction and remittance history is preserved.",
+        "vendor_id": str(v_uuid),
+    }
 
 
 @router.post("/bulk-delete", response_model=BulkDeleteVendorsResponseSchema, status_code=status.HTTP_200_OK)
@@ -1190,43 +1173,20 @@ async def bulk_delete_vendors(
     db: AsyncSession = Depends(get_async_db),
     admin_user: User = Depends(require_admin),
 ):
-    """Delete multiple selected vendors by ID array (ADMIN ONLY)."""
+    """Delete multiple selected vendors by ID array (ADMIN ONLY). Payment history is safely preserved."""
     if not payload.vendor_ids:
         raise HTTPException(status_code=400, detail="No vendor IDs provided for bulk deletion.")
 
     deleted_count = 0
     deleted_names = []
-    blocked_vendors = []
-    total_payments_removed = 0
 
     for v_id in payload.vendor_ids:
         res = await db.execute(select(Vendor).where(Vendor.id == v_id))
         vendor = res.scalar_one_or_none()
         if vendor:
-            # Check if vendor has associated payment records
-            stmt_pmt = select(func.count(Payment.id)).where(Payment.vendor_id == v_id)
-            pmt_cnt = (await db.execute(stmt_pmt)).scalar() or 0
-            if pmt_cnt > 0:
-                if payload.cascade_payments:
-                    await db.execute(delete(VendorRemittance).where(VendorRemittance.vendor_id == v_id))
-                    await db.execute(delete(Payment).where(Payment.vendor_id == v_id))
-                    await db.execute(delete(VendorChangeRequest).where(VendorChangeRequest.vendor_id == v_id))
-                    deleted_names.append(vendor.name)
-                    await db.delete(vendor)
-                    deleted_count += 1
-                    total_payments_removed += pmt_cnt
-                else:
-                    blocked_vendors.append(f"{vendor.name} ({pmt_cnt} payment(s))")
-            else:
-                deleted_names.append(vendor.name)
-                await db.delete(vendor)
-                deleted_count += 1
-
-    if deleted_count == 0 and blocked_vendors:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete selected vendor(s) because they are referenced by payment history records: {', '.join(blocked_vendors)}. To delete these vendors along with their transaction history, check 'Force delete & remove all associated transaction history'.",
-        )
+            deleted_names.append(vendor.name)
+            await db.delete(vendor)
+            deleted_count += 1
 
     if deleted_count > 0:
         audit = AuditLog(
@@ -1236,24 +1196,14 @@ async def bulk_delete_vendors(
             details={
                 "deleted_count": deleted_count,
                 "deleted_names": deleted_names,
-                "blocked_count": len(blocked_vendors),
-                "blocked_vendors": blocked_vendors,
-                "total_payments_removed": total_payments_removed,
-                "cascade_payments": payload.cascade_payments,
                 "deleted_by": admin_user.username,
             },
         )
         db.add(audit)
         await db.commit()
 
-    if blocked_vendors:
-        msg = f"Successfully deleted {deleted_count} vendor(s). {len(blocked_vendors)} vendor(s) could not be deleted because they have associated payments: {', '.join(blocked_vendors)}."
-    elif total_payments_removed > 0:
-        msg = f"Successfully deleted {deleted_count} vendor(s) and {total_payments_removed} associated payment history transaction(s) from database."
-    else:
-        msg = f"Successfully deleted {deleted_count} vendor(s) from database."
-
     return BulkDeleteVendorsResponseSchema(
         deleted_count=deleted_count,
-        message=msg,
+        deleted_vendors=deleted_names,
+        message=f"Successfully deleted {deleted_count} vendor(s) from directory. All transaction and remittance history is safely preserved.",
     )

@@ -165,7 +165,7 @@ class TestForeignKeyCascades:
 
     @pytest.mark.asyncio
     async def test_delete_vendor_with_payments_blocked(self, db_session):
-        """Vendor with existing payments MUST NOT be deletable (RESTRICT)."""
+        """Deleting vendor MUST preserve existing payment records (SET NULL)."""
         vendor = await _make_vendor(db_session)
         payment = Payment(
             vendor_id=vendor.id,
@@ -175,11 +175,14 @@ class TestForeignKeyCascades:
         )
         db_session.add(payment)
         await db_session.commit()
+        await db_session.refresh(payment)
 
-        # Attempt to delete vendor — must fail
+        # Deleting vendor sets vendor_id to None on payments
         await db_session.delete(vendor)
-        with pytest.raises(IntegrityError):
-            await db_session.commit()
+        await db_session.commit()
+        await db_session.refresh(payment)
+        assert payment.vendor_id is None
+        assert payment.amount == Decimal("500.00")
 
     @pytest.mark.asyncio
     async def test_delete_user_nullifies_payment_user_id(self, db_session):

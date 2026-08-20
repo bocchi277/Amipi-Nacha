@@ -797,18 +797,13 @@ const VendorsScreen = (() => {
     if (executeBtn) executeBtn.disabled = true;
     if (spinner) spinner.style.display = 'inline-block';
 
-    const cascadePayments = el('vendorDeleteCascadeCb') ? el('vendorDeleteCascadeCb').checked : false;
-
     try {
       let res;
       if (vendorsToDelete.length === 1) {
-        res = await API.del(`/vendors/${vendorsToDelete[0].id}?cascade_payments=${cascadePayments}`);
+        res = await API.del(`/vendors/${vendorsToDelete[0].id}`);
       } else {
         const vendor_ids = vendorsToDelete.map(v => v.id);
-        res = await API.post('/vendors/bulk-delete', {
-          vendor_ids,
-          cascade_payments: cascadePayments,
-        });
+        res = await API.post('/vendors/bulk-delete', { vendor_ids });
       }
 
       hideDeleteModal();

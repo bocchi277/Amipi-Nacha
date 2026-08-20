@@ -262,17 +262,23 @@ def _parse_qb_excel(
 
         # Handle TOTAL row closing a vendor block
         if first_val.startswith("TOTAL"):
-            # The authoritative total amount is the sum of parsed bill lines (current_amount).
-            # If current_amount is 0 (e.g. file only has TOTAL row without individual bill lines),
-            # check the Paid Amount column on the TOTAL row or rightmost numeric cells.
+            # Check TOTAL row for authoritative amount in designated amount column or rightmost cells
+            total_row_amt = None
+            if len(row_vals) >= amt_col:
+                total_row_amt = _parse_amount(row_vals[amt_col - 1])
+            if total_row_amt is None or total_row_amt == Decimal("0"):
+                for c in range(len(row_vals) - 1, -1, -1):
+                    parsed_a = _parse_amount(row_vals[c])
+                    if parsed_a is not None and parsed_a != Decimal("0"):
+                        total_row_amt = abs(parsed_a)
+                        break
+
             final_amt = abs(current_amount)
-            if final_amt == Decimal("0"):
-                for c in (amt_col - 1, 13, len(row_vals) - 3, len(row_vals) - 1):
-                    if 0 <= c < len(row_vals):
-                        parsed_a = _parse_amount(row_vals[c])
-                        if parsed_a is not None and parsed_a != Decimal("0"):
-                            final_amt = abs(parsed_a)
-                            break
+            # If total_row_amt is available and is greater than parsed line sum or line sum is 0,
+            # use the total row as authoritative reconciliation amount
+            if total_row_amt is not None and total_row_amt > 0:
+                if final_amt == Decimal("0") or total_row_amt > final_amt:
+                    final_amt = total_row_amt
 
             if current_vendor:
                 _process_qb_vendor_block(
@@ -285,11 +291,28 @@ def _parse_qb_excel(
             current_date = None
             continue
 
-        row_type = str(row_vals[type_col - 1] or "").strip()
-        row_name = str(row_vals[name_col - 1] or "").strip()
-        row_num = str(row_vals[num_col - 1] or "").strip()
-        row_date = _parse_date(row_vals[date_col - 1])
-        row_amt = _parse_amount(row_vals[amt_col - 1] if len(row_vals) >= amt_col else None)
+        val_type = row_vals[type_col - 1] if len(row_vals) >= type_col else None
+        row_type = str(val_type).strip() if val_type is not None and str(val_type).strip().lower() != "none" else ""
+
+        val_name = row_vals[name_col - 1] if len(row_vals) >= name_col else None
+        row_name = str(val_name).strip() if val_name is not None and str(val_name).strip().lower() != "none" else ""
+
+        val_num = row_vals[num_col - 1] if len(row_vals) >= num_col else None
+        row_num = str(val_num).strip() if val_num is not None and str(val_num).strip().lower() != "none" else ""
+
+        val_date = row_vals[date_col - 1] if len(row_vals) >= date_col else None
+        row_date = _parse_date(val_date)
+
+        val_amt = row_vals[amt_col - 1] if len(row_vals) >= amt_col else None
+        row_amt = _parse_amount(val_amt)
+
+        # Fallback to search rightmost columns if row_amt is None and row is not a header row
+        if row_amt is None and row_type.lower() not in ("bill pmt -check", "check", "payment", "bill pmt", "ach"):
+            for c in range(len(row_vals) - 1, -1, -1):
+                parsed_a = _parse_amount(row_vals[c])
+                if parsed_a is not None and parsed_a > Decimal("0"):
+                    row_amt = parsed_a
+                    break
 
         # If a new vendor block starts and we have accumulated sub-invoices/amounts from previous vendor, flush it
         is_new_block_start = (
@@ -328,6 +351,20 @@ def _parse_qb_excel(
                 })
             if row_amt is not None and row_type.lower() == "bill":
                 current_amount += abs(row_amt)
+        elif current_vendor and row_amt is not None and abs(row_amt) > 0:
+            # Continuation / Split line within active vendor block (e.g. split expense row with blank Type/Num)
+            current_amount += abs(row_amt)
+            if current_invoices:
+                prev_amt = current_invoices[-1].get("amount") or 0.0
+                current_invoices[-1]["amount"] = round(prev_amt + float(abs(row_amt)), 2)
+            elif row_num:
+                sub_amt = float(abs(row_amt))
+                sub_date = row_date.isoformat() if row_date else None
+                current_invoices.append({
+                    "invoice_number": row_num,
+                    "amount": sub_amt,
+                    "invoice_date": sub_date,
+                })
 
     # Process trailing block if file ends without explicit TOTAL row
     if current_vendor and current_amount > 0:

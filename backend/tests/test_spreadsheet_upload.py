@@ -324,3 +324,74 @@ async def test_upload_partial_payment_qb_excel(db_session):
     sub_sum = sum(Decimal(str(i["amount"])) for i in pmt["invoice_breakdown"])
     assert sub_sum == Decimal(pmt["amount"]) == Decimal("5000.00")
 
+
+@pytest.mark.asyncio
+async def test_upload_qb_multisplit_yellow_line_invoice(db_session):
+    """
+    Test uploading QuickBooks export with multi-split bill lines (yellow line scenario).
+    Row 1: Bill Pmt -Check ($6,542.30)
+    Row 2: Bill #129147 ($6,150.30 - Metal)
+    Row 3: [Blank Type/Num] ($392.00 - Labor Setting) -> MUST BE ACCUMULATED
+    Row 4: TOTAL ($6,542.30)
+    """
+    # Seed Sunrise vendor
+    vendor = Vendor(
+        name="SUNRISE JEWELRY MFG. CORP"[:22],
+        routing_number="021000322",
+        account_number="483028574148",
+        account_type=AccountType.CHECKING,
+        is_active=True,
+    )
+    db_session.add(vendor)
+    await db_session.commit()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+
+    # Row 1: Header
+    ws.append([None, "Type", None, "Num", None, "Date", None, "Name", None, "Account", None, None, None, "Paid Amount", None, "Original Amount"])
+    # Row 2: Empty
+    ws.append([" "])
+    # Row 3: Bill Pmt -Check header
+    ws.append([None, "Bill Pmt -Check", None, "ACH", None, "08/20/2026", None, "SUNRISE JEWELRY MFG. CORP", None, "1002 · JP MORGAN CHASE BANK, N.A.", None, None, None, -6542.30, None, -6542.30])
+    # Row 4: Empty
+    ws.append([" "])
+    # Row 5: Primary Bill Line (Metal Castings $6,150.30)
+    ws.append([None, "Bill", None, "129147", None, "07/23/2026", None, None, None, "5040 · Metal (Castings)", None, None, None, 6150.30, None, -6150.30])
+    # Row 6: Split Line Item without Type/Num/Date (Yellow line: Labor Setting $392.00)
+    ws.append([None, "", None, "", None, "", None, None, None, "5035 · Labor (Setting)", None, None, None, 392.00, None, -392.00])
+    # Row 7: TOTAL row
+    ws.append(["TOTAL", None, None, None, None, None, None, None, None, None, None, None, None, 6542.30, None, -6542.30])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    file_bytes = buf.getvalue()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/payments/upload",
+            files={"file": ("sunrise_split.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"batch_number": "1", "effective_date": "2026-08-20"},
+        )
+
+    assert response.status_code == 201, f"Response: {response.text}"
+    data = response.json()
+
+    assert data["summary"]["valid_rows"] == 1
+    assert data["summary"]["error_rows"] == 0
+    assert len(data["valid_payments"]) == 1
+
+    pmt = data["valid_payments"][0]
+    # Total MUST be $6542.30, successfully accounting for the yellow line ($392.00)!
+    assert pmt["vendor_name"] == "SUNRISE JEWELRY MFG. CORP"[:22]
+    assert Decimal(pmt["amount"]) == Decimal("6542.30")
+    assert pmt["id_number"] == "129147"
+    assert pmt["invoice_breakdown"] is not None
+    assert len(pmt["invoice_breakdown"]) == 1
+    assert pmt["invoice_breakdown"][0]["invoice_number"] == "129147"
+    assert Decimal(str(pmt["invoice_breakdown"][0]["amount"])) == Decimal("6542.30")
+

@@ -199,10 +199,10 @@
               <!-- Batch 1 Input Mode Switch -->
               <div style="display: flex; gap: 6px;">
                 <button type="button" class="btn btn-sm active" id="batch1TabUploadBtn" style="font-weight: 600; padding: 4px 12px; font-size: 12px;">
-                  📄 Upload Spreadsheet
+                  Upload Spreadsheet
                 </button>
                 <button type="button" class="btn btn-sm btn-secondary" id="batch1TabManualBtn" style="font-weight: 600; padding: 4px 12px; font-size: 12px;">
-                  ✍️ Manual Payment Entry
+                  Manual Payment Entry
                 </button>
               </div>
             </div>
@@ -718,7 +718,7 @@
                 <button type="button" class="btn btn-secondary btn-sm" id="clearVendorSelectionBtn">Clear Selection</button>
                 <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteVendorsBtn" style="background: var(--color-danger, #ef4444); color: white; border: none;">
                   <span class="spinner" id="bulkDeleteSpinner" style="display: none;"></span>
-                  <span>🗑 Delete Selected Vendors</span>
+                  <span>Delete Selected Vendors</span>
                 </button>
               </div>
             </div>
@@ -1041,19 +1041,19 @@
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); align-items: end;">
               <div>
-                <label class="form-label" for="filterMonthFrom" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">📅 Month Range (From):</label>
+                <label class="form-label" for="filterMonthFrom" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">Month Range (From):</label>
                 <input type="month" class="form-input" id="filterMonthFrom" style="font-size: 12px; padding: 5px 8px; background: white;" />
               </div>
               <div>
-                <label class="form-label" for="filterMonthTo" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">📅 Month Range (To):</label>
+                <label class="form-label" for="filterMonthTo" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">Month Range (To):</label>
                 <input type="month" class="form-input" id="filterMonthTo" style="font-size: 12px; padding: 5px 8px; background: white;" />
               </div>
               <div>
-                <label class="form-label" for="filterAmountMin" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">💵 Min Amount ($):</label>
+                <label class="form-label" for="filterAmountMin" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">Min Amount ($):</label>
                 <input type="number" step="0.01" min="0" class="form-input" id="filterAmountMin" placeholder="0.00" style="font-size: 12px; padding: 5px 8px; background: white;" />
               </div>
               <div>
-                <label class="form-label" for="filterAmountMax" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">💵 Max Amount ($):</label>
+                <label class="form-label" for="filterAmountMax" style="font-size: 11px; margin-bottom: 3px; color: #475569; font-weight: 600;">Max Amount ($):</label>
                 <input type="number" step="0.01" min="0" class="form-input" id="filterAmountMax" placeholder="No limit" style="font-size: 12px; padding: 5px 8px; background: white;" />
               </div>
             </div>
@@ -1075,7 +1075,7 @@
               </div>
               <div style="display: flex; gap: var(--space-sm); align-items: center;">
                 <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteHistoryBtn" style="display: none; background: #dc2626; color: white; border: none; font-weight: 600;">
-                  <span>🗑 Delete Selected Transactions</span>
+                  <span>Delete Selected Transactions</span>
                 </button>
                 <button type="button" class="btn btn-primary btn-sm" id="bulkResendBtn">
                   <span>Bulk Resend Remittance Emails</span>
@@ -1265,23 +1265,23 @@
             <!-- Non-Tech Friendly Variable Buttons -->
             <div style="background: var(--color-surface-alt, #f8fafc); padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: var(--space-md); border: 1px solid var(--border-color, #e2e8f0);">
               <strong style="color: var(--color-primary); font-size: var(--text-xs); display: block; margin-bottom: 8px;">
-                💡 CLICK A BUTTON TO INSERT AUTOMATIC PAYMENT INFORMATION INTO YOUR TEMPLATE:
+                Click a variable button to insert automatic payment information into your template:
               </strong>
               <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                 <button type="button" class="btn btn-secondary btn-sm" id="btnVarVendor" title="Inserts recipient vendor name">
-                  👤 Vendor Name
+                  Vendor Name
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnVarAmount" title="Inserts dollar amount">
-                  💵 Payment Amount
+                  Payment Amount
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnVarInvoice" title="Inserts invoice reference number">
-                  📄 Invoice Reference
+                  Invoice Reference
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnVarDate" title="Inserts ACH transfer date">
-                  📅 Effective Date
+                  Effective Date
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnVarCompany" title="Inserts your company name (AMIPI INC)">
-                  🏢 Company Name
+                  Company Name
                 </button>
               </div>
             </div>
@@ -1552,7 +1552,7 @@
       <div class="modal-card" style="max-width: 600px; width: 100%; border-top: 4px solid var(--color-warning, #f59e0b);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="background: #FEF3C7; color: #D97706; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px;">⚠️ Duplicate Detected</span>
+            <span style="background: #FEF3C7; color: #D97706; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px;">Duplicate Detected</span>
             <h3 class="card-title" style="margin-bottom: 0;" id="dupConfirmModalTitle">Update Existing Vendor?</h3>
           </div>
           <button type="button" class="btn btn-secondary btn-sm" id="closeDupConfirmModalBtn" style="padding: 2px 8px;">✕</button>
@@ -1670,20 +1670,12 @@
         </div>
 
         <div style="margin-bottom: var(--space-md);">
-          <p class="text-sm" id="confirmDeleteMessage">Are you sure you want to permanently delete the selected vendor(s) from the database? This action cannot be undone.</p>
+          <p class="text-sm" id="confirmDeleteMessage">Are you sure you want to delete the selected vendor(s) from the directory? This action will remove them from future payment batches.</p>
           <div class="card" style="background: #f8fafc; padding: 10px; max-height: 120px; overflow-y: auto; font-size: var(--text-xs); font-family: monospace;" id="deleteVendorsListText"></div>
         </div>
 
-        <div style="background: #fffbeb; border: 1px solid #fef3c7; padding: 10px 12px; border-radius: 6px; margin-bottom: var(--space-md);">
-          <label style="display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-xs); color: #92400e; cursor: pointer; user-select: none;">
-            <input type="checkbox" id="vendorDeleteCascadeCb" style="margin-top: 2px;" />
-            <div>
-              <strong>Force delete & remove associated transaction history</strong>
-              <div style="color: #b45309; font-size: 11px; margin-top: 2px;">
-                Check this if the selected vendor(s) have past payment transactions (e.g. duplicate vendors) that should be removed along with the vendor.
-              </div>
-            </div>
-          </label>
+        <div style="background: #eff6ff; border: 1px solid #dbeafe; padding: 10px 12px; border-radius: 6px; margin-bottom: var(--space-md); font-size: var(--text-xs); color: #1e40af;">
+          <strong>Transaction History Protection:</strong> All past payment history, remittances, and audit records related to this vendor will remain <strong>safely preserved and intact</strong> in Payment History.
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
@@ -1791,7 +1783,7 @@
 
         <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-md);">
           <button type="button" class="btn btn-sm active" id="tmplTabEditBtn" style="border-radius: 6px 6px 0 0; padding: 6px 14px; font-weight: 600;">Edit Template</button>
-          <button type="button" class="btn btn-sm btn-secondary" id="tmplTabPreviewBtn" style="border-radius: 6px 6px 0 0; padding: 6px 14px; font-weight: 600;">👁 Live Email Preview</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="tmplTabPreviewBtn" style="border-radius: 6px 6px 0 0; padding: 6px 14px; font-weight: 600;">Live Email Preview</button>
         </div>
 
         <div class="alert alert-error" id="emailTmplError" style="display: none; margin-bottom: var(--space-md);"></div>
