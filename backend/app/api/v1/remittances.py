@@ -10,13 +10,13 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
-from app.models import AuditLog, NachaFileRecord, RemittanceStatus, User, VendorRemittance
+from app.models import AuditLog, NachaFileRecord, Payment, RemittanceStatus, UploadBatch, User, VendorRemittance
 from app.services.email_service import bulk_resend_remittances, send_single_remittance
 
 router = APIRouter(prefix="/remittances", tags=["Vendor Remittances"])
@@ -496,4 +496,40 @@ async def bulk_delete_remittances(
     return BulkDeleteRemittancesResponseSchema(
         deleted_count=deleted_count,
         message=f"Successfully deleted {deleted_count} remittance transaction record(s)."
+    )
+
+
+@router.post("/clear-all", response_model=BulkDeleteRemittancesResponseSchema)
+async def clear_all_payment_history(
+    db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Clear all payment history, remittances, batch staging records, and generated files (Admin only).
+    """
+    res = await db.execute(select(VendorRemittance))
+    remittances = res.scalars().all()
+    rem_count = len(remittances)
+
+    await db.execute(delete(VendorRemittance))
+    await db.execute(delete(Payment))
+    await db.execute(delete(NachaFileRecord))
+    await db.execute(delete(UploadBatch))
+
+    audit_entry = AuditLog(
+        user_id=admin_user.id,
+        action="CLEAR_ALL_PAYMENT_HISTORY",
+        entity_type="VendorRemittance",
+        details={
+            "deleted_remittances_count": rem_count,
+            "admin_user_id": str(admin_user.id),
+            "username": admin_user.username,
+        },
+    )
+    db.add(audit_entry)
+    await db.commit()
+
+    return BulkDeleteRemittancesResponseSchema(
+        deleted_count=rem_count,
+        message=f"All payment history and records successfully cleared ({rem_count} remittances deleted)."
     )

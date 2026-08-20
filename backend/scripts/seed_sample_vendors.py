@@ -74,7 +74,7 @@ async def seed_vendors():
             res = await db.execute(select(Vendor).where(Vendor.name == name_clean))
             existing = res.scalar_one_or_none()
 
-            def_id = acct[-4:] if len(acct) >= 4 else acct
+            def_id = acct[-5:] if len(acct) >= 5 else acct
             if existing:
                 if not existing.default_id_number or existing.default_id_number == "ABC":
                     existing.default_id_number = def_id

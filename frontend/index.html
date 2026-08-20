@@ -843,7 +843,7 @@
 
                 <div class="form-group" style="margin-bottom: var(--space-md);">
                   <label class="form-label" for="editVendorRef">Default Payee ID / Invoice Ref</label>
-                  <input type="text" class="form-input font-mono" id="editVendorRef" placeholder="e.g. Last 4 digits of Account (e.g. 7265)" />
+                  <input type="text" class="form-input font-mono" id="editVendorRef" placeholder="e.g. Last 5 digits of Account (e.g. 72651)" />
                 </div>
 
                 <div class="form-group" style="margin-bottom: var(--space-lg);">
@@ -1153,9 +1153,21 @@
 
             <!-- Pagination Bar -->
             <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-md); flex-wrap: wrap; gap: var(--space-md);">
-              <div class="text-xs text-muted" id="historyPageInfoDisplay">Showing 0 records</div>
-              <div style="display: flex; gap: var(--space-xs);">
+              <div style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap;">
+                <div class="text-xs text-muted" id="historyPageInfoDisplay">Showing 0 records</div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <label class="form-label" for="historyPageSizeSelect" style="font-size: 11px; margin-bottom: 0; color: #64748B;">Items per page:</label>
+                  <select class="form-select" id="historyPageSizeSelect" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; width: auto; background: white; border: 1px solid #CBD5E1; cursor: pointer;">
+                    <option value="10" selected>10 per page</option>
+                    <option value="20">20 per page</option>
+                    <option value="30">30 per page</option>
+                    <option value="50">50 per page (Max)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; gap: var(--space-xs); align-items: center;">
                 <button type="button" class="btn btn-secondary btn-sm" id="prevHistoryPageBtn" disabled>Previous</button>
+                <span id="historyPageNumbers" style="font-size: 12px; color: #475569; font-weight: 600; padding: 0 6px;">Page 1 of 1</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="nextHistoryPageBtn" disabled>Next</button>
               </div>
             </div>
@@ -1483,7 +1495,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label" for="addVendorRef">Default Payee ID / Invoice Ref</label>
-                <input type="text" class="form-input font-mono" id="addVendorRef" placeholder="Auto-fills last 4 digits of Account" />
+                <input type="text" class="form-input font-mono" id="addVendorRef" placeholder="Auto-fills last 5 digits of Account" />
               </div>
             </div>
 

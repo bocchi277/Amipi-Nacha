@@ -114,14 +114,14 @@ const VendorsScreen = (() => {
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
 
-    // Auto-fill ID with last 4 digits of account number
+    // Auto-fill ID with last 5 digits of account number
     const addAcctInput = el('addVendorAccount');
     const addRefInput = el('addVendorRef');
     if (addAcctInput && addRefInput) {
       addAcctInput.addEventListener('input', () => {
         const cleanAcct = addAcctInput.value.replace(/\D/g, '');
-        if (cleanAcct.length >= 4 && (!addRefInput.dataset.manuallyEdited || !addRefInput.value)) {
-          addRefInput.value = cleanAcct.slice(-4);
+        if (cleanAcct.length >= 5 && (!addRefInput.dataset.manuallyEdited || !addRefInput.value)) {
+          addRefInput.value = cleanAcct.slice(-5);
         }
       });
       addRefInput.addEventListener('input', () => {
@@ -176,8 +176,8 @@ const VendorsScreen = (() => {
     const vendor = loadedVendors.find(v => v.id === vendorId);
     if (!vendor) return;
 
-    const defaultIdVal = (vendor.account_number && vendor.account_number.length >= 4)
-      ? vendor.account_number.slice(-4)
+    const defaultIdVal = (vendor.account_number && vendor.account_number.length >= 5)
+      ? vendor.account_number.slice(-5)
       : (vendor.default_id_number || vendor.account_number || '');
 
     el('editVendorId').value = vendor.id;
@@ -363,7 +363,7 @@ const VendorsScreen = (() => {
     const account_type = el('addVendorAccountType') ? el('addVendorAccountType').value : 'checking';
     const default_id_number = (el('addVendorRef') && el('addVendorRef').value.trim())
       ? el('addVendorRef').value.trim()
-      : (account_number.length >= 4 ? account_number.slice(-4) : (account_number || null));
+      : (account_number.length >= 5 ? account_number.slice(-5) : (account_number || null));
     const email = el('addVendorEmail') ? (el('addVendorEmail').value.trim() || null) : null;
 
     const errBox = el('addVendorError');
@@ -411,6 +411,20 @@ const VendorsScreen = (() => {
           // Open duplicate confirm modal with field differences
           pendingSingleVendorPayload = payload;
           if (el('dupVendorNameDisplay')) el('dupVendorNameDisplay').textContent = detailObj.vendor_name || name;
+
+          if (detailObj.same_bank_different_name) {
+            if (el('dupConfirmModalTitle')) el('dupConfirmModalTitle').textContent = 'Bank Account Already Exists';
+            if (el('dupConfirmAlert')) {
+              el('dupConfirmAlert').className = 'alert alert-warning show';
+              el('dupConfirmAlert').innerHTML = `<strong>⚠️ Existing Bank Account Detected:</strong> An existing vendor (<strong>${detailObj.existing_vendor_name || detailObj.vendor_name}</strong>) is already registered with this exact bank account. Do you want to update this existing vendor's name and details to <strong>${detailObj.new_vendor_name || name}</strong>?`;
+            }
+          } else {
+            if (el('dupConfirmModalTitle')) el('dupConfirmModalTitle').textContent = 'Update Existing Vendor?';
+            if (el('dupConfirmAlert')) {
+              el('dupConfirmAlert').className = 'alert alert-warning show';
+              el('dupConfirmAlert').innerHTML = `An existing record was found in the Vendor Book for <strong>${detailObj.vendor_name || name}</strong> with modified details.`;
+            }
+          }
 
           const changesContainer = el('dupChangesList');
           if (changesContainer && detailObj.changes) {
@@ -556,9 +570,13 @@ const VendorsScreen = (() => {
               const tr = document.createElement('tr');
               tr.style.borderBottom = '1px solid #E2E8F0';
               const isBank = ['routing_number', 'account_number', 'account_type'].includes(field);
-              const badge = isBank
+              let badge = isBank
                 ? `<span class="badge badge-danger" style="font-size: 10px;">Bank Detail</span>`
                 : `<span class="badge badge-primary" style="font-size: 10px;">Profile</span>`;
+
+              if (uv.same_bank_different_name && field === 'name') {
+                badge = `<span class="badge badge-warning" style="font-size: 10px;" title="This bank account matches existing vendor ${uv.vendor_name}">⚠️ Existing Bank Account</span>`;
+              }
 
               tr.innerHTML = `
                 <td style="padding: 6px 10px;"><strong>${uv.vendor_name}</strong></td>
@@ -951,8 +969,8 @@ const VendorsScreen = (() => {
       }
 
       const isChecked = selectedVendorIds.has(v.id);
-      const vendorIdDisplay = (v.account_number && v.account_number.length >= 4)
-        ? v.account_number.slice(-4)
+      const vendorIdDisplay = (v.account_number && v.account_number.length >= 5)
+        ? v.account_number.slice(-5)
         : (v.default_id_number || v.account_number || '—');
 
       const statusBadge = v.is_active === false
@@ -1055,8 +1073,8 @@ const VendorsScreen = (() => {
 
       const displayEmail = v.email || ('ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
       const isChecked = selectedVendorIds.has(v.id);
-      const vendorIdDisplay = (v.account_number && v.account_number.length >= 4)
-        ? v.account_number.slice(-4)
+      const vendorIdDisplay = (v.account_number && v.account_number.length >= 5)
+        ? v.account_number.slice(-5)
         : (v.default_id_number || v.account_number || '—');
 
       tr.innerHTML = `

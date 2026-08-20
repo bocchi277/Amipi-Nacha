@@ -181,7 +181,7 @@ async def seed_sample_vendors(
     for v_data in SAMPLE_VENDORS:
         name_clean = v_data["name"].strip()
         acc = v_data["account"]
-        def_id = acc[-4:] if len(acc) >= 4 else acc
+        def_id = acc[-5:] if len(acc) >= 5 else acc
         res = await db.execute(select(Vendor).where(Vendor.name == name_clean))
         existing_v = res.scalar_one_or_none()
         if existing_v:
@@ -221,7 +221,7 @@ async def list_vendors(
             routing_number=v.routing_number,
             account_number=v.account_number,
             account_type=_val(v.account_type),
-            default_id_number=v.default_id_number or (v.account_number[-4:] if v.account_number and len(v.account_number) >= 4 else v.account_number),
+            default_id_number=v.default_id_number or (v.account_number[-5:] if v.account_number and len(v.account_number) >= 5 else v.account_number),
             email=v.email,
             is_active=v.is_active,
         )
@@ -299,15 +299,29 @@ async def create_vendor(
                 },
             )
 
+        is_same_bank = (existing.routing_number == rt and existing.account_number == acc)
+        is_diff_name = (existing.name.strip().upper() != name_clean.upper())
+        same_bank_diff_name = is_same_bank and is_diff_name
+
         if not payload.allow_update:
+            masked_acc = f"•••• {acc[-5:] if len(acc) >= 5 else acc}"
+            conflict_msg = (
+                f"A vendor with this bank account already exists: '{existing.name}' (Routing: {rt}, Account: {masked_acc}). "
+                f"Would you like to update the existing vendor's details to '{name_clean}'?"
+                if same_bank_diff_name
+                else f"Existing vendor '{existing.name}' detected with modified details."
+            )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "message": f"Existing vendor '{existing.name}' detected with modified details.",
+                    "message": conflict_msg,
                     "duplicate": True,
                     "exact_match": False,
+                    "same_bank_different_name": same_bank_diff_name,
                     "vendor_id": str(existing.id),
                     "vendor_name": existing.name,
+                    "existing_vendor_name": existing.name,
+                    "new_vendor_name": name_clean,
                     "has_bank_change": has_bank_change,
                     "changes": changes,
                 },
@@ -366,7 +380,7 @@ async def create_vendor(
         )
 
     # New Vendor
-    def_id = payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else (acc[-4:] if len(acc) >= 4 else acc)
+    def_id = payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else (acc[-5:] if len(acc) >= 5 else acc)
     vendor = Vendor(
         name=name_clean,
         routing_number=rt,
@@ -548,10 +562,17 @@ async def bulk_preview_vendors(
                 changes["account_type"] = {"old": existing_type_val, "new": acct_type_val}
                 has_bank_change = True
 
+            same_bank_diff_name = (
+                existing.routing_number == routing_clean
+                and existing.account_number == account_clean
+                and existing.name.strip().upper() != name_clean.upper()
+            )
+
             if changes:
                 updated_vendors.append({
                     "vendor_id": str(existing.id),
                     "vendor_name": existing.name,
+                    "same_bank_different_name": same_bank_diff_name,
                     "has_bank_change": has_bank_change,
                     "changes": changes,
                     "new_data": {
@@ -571,7 +592,7 @@ async def bulk_preview_vendors(
                     "account_number": existing.account_number,
                 })
         else:
-            def_ref_clean = default_ref.strip() if default_ref and default_ref.strip() else (account_clean[-4:] if len(account_clean) >= 4 else account_clean)
+            def_ref_clean = default_ref.strip() if default_ref and default_ref.strip() else (account_clean[-5:] if len(account_clean) >= 5 else account_clean)
             new_vendors.append({
                 "name": name_clean,
                 "routing_number": routing_clean,
@@ -616,7 +637,7 @@ async def bulk_confirm_vendors(
         if not name_clean or not rt or not acc:
             continue
         acct_type = AccountType.SAVINGS if "sav" in str(nv.get("account_type", "")).lower() else AccountType.CHECKING
-        def_id = str(nv.get("default_id_number", "")).strip() or (acc[-4:] if len(acc) >= 4 else acc)
+        def_id = str(nv.get("default_id_number", "")).strip() or (acc[-5:] if len(acc) >= 5 else acc)
         v = Vendor(
             name=name_clean,
             routing_number=rt,

@@ -14,7 +14,7 @@ const HistoryScreen = (() => {
 
   // Pagination state
   let currentPage = 1;
-  const pageSize = 10;
+  let pageSize = 10;
 
   let historyToDelete = [];
 
@@ -73,6 +73,18 @@ const HistoryScreen = (() => {
     const nextBtn = el('nextHistoryPageBtn');
     if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
     if (nextBtn) nextBtn.addEventListener('click', () => changePage(1));
+
+    const pageSizeSelect = el('historyPageSizeSelect');
+    if (pageSizeSelect) {
+      pageSizeSelect.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val > 0) {
+          pageSize = Math.min(val, 50);
+          currentPage = 1;
+          renderTable();
+        }
+      });
+    }
 
     // Prototype Top Action Bar Event Listeners
     const exportCsvBtn = el('historyExportCsvBtn');
@@ -718,6 +730,7 @@ const HistoryScreen = (() => {
     const infoDisplay = el('historyPageInfoDisplay');
     const prevBtn = el('prevHistoryPageBtn');
     const nextBtn = el('nextHistoryPageBtn');
+    const pageNumbers = el('historyPageNumbers');
 
     if (infoDisplay) {
       if (totalCount === 0) {
@@ -725,12 +738,16 @@ const HistoryScreen = (() => {
       } else {
         const start = (currentPage - 1) * pageSize + 1;
         const end = Math.min(currentPage * pageSize, totalCount);
-        infoDisplay.textContent = `Page ${currentPage} of ${totalPages} (Showing ${start}-${end} of ${totalCount} records)`;
+        infoDisplay.textContent = `Showing ${start}-${end} of ${totalCount} records`;
       }
     }
 
+    if (pageNumbers) {
+      pageNumbers.textContent = `Page ${totalCount === 0 ? 1 : currentPage} of ${totalPages}`;
+    }
+
     if (prevBtn) prevBtn.disabled = currentPage <= 1;
-    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages || totalCount === 0;
   }
 
   function changePage(delta) {

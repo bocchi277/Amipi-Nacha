@@ -292,7 +292,7 @@ async def create_manual_payment_batch(
             continue
 
         id_val = p_item.id_number.strip() if p_item.id_number and p_item.id_number.strip() else (
-            vendor.default_id_number or (vendor.account_number[-4:] if vendor.account_number and len(vendor.account_number) >= 4 else "EPAY")
+            vendor.default_id_number or (vendor.account_number[-5:] if vendor.account_number and len(vendor.account_number) >= 5 else "EPAY")
         )
         parsed_payments.append(
             ParsedPayment(
