@@ -11,6 +11,7 @@ const GenerateScreen = (() => {
   let currentFile = null;
   let lastUploadResponse = null;
   let loadedVendors = [];
+  let b1ManualDraftEntries = [];
   let manualDraftEntries = [];
   let currentRenderedBatch1Payments = [];
 
@@ -28,6 +29,7 @@ const GenerateScreen = (() => {
 
   function setDefaultEffectiveDate() {
     const effInput = el('effDate');
+    const b1ManualEffDate = el('b1ManualEffDate');
     const manualEffDate = el('manualEffDate');
 
     const d = new Date();
@@ -44,6 +46,10 @@ const GenerateScreen = (() => {
       effInput.value = `${yy}${mmStr}${ddStr}`;
     }
 
+    if (b1ManualEffDate && !b1ManualEffDate.value) {
+      b1ManualEffDate.value = `${yyyy}-${mmStr}-${ddStr}`;
+    }
+
     if (manualEffDate && !manualEffDate.value) {
       manualEffDate.value = `${yyyy}-${mmStr}-${ddStr}`;
     }
@@ -58,20 +64,21 @@ const GenerateScreen = (() => {
   }
 
   async function loadVendors() {
-    const select = el('manualVendorSelect');
-    if (!select) return;
-
     try {
       const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
 
-      select.innerHTML = '<option value="">-- Select Vendor --</option>';
-      loadedVendors.filter(v => v.is_active !== false).forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.id;
-        const vId = (v.account_number && v.account_number.length >= 4) ? v.account_number.slice(-4) : (v.default_id_number || '—');
-        opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
-        select.appendChild(opt);
+      ['manualVendorSelect', 'b1ManualVendorSelect'].forEach(selId => {
+        const select = el(selId);
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Select Vendor --</option>';
+        loadedVendors.filter(v => v.is_active !== false).forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          const vId = (v.account_number && v.account_number.length >= 4) ? v.account_number.slice(-4) : (v.default_id_number || '—');
+          opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
+          select.appendChild(opt);
+        });
       });
     } catch (err) {
       console.warn('Failed to load vendors for manual entry dropdown:', err);
@@ -143,6 +150,35 @@ const GenerateScreen = (() => {
       updateDiscretionaryPreview();
     }
 
+    // Batch 1 Mode Tabs
+    const b1TabUploadBtn = el('batch1TabUploadBtn');
+    const b1TabManualBtn = el('batch1TabManualBtn');
+    if (b1TabUploadBtn) b1TabUploadBtn.addEventListener('click', () => switchBatch1Mode('upload'));
+    if (b1TabManualBtn) b1TabManualBtn.addEventListener('click', () => switchBatch1Mode('manual'));
+
+    // Batch 1 Manual Entry Form Listeners
+    const addB1ManualBtn = el('addB1ManualEntryBtn');
+    if (addB1ManualBtn) {
+      addB1ManualBtn.addEventListener('click', handleAddB1ManualEntry);
+    }
+
+    const b1ManualVendorSelect = el('b1ManualVendorSelect');
+    if (b1ManualVendorSelect) {
+      b1ManualVendorSelect.addEventListener('change', () => {
+        const vId = b1ManualVendorSelect.value;
+        const vObj = loadedVendors.find(v => v.id === vId);
+        const idInput = el('b1ManualIdNumber');
+        if (vObj && idInput) {
+          idInput.value = (vObj.account_number && vObj.account_number.length >= 4) ? vObj.account_number.slice(-4) : (vObj.default_id_number || '');
+        }
+      });
+    }
+
+    const submitB1ManualBtn = el('submitB1ManualBatchBtn');
+    if (submitB1ManualBtn) {
+      submitB1ManualBtn.addEventListener('click', () => handleSubmitB1ManualBatch(false));
+    }
+
     const addManualBtn = el('addManualEntryBtn');
     if (addManualBtn) {
       addManualBtn.addEventListener('click', handleAddManualEntry);
@@ -206,6 +242,10 @@ const GenerateScreen = (() => {
     init,
     handleUpload,
     loadVendors,
+    switchBatch1Mode,
+    handleAddB1ManualEntry,
+    removeB1ManualEntry,
+    handleSubmitB1ManualBatch,
     removeManualEntry,
     handleSubmitManualBatch,
     handleGenerateNacha,
@@ -545,6 +585,170 @@ const GenerateScreen = (() => {
 
 
 
+  // ── Batch 1: Mode Switch & Manual Payment Entry ───────────────
+  function switchBatch1Mode(mode) {
+    const uploadBtn = el('batch1TabUploadBtn');
+    const manualBtn = el('batch1TabManualBtn');
+    const uploadPanel = el('batch1UploadPanel');
+    const manualPanel = el('batch1ManualPanel');
+
+    if (mode === 'upload') {
+      if (uploadBtn) {
+        uploadBtn.classList.add('active');
+        uploadBtn.classList.remove('btn-secondary');
+      }
+      if (manualBtn) {
+        manualBtn.classList.remove('active');
+        manualBtn.classList.add('btn-secondary');
+      }
+      if (uploadPanel) uploadPanel.style.display = 'block';
+      if (manualPanel) manualPanel.style.display = 'none';
+    } else {
+      if (manualBtn) {
+        manualBtn.classList.add('active');
+        manualBtn.classList.remove('btn-secondary');
+      }
+      if (uploadBtn) {
+        uploadBtn.classList.remove('active');
+        uploadBtn.classList.add('btn-secondary');
+      }
+      if (uploadPanel) uploadPanel.style.display = 'none';
+      if (manualPanel) manualPanel.style.display = 'block';
+    }
+  }
+
+  function handleAddB1ManualEntry() {
+    const vendorSelect = el('b1ManualVendorSelect');
+    const amtInput = el('b1ManualAmount');
+    const idInput = el('b1ManualIdNumber');
+    const dateInput = el('b1ManualEffDate');
+    const errBox = el('b1ManualFormError');
+
+    if (errBox) errBox.style.display = 'none';
+
+    const vendorId = vendorSelect ? vendorSelect.value : '';
+    const amountVal = amtInput ? amtInput.value.trim() : '';
+    let idNum = idInput ? idInput.value.trim() : '';
+    const effDate = dateInput ? dateInput.value.trim() : '';
+
+    if (!vendorId) return showB1ManualError('Please select a vendor.');
+    if (!amountVal || isNaN(amountVal) || parseFloat(amountVal) <= 0) return showB1ManualError('Please enter a valid positive amount.');
+    if (!effDate) return showB1ManualError('Effective date is required.');
+
+    const vendorObj = loadedVendors.find(v => v.id === vendorId);
+    if (!vendorObj) return showB1ManualError('Selected vendor invalid.');
+
+    if (!idNum) {
+      idNum = (vendorObj.account_number && vendorObj.account_number.length >= 4) ? vendorObj.account_number.slice(-4) : (vendorObj.default_id_number || 'EPAY');
+    }
+
+    b1ManualDraftEntries.push({
+      vendor_id: vendorId,
+      vendor_name: vendorObj.name,
+      routing_number: vendorObj.routing_number,
+      account_number: vendorObj.account_number,
+      amount: parseFloat(amountVal).toFixed(2),
+      id_number: idNum,
+      effective_date: effDate,
+    });
+
+    if (amtInput) amtInput.value = '';
+    if (idInput) idInput.value = '';
+
+    renderB1ManualDraftTable();
+  }
+
+  function showB1ManualError(msg) {
+    const errBox = el('b1ManualFormError');
+    if (errBox) {
+      errBox.textContent = msg;
+      errBox.style.display = 'block';
+    }
+  }
+
+  function renderB1ManualDraftTable() {
+    const tbody = el('b1ManualDraftTableBody');
+    const section = el('b1ManualDraftSection');
+    const submitBtn = el('submitB1ManualBatchBtn');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (b1ManualDraftEntries.length === 0) {
+      if (section) section.style.display = 'none';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    if (section) section.style.display = 'block';
+    if (submitBtn) submitBtn.disabled = false;
+
+    let totalAmt = 0;
+
+    b1ManualDraftEntries.forEach((entry, idx) => {
+      totalAmt += parseFloat(entry.amount);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="font-mono">${idx + 1}</td>
+        <td class="font-bold">${entry.vendor_name}</td>
+        <td class="font-mono">${entry.routing_number}</td>
+        <td class="font-mono">${entry.account_number}</td>
+        <td class="font-mono">$${parseFloat(entry.amount).toFixed(2)}</td>
+        <td class="font-mono">${entry.id_number}</td>
+        <td class="font-mono">${entry.effective_date}</td>
+        <td>
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeB1ManualEntry(${idx})">Remove</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (el('b1ManualDraftCount')) el('b1ManualDraftCount').textContent = b1ManualDraftEntries.length;
+    if (el('b1ManualDraftTotalAmount')) el('b1ManualDraftTotalAmount').textContent = `$${totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function removeB1ManualEntry(index) {
+    b1ManualDraftEntries.splice(index, 1);
+    renderB1ManualDraftTable();
+  }
+
+  async function handleSubmitB1ManualBatch(overrideFlag = false) {
+    if (b1ManualDraftEntries.length === 0) return;
+
+    const payload = {
+      batch_number: 1,
+      filename: "Manual Batch 1",
+      allow_override: overrideFlag,
+      payments: b1ManualDraftEntries.map(e => ({
+        vendor_id: e.vendor_id,
+        amount: e.amount,
+        id_number: e.id_number,
+        effective_date: e.effective_date,
+      }))
+    };
+
+    setB1ManualLoading(true);
+
+    try {
+      const response = await API.post('/payments/manual-batch', payload);
+      batch1Id = response.batch_id;
+      lastUploadResponse = response;
+      renderUploadResults(response);
+      checkNachaGenerateButtonState();
+    } catch (err) {
+      showB1ManualError(err.message || 'Failed to submit manual Batch 1 payments.');
+    } finally {
+      setB1ManualLoading(false);
+    }
+  }
+
+  function setB1ManualLoading(loading) {
+    const btn = el('submitB1ManualBatchBtn');
+    const spinner = el('b1ManualBatchSpinner');
+    if (btn) btn.disabled = loading || b1ManualDraftEntries.length === 0;
+    if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
+  }
+
   // ── Batch 2: Manual Payment Entry ─────────────────────────────
   function handleAddManualEntry() {
     const vendorSelect = el('manualVendorSelect');
@@ -714,8 +918,8 @@ const GenerateScreen = (() => {
   function checkNachaGenerateButtonState() {
     const btn = el('generateNachaBtn');
     if (!btn) return;
-    const hasBatch1Valid = batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0;
-    const hasBatch2Valid = batch2Id && manualDraftEntries && manualDraftEntries.length > 0;
+    const hasBatch1Valid = Boolean(batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0);
+    const hasBatch2Valid = Boolean(batch2Id);
     btn.disabled = !(hasBatch1Valid || hasBatch2Valid);
   }
 
