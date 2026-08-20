@@ -126,9 +126,6 @@ const HelpScreen = (() => {
     // Generate Tabular Section matching sample template
     const sampleTableHtml = `
       <div style="margin-top: 14px; margin-bottom: 16px;">
-        <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
-          <span style="background-color: #fef08a; padding: 1px 4px; border-radius: 2px;">Sunrise:</span> Check/Wire Deposits (Deposit #12970)
-        </div>
         <table style="width: 100%; border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 12px; border: 1px solid #94a3b8;">
           <thead>
             <tr style="background-color: #8bbcdb; color: #0f172a;">
@@ -180,7 +177,7 @@ const HelpScreen = (() => {
       el('helpTmplSubject').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('helpTmplBody')) {
-      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\n\nInvoices applied:`;
+      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\nReference Number: {{invoice_ref}}\n\nInvoices applied:`;
     }
     updateLivePreview();
   }

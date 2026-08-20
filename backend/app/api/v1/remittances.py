@@ -95,7 +95,6 @@ async def get_email_template(current_user: User = Depends(get_current_user)):
             "company_name": "AMIPI INC",
             "payment_method": "ACH/Wire",
             "deposit_ref": "12970",
-            "deposit_source": "Sunrise",
         },
         invoice_items=[
             {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
@@ -131,7 +130,6 @@ async def preview_email_template(
             "company_name": "AMIPI INC",
             "payment_method": "ACH/Wire",
             "deposit_ref": "12970",
-            "deposit_source": "Sunrise",
         },
         invoice_items=[
             {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
@@ -168,7 +166,6 @@ async def update_email_template(
             "company_name": "AMIPI INC",
             "payment_method": "ACH/Wire",
             "deposit_ref": "12970",
-            "deposit_source": "Sunrise",
         },
         invoice_items=[
             {"method": "ACH/Wire", "invoice_date": "05-19-2026", "invoice_number": "128753", "amount": 22094.82},
@@ -214,7 +211,6 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
                 "company_name": "AMIPI INC",
                 "payment_method": "ACH/Wire",
                 "deposit_ref": str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970",
-                "deposit_source": "Sunrise",
             },
             invoice_items=breakdown,
         )

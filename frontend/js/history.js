@@ -228,7 +228,7 @@ const HistoryScreen = (() => {
       el('tmplSubjectInput').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('tmplBodyInput')) {
-      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\n\nInvoices applied:`;
+      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\nReference Number: {{invoice_ref}}\n\nInvoices applied:`;
     }
   }
 

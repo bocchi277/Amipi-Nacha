@@ -12,15 +12,17 @@ DEFAULT_SUBJECT_TEMPLATE = "Payment Remittance Advice — {{vendor_name}} (${{am
 DEFAULT_BODY_TEMPLATE = (
     "Dear {{vendor_name}},\n\n"
     "We would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\n"
-    "Payment Amount: ${{amount}}\n\n"
+    "Payment Amount: ${{amount}}\n"
+    "Effective Date: {{effective_date}}\n"
+    "Reference Number: {{invoice_ref}}\n\n"
     "Invoices applied:"
 )
 
 AVAILABLE_PLACEHOLDERS = [
     {"name": "{{vendor_name}}", "description": "Vendor or Payee Name"},
     {"name": "{{amount}}", "description": "Formatted payment dollar amount (e.g. 53,413.06)"},
-    {"name": "{{invoice_ref}}", "description": "Primary invoice reference or ID"},
     {"name": "{{effective_date}}", "description": "ACH Effective Entry Date (e.g. 05-19-2026)"},
+    {"name": "{{invoice_ref}}", "description": "Primary invoice reference or ID"},
     {"name": "{{company_name}}", "description": "Originating Company Name (e.g. AMIPI INC)"},
     {"name": "{{payment_method}}", "description": "Payment Method (e.g. ACH/Wire or ACH Credit)"},
     {"name": "{{deposit_ref}}", "description": "Deposit or Trace Reference Number"},
@@ -31,7 +33,6 @@ ACTIVE_TEMPLATE = {
     "subject": DEFAULT_SUBJECT_TEMPLATE,
     "body": DEFAULT_BODY_TEMPLATE,
     "company_name": "AMIPI INC",
-    "deposit_source": "Sunrise",
 }
 
 
@@ -92,9 +93,6 @@ def build_invoice_table_html(
 
     table_html = f"""
     <div style="margin-top: 14px; margin-bottom: 20px;">
-      <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
-        <span style="background-color: #fef08a; padding: 1px 4px; border-radius: 2px;">{deposit_source}:</span> Check/Wire Deposits (Deposit #{deposit_ref})
-      </div>
       <table style="width: 100%; max-width: 680px; border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 12px; border: 1px solid #94a3b8;">
         <thead>
           <tr style="background-color: #8bbcdb; color: #0f172a;">
@@ -152,7 +150,6 @@ def build_invoice_table_text(
     tot_amt = f"${total_amount}" if not str(total_amount).startswith("$") else str(total_amount)
 
     lines = [
-        f"{deposit_source}: Check/Wire Deposits (Deposit #{deposit_ref})",
         "-" * 68,
         f"{'Method of Payment':<18} {'Invoice Date':<14} {'Invoice #':<16} {'Amount':>16}",
         "-" * 68,
@@ -230,10 +227,20 @@ def render_email_template(
 </head>
 <body style="margin: 0; padding: 24px; font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; color: #1e293b;">
   <div style="max-width: 720px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="font-size: 18px; font-weight: 700; color: #0f172a; font-family: Arial, Helvetica, sans-serif;">{company}</td>
+          <td style="text-align: right; font-size: 12px; font-weight: 600; color: #2563eb; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, Helvetica, sans-serif;">Payment Remittance Advice</td>
+        </tr>
+      </table>
+    </div>
     {html_paragraphs}
     {table_html}
-    <p style="margin: 20px 0 6px 0; font-size: 13px; color: #64748b; line-height: 1.4;">If you have any questions regarding this payment remittance, please contact Accounts Payable.</p>
-    <p style="margin: 0; font-size: 13px; color: #334155; font-weight: 600;">{company} Accounts Payable</p>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0 0 4px 0; font-size: 13px; color: #64748b; line-height: 1.4;">If you have any questions regarding this payment remittance, please contact Accounts Payable.</p>
+      <p style="margin: 0; font-size: 13px; color: #1e293b; font-weight: 600;">{company} Accounts Payable</p>
+    </div>
   </div>
 </body>
 </html>"""

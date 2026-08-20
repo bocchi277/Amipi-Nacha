@@ -215,7 +215,6 @@ async def combine_batches_and_generate_nacha(
                 "company_name": company_name,
                 "payment_method": "ACH/Wire",
                 "deposit_ref": str(nacha_record.id)[:8],
-                "deposit_source": ACTIVE_TEMPLATE.get("deposit_source", "Sunrise"),
             },
             invoice_items=p.invoice_breakdown,
         )
