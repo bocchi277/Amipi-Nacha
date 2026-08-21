@@ -340,7 +340,7 @@ async def test_tabular_remittance_email_template_rendering_and_preview(db_sessio
 
     subj, text, html = render_email_template(
         "Payment Remittance Advice — {{vendor_name}} (${{amount}})",
-        "Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: ${{amount}}\nEffective Date: {{effective_date}}\nReference Number: {{invoice_ref}}\n\nInvoices applied:",
+        "Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: ${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:",
         {
             "vendor_name": "AMIPI INC",
             "amount": "53,413.06",
@@ -355,7 +355,6 @@ async def test_tabular_remittance_email_template_rendering_and_preview(db_sessio
 
     assert "53,413.06" in subj
     assert "05-19-2026" in html
-    assert "INV-128753" in html
     assert "Sunrise" not in html
     assert "Check/Wire Deposits" not in html
     assert "Sunrise" not in text

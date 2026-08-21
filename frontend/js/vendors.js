@@ -88,10 +88,12 @@ const VendorsScreen = (() => {
     const closeEditVendorBtn = el('closeEditVendorModalBtn');
     const cancelEditVendorBtn = el('cancelEditVendorModalBtn');
     const editVendorForm = el('editVendorProfileForm');
+    const saveVendorProfileBtn = el('saveVendorProfileBtn');
 
     if (closeEditVendorBtn) closeEditVendorBtn.addEventListener('click', hideEditVendorModal);
     if (cancelEditVendorBtn) cancelEditVendorBtn.addEventListener('click', hideEditVendorModal);
     if (editVendorForm) editVendorForm.addEventListener('submit', handleSaveVendorProfile);
+    if (saveVendorProfileBtn) saveVendorProfileBtn.addEventListener('click', handleSaveVendorProfile);
 
     // Add Vendor Modal Event Listeners
     const openAddVendorBtn = el('openAddVendorModalBtn');
@@ -102,7 +104,8 @@ const VendorsScreen = (() => {
     const addBulkVendorTab = el('addBulkVendorTabBtn');
     const singleVendorForm = el('addVendorForm');
     const bulkVendorForm = el('bulkVendorForm');
-    const downloadTemplateBtn = el('downloadVendorTemplateBtn');
+    const saveAddVendorBtn = el('saveAddVendorBtn');
+    const uploadBulkVendorBtn = el('uploadBulkVendorBtn');
 
     if (openAddVendorBtn) openAddVendorBtn.addEventListener('click', openAddVendorModal);
     if (closeAddVendorBtn) closeAddVendorBtn.addEventListener('click', hideAddVendorModal);
@@ -111,7 +114,9 @@ const VendorsScreen = (() => {
     if (addSingleVendorTab) addSingleVendorTab.addEventListener('click', () => switchAddVendorTab('single'));
     if (addBulkVendorTab) addBulkVendorTab.addEventListener('click', () => switchAddVendorTab('bulk'));
     if (singleVendorForm) singleVendorForm.addEventListener('submit', handleCreateSingleVendorSubmit);
+    if (saveAddVendorBtn) saveAddVendorBtn.addEventListener('click', handleCreateSingleVendorSubmit);
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
+    if (uploadBulkVendorBtn) uploadBulkVendorBtn.addEventListener('click', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
 
     // Auto-fill ID with last 5 digits of account number
@@ -1212,11 +1217,20 @@ const VendorsScreen = (() => {
     openChangeModal,
     openEditVendorModal,
     openAddVendorModal,
+    hideAddVendorModal,
     openConfirmDeleteSingle,
     openConfirmDeleteSelection,
+    executeBulkDiffConfirm,
+    executeSingleVendorDuplicateUpdate,
+    executeVendorDeletion,
+    hideBulkDiffModal,
+    hideDupConfirmModal,
+    hideDeleteModal,
   };
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { VendorsScreen.init(); });
+} else {
   VendorsScreen.init();
-});
+}

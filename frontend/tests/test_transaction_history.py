@@ -14,14 +14,13 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-STD_USER = f"std_user_p7_{_RUN_ID}"
-STD_EMAIL = f"{STD_USER}@amipi.com"
-STD_PASSWORD = "StdUserPass123!"
-
-
 def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page: Page, base_url: str):
     """Test filtering by each type, multi-select checkboxes, confirmation modal, and bulk resend status update."""
+    run_id = uuid.uuid4().hex[:8]
+    std_user = f"std_user_p7_{run_id}"
+    std_email = f"{std_user}@amipi.com"
+    std_password = "StdUserPass123!"
+
     page.goto(base_url)
     page.evaluate("sessionStorage.clear()")
     page.reload()
@@ -37,11 +36,12 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
             });
         }
         """,
-        [base_url, STD_EMAIL, STD_USER, STD_PASSWORD],
+        [base_url, std_email, std_user, std_password],
     )
 
-    page.fill("#loginUsername", STD_USER)
-    page.fill("#loginPassword", STD_PASSWORD)
+    page.wait_for_selector("#loginUsername", state="visible")
+    page.fill("#loginUsername", std_user)
+    page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 

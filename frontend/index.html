@@ -716,7 +716,7 @@
               </div>
               <div style="display: flex; gap: var(--space-sm);">
                 <button type="button" class="btn btn-secondary btn-sm" id="clearVendorSelectionBtn">Clear Selection</button>
-                <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteVendorsBtn" style="background: var(--color-danger, #ef4444); color: white; border: none;">
+                <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteVendorsBtn" onclick="VendorsScreen.openConfirmDeleteSelection()" style="background: var(--color-danger, #ef4444); color: white; border: none;">
                   <span class="spinner" id="bulkDeleteSpinner" style="display: none;"></span>
                   <span>Delete Selected Vendors</span>
                 </button>
@@ -1653,7 +1653,7 @@
 
         <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
           <button type="button" class="btn btn-secondary btn-sm" id="cancelBulkDiffModalBtn">Cancel & Back</button>
-          <button type="button" class="btn btn-primary btn-sm" id="executeBulkDiffConfirmBtn" style="font-weight: 600;">
+          <button type="button" class="btn btn-primary btn-sm" id="executeBulkDiffConfirmBtn" onclick="VendorsScreen.executeBulkDiffConfirm()" style="font-weight: 600;">
             <span class="spinner" id="bulkDiffSpinner" style="display: none;"></span>
             <span id="bulkDiffConfirmBtnText">Confirm & Apply Changes</span>
           </button>
@@ -1680,7 +1680,7 @@
 
         <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
           <button type="button" class="btn btn-secondary btn-sm" id="cancelDeleteModalBtn">Cancel</button>
-          <button type="button" class="btn btn-danger btn-sm" id="executeDeleteVendorsBtn" style="background: #dc2626; color: white; border: none;">
+          <button type="button" class="btn btn-danger btn-sm" id="executeDeleteVendorsBtn" onclick="VendorsScreen.executeVendorDeletion()" style="background: #dc2626; color: white; border: none;">
             <span class="spinner" id="executeDeleteSpinner" style="display: none;"></span>
             <span>Permanently Delete</span>
           </button>

@@ -177,7 +177,7 @@ const HelpScreen = (() => {
       el('helpTmplSubject').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('helpTmplBody')) {
-      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\nReference Number: {{invoice_ref}}\n\nInvoices applied:`;
+      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:`;
     }
     updateLivePreview();
   }

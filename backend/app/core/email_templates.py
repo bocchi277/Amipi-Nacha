@@ -13,8 +13,7 @@ DEFAULT_BODY_TEMPLATE = (
     "Dear {{vendor_name}},\n\n"
     "We would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\n"
     "Payment Amount: ${{amount}}\n"
-    "Effective Date: {{effective_date}}\n"
-    "Reference Number: {{invoice_ref}}\n\n"
+    "Effective Date: {{effective_date}}\n\n"
     "Invoices applied:"
 )
 
