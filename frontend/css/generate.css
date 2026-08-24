@@ -188,7 +188,7 @@
 
 /* ── Payments List Table ────────────────────────────────────────── */
 .payments-table-wrap {
-  overflow-x: hidden;
+  overflow-x: auto;
   width: 100%;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-light);

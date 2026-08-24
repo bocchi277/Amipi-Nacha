@@ -192,9 +192,14 @@ async def combine_batches_and_generate_nacha(
     # Update Payments & UploadBatches, and create VendorRemittance pending records
     from app.models import RemittanceStatus, VendorRemittance
 
-    for p in payments_to_update:
+    # Extract entry detail trace numbers from generated file
+    entry_lines = [l for l in lines if l.startswith("6")]
+
+    for idx, p in enumerate(payments_to_update):
+        trace_str = entry_lines[idx][79:94] if idx < len(entry_lines) else None
         p.nacha_file_id = nacha_record.id
         p.status = PaymentStatus.PROCESSING
+        p.trace_number = trace_str
 
         # Fetch vendor email
         res_v = await db_session.execute(select(Vendor).where(Vendor.id == p.vendor_id))
@@ -214,7 +219,7 @@ async def combine_batches_and_generate_nacha(
                 "effective_date": p.effective_date.strftime("%m-%d-%Y") if hasattr(p.effective_date, "strftime") else str(p.effective_date),
                 "company_name": company_name,
                 "payment_method": "ACH/Wire",
-                "deposit_ref": str(nacha_record.id)[:8],
+                "deposit_ref": trace_str or str(nacha_record.id)[:8],
             },
             invoice_items=p.invoice_breakdown,
         )
@@ -228,6 +233,7 @@ async def combine_batches_and_generate_nacha(
             amount=p.amount,
             effective_date=p.effective_date,
             invoice_reference=p.id_number,
+            trace_number=trace_str,
             subject=subj,
             body_text=body_text,
             body_html=body_html,

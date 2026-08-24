@@ -106,6 +106,8 @@ const VendorsScreen = (() => {
     const bulkVendorForm = el('bulkVendorForm');
     const saveAddVendorBtn = el('saveAddVendorBtn');
     const uploadBulkVendorBtn = el('uploadBulkVendorBtn');
+    const downloadTemplateBtn = el('downloadVendorTemplateBtn');
+    const downloadTemplateXlsxBtn = el('downloadVendorTemplateXlsxBtn');
 
     if (openAddVendorBtn) openAddVendorBtn.addEventListener('click', openAddVendorModal);
     if (closeAddVendorBtn) closeAddVendorBtn.addEventListener('click', hideAddVendorModal);
@@ -118,6 +120,7 @@ const VendorsScreen = (() => {
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
     if (uploadBulkVendorBtn) uploadBulkVendorBtn.addEventListener('click', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
+    if (downloadTemplateXlsxBtn) downloadTemplateXlsxBtn.addEventListener('click', downloadVendorTemplateXlsx);
 
     // Auto-fill ID with last 5 digits of account number
     const addAcctInput = el('addVendorAccount');
@@ -483,16 +486,59 @@ const VendorsScreen = (() => {
   }
 
   function downloadVendorTemplate() {
-    const csvContent = 'Vendor Name,Routing Number,Account Number,Account Type,Invoice Ref,Email\nACME SUPPLIES INC,021000021,11391039,checking,INV-1001,ap@acme.com\nBELGIUM DIA LLC,021000322,483110589481,checking,INV-1002,ap@belgium.com\n';
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvContent = [
+      'Vendor Name,Routing Number,Account Number,Account Type,Invoice Ref,Email',
+      'ACME SUPPLIES INC,021000021,11391039,checking,INV-1001,ap@acme.com',
+      'BELGIUM DIA LLC,021000322,483110589481,checking,INV-1002,ap@belgium.com',
+      'GLOBAL METALS INC,026013356,112233445566,checking,INV-1003,billing@globalmetals.com',
+      'PRECISION TOOLS CORP,121000247,445566778899,savings,INV-1004,accounts@precisiontools.com',
+    ].join('\r\n');
+
+    triggerFileDownload('vendor_import_template.csv', csvContent, 'text/csv;charset=utf-8;');
+  }
+
+  function downloadVendorTemplateXlsx() {
+    if (typeof XLSX === 'undefined') {
+      downloadVendorTemplate();
+      return;
+    }
+
+    const headers = ['Vendor Name', 'Routing Number', 'Account Number', 'Account Type', 'Invoice Ref', 'Email'];
+    const rows = [
+      ['ACME SUPPLIES INC', '021000021', '11391039', 'checking', 'INV-1001', 'ap@acme.com'],
+      ['BELGIUM DIA LLC', '021000322', '483110589481', 'checking', 'INV-1002', 'ap@belgium.com'],
+      ['GLOBAL METALS INC', '026013356', '112233445566', 'checking', 'INV-1003', 'billing@globalmetals.com'],
+      ['PRECISION TOOLS CORP', '121000247', '445566778899', 'savings', 'INV-1004', 'accounts@precisiontools.com'],
+    ];
+
+    const wsData = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = [
+      { wch: 26 }, // Vendor Name
+      { wch: 18 }, // Routing Number
+      { wch: 20 }, // Account Number
+      { wch: 15 }, // Account Type
+      { wch: 15 }, // Invoice Ref
+      { wch: 30 }, // Email
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Vendor Directory');
+    XLSX.writeFile(wb, 'vendor_import_template.xlsx');
+  }
+
+  function triggerFileDownload(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'vendor_import_template.csv');
-    link.style.visibility = 'hidden';
+    link.setAttribute('download', filename);
+    link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   function hideBulkDiffModal() {

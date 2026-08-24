@@ -39,6 +39,7 @@ class RemittanceResponseSchema(BaseModel):
     created_at: str
     created_by_username: Optional[str] = "admin"
     invoice_breakdown: Optional[list[dict[str, Any]]] = None
+    sequence_id: Optional[str] = None
 
 
 
@@ -199,6 +200,21 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
             created_by_user = r.nacha_file.created_by_user.username
 
     html_content = getattr(r, "body_html", None)
+    seq_id = getattr(r, "trace_number", None)
+    if not seq_id and "payment" in insp.dict and r.payment is not None:
+        seq_id = getattr(r.payment, "trace_number", None)
+    if not seq_id and "nacha_file" in insp.dict and r.nacha_file is not None and getattr(r.nacha_file, "raw_content", None):
+        try:
+            lines = [l for l in r.nacha_file.raw_content.split("\r\n") if l.startswith("6")]
+            for eline in lines:
+                if (r.invoice_reference and r.invoice_reference[:15] in eline) or (r.vendor_name and r.vendor_name[:15].upper() in eline.upper()):
+                    seq_id = eline[79:94]
+                    break
+            if not seq_id and lines:
+                seq_id = lines[0][79:94]
+        except Exception:
+            pass
+
     if not html_content:
         eff_str = r.effective_date.strftime("%m-%d-%Y") if hasattr(r.effective_date, "strftime") else str(r.effective_date)
         _, _, html_content = render_email_template(
@@ -211,7 +227,7 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
                 "effective_date": eff_str,
                 "company_name": "AMIPI INC",
                 "payment_method": "ACH/Wire",
-                "deposit_ref": str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970",
+                "deposit_ref": seq_id or (str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970"),
             },
             invoice_items=breakdown,
         )
@@ -233,6 +249,7 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
         created_at=r.created_at.isoformat(),
         created_by_username=created_by_user,
         invoice_breakdown=breakdown,
+        sequence_id=seq_id,
     )
 
 

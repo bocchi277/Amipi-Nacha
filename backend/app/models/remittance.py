@@ -38,6 +38,7 @@ class VendorRemittance(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     invoice_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    trace_number: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     body_text: Mapped[str] = mapped_column(Text, nullable=False)
     body_html: Mapped[str | None] = mapped_column(Text, nullable=True)

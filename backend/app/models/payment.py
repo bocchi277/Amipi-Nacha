@@ -49,6 +49,7 @@ class Payment(Base):
         UUID(as_uuid=True), ForeignKey("upload_batches.id", ondelete="SET NULL"), nullable=True, index=True
     )
     fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    trace_number: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     is_duplicate_override: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
