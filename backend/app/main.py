@@ -1,6 +1,4 @@
-"""
-FastAPI Main Application.
-"""
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,18 +13,10 @@ from app.api.v1.remittances import router as remittances_router
 from app.api.v1.vendors import router as vendors_router
 from app.config import settings
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
-)
 
-
-@app.on_event("startup")
-async def on_startup():
-    """Auto-migrate production database columns on backend startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI application lifespan event handler."""
     from sqlalchemy import text
     from app.db.session import async_engine
     try:
@@ -38,6 +28,17 @@ async def on_startup():
             await conn.execute(text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS trace_number VARCHAR(30);"))
     except Exception as err:
         print(f"Startup DB migration warning: {err}")
+    yield
+
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url=f"{settings.API_V1_STR}/docs",
+    redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
+)
 
 
 # CORS middleware configuration

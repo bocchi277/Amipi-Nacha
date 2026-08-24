@@ -23,7 +23,7 @@ class RegisterUserSchema(BaseModel):
     email: str
     username: str
     password: str
-    role: UserRole = UserRole.USER
+    role: Optional[UserRole] = None
 
 
 class TokenResponseSchema(BaseModel):
@@ -46,7 +46,10 @@ async def register_user(
     payload: RegisterUserSchema,
     db: AsyncSession = Depends(get_async_db),
 ):
-    """Register a new user (role: 'user' or 'admin')."""
+    """Register a new standard user account."""
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+
     # Check duplicate email
     res_e = await db.execute(select(User).where(User.email == payload.email.strip().lower()))
     if res_e.scalar_one_or_none():
@@ -58,11 +61,12 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Username already taken.")
 
     pw_hash = hash_password(payload.password)
+    # Always create public registrations with standard USER role to prevent unauthorized admin privilege escalation
     user = User(
         email=payload.email.strip().lower(),
         username=payload.username.strip(),
         password_hash=pw_hash,
-        role=payload.role,
+        role=UserRole.USER,
         is_active=True,
     )
     db.add(user)

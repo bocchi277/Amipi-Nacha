@@ -3,11 +3,14 @@ Security Utilities: Password Hashing (PBKDF2-HMAC-SHA256) & JWT Tokens.
 """
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 import os
 from typing import Any, Optional
 import jwt
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "SUPER_SECRET_AMIPI_NACHA_KEY_2026_CHANGE_IN_PROD")
+from app.config import settings
+
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
@@ -34,9 +37,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def hmac_compare(val1: bytes, val2: bytes) -> bool:
     """Constant-time byte string comparison to prevent timing attacks."""
     return hmac.compare_digest(val1, val2)
-
-
-import hmac
 
 
 def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

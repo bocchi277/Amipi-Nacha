@@ -137,6 +137,28 @@ const VendorsScreen = (() => {
       });
     }
 
+    // Live ABA Routing Number Checksum Validation
+    const addRoutingInput = el('addVendorRouting');
+    if (addRoutingInput) {
+      addRoutingInput.addEventListener('input', () => {
+        const val = addRoutingInput.value.replace(/\D/g, '');
+        if (val.length === 9) {
+          const d = val.split('').map(Number);
+          const checksum = (3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + 1 * (d[2] + d[5] + d[8])) % 10;
+          if (checksum === 0) {
+            addRoutingInput.style.borderColor = '#16a34a';
+            addRoutingInput.title = 'Valid 9-digit ABA Routing Number';
+          } else {
+            addRoutingInput.style.borderColor = '#dc2626';
+            addRoutingInput.title = 'Invalid ABA routing number checksum';
+          }
+        } else {
+          addRoutingInput.style.borderColor = '';
+          addRoutingInput.title = '';
+        }
+      });
+    }
+
     // Duplicate Single Vendor Confirmation Modal Listeners
     const closeDupModalBtn = el('closeDupConfirmModalBtn');
     const cancelDupModalBtn = el('cancelDupConfirmModalBtn');
