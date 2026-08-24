@@ -92,6 +92,43 @@ const HelpScreen = (() => {
     updateLivePreview();
   }
 
+  function splitBodyIntroAndClosing(bodyText) {
+    const lower = bodyText.toLowerCase();
+    for (const tag of ['{{invoices_table}}', '{{invoice_table}}', '{{table}}']) {
+      const idx = lower.indexOf(tag);
+      if (idx !== -1) {
+        return {
+          intro: bodyText.substring(0, idx).trim(),
+          closing: bodyText.substring(idx + tag.length).trim(),
+        };
+      }
+    }
+
+    const invMarker = 'invoices applied:';
+    if (lower.includes(invMarker)) {
+      const idx = lower.indexOf(invMarker);
+      const splitPos = idx + invMarker.length;
+      return {
+        intro: bodyText.substring(0, splitPos).trim(),
+        closing: bodyText.substring(splitPos).trim(),
+      };
+    }
+
+    const qMarker = 'if you have any questions';
+    if (lower.includes(qMarker)) {
+      const idx = lower.indexOf(qMarker);
+      return {
+        intro: bodyText.substring(0, idx).trim(),
+        closing: bodyText.substring(idx).trim(),
+      };
+    }
+
+    return {
+      intro: bodyText.trim(),
+      closing: '',
+    };
+  }
+
   function updateLivePreview() {
     const subjVal = el('helpTmplSubject') ? el('helpTmplSubject').value : '';
     const bodyVal = el('helpTmplBody') ? el('helpTmplBody').value : '';
@@ -116,9 +153,11 @@ const HelpScreen = (() => {
     if (el('previewSubject')) el('previewSubject').textContent = renderedSubj || 'Payment Remittance Advice — AMIPI INC ($53,413.06)';
     if (el('previewBody')) el('previewBody').textContent = renderedBody || '—';
 
-    // Format paragraphs
-    const paragraphs = (renderedBody || '').split('\n\n');
-    const htmlParagraphs = paragraphs
+    const { intro, closing } = splitBodyIntroAndClosing(renderedBody);
+
+    // Format intro paragraphs
+    const introParagraphs = (intro || '').split('\n\n');
+    const htmlIntro = introParagraphs
       .filter(p => p.trim())
       .map(p => `<p style="margin: 0 0 10px 0; font-size: 13px; line-height: 1.5; color: #1e293b;">${p.replace(/\n/g, '<br/>')}</p>`)
       .join('');
@@ -161,14 +200,28 @@ const HelpScreen = (() => {
             </tr>
           </tfoot>
         </table>
-        <p style="margin: 16px 0 4px 0; font-size: 12px; color: #64748b;">If you have any questions regarding this payment remittance, please contact Accounts Payable.</p>
-        <p style="margin: 0; font-size: 12px; color: #334155; font-weight: 600;">AMIPI INC Accounts Payable</p>
       </div>
     `;
 
+    // Format closing paragraphs
+    let htmlClosing = '';
+    if (closing) {
+      const closingParagraphs = closing.split('\n\n');
+      const innerClosing = closingParagraphs
+        .filter(p => p.trim())
+        .map((p, idx) => {
+          const isSignOff = idx === closingParagraphs.length - 1 && p.includes('Accounts Payable');
+          const color = isSignOff ? '#334155' : '#64748b';
+          const weight = isSignOff ? 'font-weight: 600;' : '';
+          return `<p style="margin: ${idx === 0 ? '16px' : '4px'} 0 4px 0; font-size: 12px; color: ${color}; ${weight}">${p.replace(/\n/g, '<br/>')}</p>`;
+        })
+        .join('');
+      htmlClosing = innerClosing;
+    }
+
     const previewContainer = el('helpPreviewHtmlContainer');
     if (previewContainer) {
-      previewContainer.innerHTML = htmlParagraphs + sampleTableHtml;
+      previewContainer.innerHTML = htmlIntro + sampleTableHtml + htmlClosing;
     }
   }
 
@@ -177,7 +230,7 @@ const HelpScreen = (() => {
       el('helpTmplSubject').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
     }
     if (el('helpTmplBody')) {
-      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:`;
+      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable`;
     }
     updateLivePreview();
   }

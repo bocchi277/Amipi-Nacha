@@ -392,4 +392,22 @@ async def test_tabular_remittance_email_template_rendering_and_preview(db_sessio
         assert "2 Payment Transaction records" in data["body_html"]
         assert "TOT" in data["body_html"]
 
+    # Test editable closing line rendering
+    subj_c, text_c, html_c = render_email_template(
+        "Payment Remittance Advice — {{vendor_name}} (${{amount}})",
+        "Dear {{vendor_name}},\n\nPayment Amount: ${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable",
+        {
+            "vendor_name": "ACME CORP",
+            "amount": "1,500.00",
+            "effective_date": "08-24-2026",
+            "company_name": "AMIPI INC",
+        },
+        invoice_items=[{"method": "ACH", "invoice_date": "08-24-2026", "invoice_number": "INV-99", "amount": 1500.00}],
+    )
+    assert "If you have any questions regarding this payment remittance, please contact Accounts Payable." in html_c
+    assert "AMIPI INC Accounts Payable" in html_c
+    assert "If you have any questions regarding this payment remittance, please contact Accounts Payable." in text_c
+    assert "AMIPI INC Accounts Payable" in text_c
+
+
 

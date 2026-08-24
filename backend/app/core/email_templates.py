@@ -14,7 +14,9 @@ DEFAULT_BODY_TEMPLATE = (
     "We would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\n"
     "Payment Amount: ${{amount}}\n"
     "Effective Date: {{effective_date}}\n\n"
-    "Invoices applied:"
+    "Invoices applied:\n\n"
+    "If you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n"
+    "{{company_name}} Accounts Payable"
 )
 
 AVAILABLE_PLACEHOLDERS = [
@@ -33,6 +35,35 @@ ACTIVE_TEMPLATE = {
     "body": DEFAULT_BODY_TEMPLATE,
     "company_name": "AMIPI INC",
 }
+
+
+def split_body_intro_and_closing(body_content: str) -> tuple[str, str]:
+    """
+    Split body template into intro section (before invoice table) and closing section (after invoice table).
+    """
+    lower_content = body_content.lower()
+
+    # 1. Explicit table markers
+    for tag in ["{{invoices_table}}", "{{invoice_table}}", "{{table}}"]:
+        if tag in lower_content:
+            idx = lower_content.index(tag)
+            return body_content[:idx].strip(), body_content[idx + len(tag):].strip()
+
+    # 2. Marker "invoices applied:"
+    inv_marker = "invoices applied:"
+    if inv_marker in lower_content:
+        idx = lower_content.index(inv_marker)
+        split_pos = idx + len(inv_marker)
+        return body_content[:split_pos].strip(), body_content[split_pos:].strip()
+
+    # 3. Marker "if you have any questions"
+    q_marker = "if you have any questions"
+    if q_marker in lower_content:
+        idx = lower_content.index(q_marker)
+        return body_content[:idx].strip(), body_content[idx:].strip()
+
+    # 4. Fallback: all intro
+    return body_content.strip(), ""
 
 
 def build_invoice_table_html(
@@ -213,9 +244,26 @@ def render_email_template(
         deposit_source=dep_source,
     )
 
-    # Convert body text linebreaks to HTML paragraphs/breaks
-    paragraphs = body_content.split("\n\n")
-    html_paragraphs = "".join(f"<p style=\"margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; color: #1e293b;\">{p.replace(chr(10), '<br/>')}</p>" for p in paragraphs if p.strip())
+    intro_text, closing_text = split_body_intro_and_closing(body_content)
+
+    # Convert intro text linebreaks to HTML paragraphs/breaks
+    intro_paragraphs = intro_text.split("\n\n")
+    html_intro = "".join(
+        f'<p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; color: #1e293b;">{p.replace(chr(10), "<br/>")}</p>'
+        for p in intro_paragraphs if p.strip()
+    )
+
+    # Convert closing text linebreaks to HTML paragraphs/breaks
+    html_closing = ""
+    if closing_text:
+        closing_paragraphs = closing_text.split("\n\n")
+        closing_inner = "".join(
+            f'<p style="margin: 0 0 6px 0; font-size: 13px; color: #64748b; line-height: 1.4;">{p.replace(chr(10), "<br/>")}</p>'
+            for p in closing_paragraphs if p.strip()
+        )
+        html_closing = f"""<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+      {closing_inner}
+    </div>"""
 
     full_html = f"""<!DOCTYPE html>
 <html>
@@ -234,16 +282,16 @@ def render_email_template(
         </tr>
       </table>
     </div>
-    {html_paragraphs}
+    {html_intro}
     {table_html}
-    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0 0 4px 0; font-size: 13px; color: #64748b; line-height: 1.4;">If you have any questions regarding this payment remittance, please contact Accounts Payable.</p>
-      <p style="margin: 0; font-size: 13px; color: #1e293b; font-weight: 600;">{company} Accounts Payable</p>
-    </div>
+    {html_closing}
   </div>
 </body>
 </html>"""
 
-    full_text = f"{body_content}\n\n{table_text}\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{company} Accounts Payable"
+    if closing_text:
+        full_text = f"{intro_text}\n\n{table_text}\n\n{closing_text}"
+    else:
+        full_text = f"{intro_text}\n\n{table_text}"
 
     return rendered_subject, full_text, full_html
