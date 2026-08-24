@@ -63,23 +63,55 @@ const GenerateScreen = (() => {
     discPrev.textContent = digits.padStart(20, '0');
   }
 
+  function filterVendorDropdown(selectId, searchTerm = '') {
+    const select = el(selectId);
+    if (!select) return;
+
+    const term = (searchTerm || '').trim().toLowerCase();
+    const currentVal = select.value;
+
+    select.innerHTML = '<option value="">-- Select Vendor --</option>';
+
+    const activeVendors = loadedVendors.filter(v => v.is_active !== false);
+    const filtered = activeVendors.filter(v => {
+      if (!term) return true;
+      const name = (v.name || '').toLowerCase();
+      const refId = ((v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '')).toLowerCase();
+      const routing = (v.routing_number || '').toLowerCase();
+      const acct = (v.account_number || '').toLowerCase();
+      const email = (v.email || '').toLowerCase();
+
+      return name.includes(term) || refId.includes(term) || routing.includes(term) || acct.includes(term) || email.includes(term);
+    });
+
+    if (filtered.length === 0) {
+      select.innerHTML = '<option value="">No matching vendors found</option>';
+      return;
+    }
+
+    filtered.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      const vId = (v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '—');
+      opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
+      if (v.id === currentVal) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+
+    // If search term filtered to exactly 1 vendor, auto-select it
+    if (term && filtered.length === 1) {
+      select.value = filtered[0].id;
+    }
+  }
+
   async function loadVendors() {
     try {
       const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
-
-      ['manualVendorSelect', 'b1ManualVendorSelect'].forEach(selId => {
-        const select = el(selId);
-        if (!select) return;
-        select.innerHTML = '<option value="">-- Select Vendor --</option>';
-        loadedVendors.filter(v => v.is_active !== false).forEach(v => {
-          const opt = document.createElement('option');
-          opt.value = v.id;
-          const vId = (v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '—');
-          opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
-          select.appendChild(opt);
-        });
-      });
+      filterVendorDropdown('manualVendorSelect', '');
+      filterVendorDropdown('b1ManualVendorSelect', '');
     } catch (err) {
       console.warn('Failed to load vendors for manual entry dropdown:', err);
     }
@@ -170,6 +202,28 @@ const GenerateScreen = (() => {
       });
     }
 
+    const b1SearchInput = el('b1ManualVendorSearchInput');
+    const b1SearchBtn = el('b1ManualVendorSearchBtn');
+    if (b1SearchInput) {
+      b1SearchInput.addEventListener('input', () => {
+        filterVendorDropdown('b1ManualVendorSelect', b1SearchInput.value);
+      });
+      b1SearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          filterVendorDropdown('b1ManualVendorSelect', b1SearchInput.value);
+          if (el('b1ManualVendorSelect')) el('b1ManualVendorSelect').focus();
+        }
+      });
+    }
+    if (b1SearchBtn) {
+      b1SearchBtn.addEventListener('click', () => {
+        const val = b1SearchInput ? b1SearchInput.value : '';
+        filterVendorDropdown('b1ManualVendorSelect', val);
+        if (el('b1ManualVendorSelect')) el('b1ManualVendorSelect').focus();
+      });
+    }
+
     const addManualBtn = el('addManualEntryBtn');
     if (addManualBtn) {
       addManualBtn.addEventListener('click', handleAddManualEntry);
@@ -180,6 +234,28 @@ const GenerateScreen = (() => {
       manualVendorSelect.addEventListener('change', () => {
         const idInput = el('manualIdNumber');
         if (idInput) idInput.value = ''; // Keep blank for explicit mandatory user entry
+      });
+    }
+
+    const manualSearchInput = el('manualVendorSearchInput');
+    const manualSearchBtn = el('manualVendorSearchBtn');
+    if (manualSearchInput) {
+      manualSearchInput.addEventListener('input', () => {
+        filterVendorDropdown('manualVendorSelect', manualSearchInput.value);
+      });
+      manualSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          filterVendorDropdown('manualVendorSelect', manualSearchInput.value);
+          if (el('manualVendorSelect')) el('manualVendorSelect').focus();
+        }
+      });
+    }
+    if (manualSearchBtn) {
+      manualSearchBtn.addEventListener('click', () => {
+        const val = manualSearchInput ? manualSearchInput.value : '';
+        filterVendorDropdown('manualVendorSelect', val);
+        if (el('manualVendorSelect')) el('manualVendorSelect').focus();
       });
     }
 
@@ -638,6 +714,8 @@ const GenerateScreen = (() => {
 
     const success = await handleSubmitB1ManualBatch(false);
     if (success) {
+      if (el('b1ManualVendorSearchInput')) el('b1ManualVendorSearchInput').value = '';
+      filterVendorDropdown('b1ManualVendorSelect', '');
       if (vendorSelect) vendorSelect.value = '';
       if (amtInput) amtInput.value = '';
       if (idInput) idInput.value = '';
@@ -747,6 +825,8 @@ const GenerateScreen = (() => {
 
     const success = await handleSubmitManualBatch(false);
     if (success) {
+      if (el('manualVendorSearchInput')) el('manualVendorSearchInput').value = '';
+      filterVendorDropdown('manualVendorSelect', '');
       if (vendorSelect) vendorSelect.value = '';
       if (amtInput) amtInput.value = '';
       if (idInput) idInput.value = '';
