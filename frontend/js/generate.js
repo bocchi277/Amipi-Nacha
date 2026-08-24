@@ -22,6 +22,7 @@ const GenerateScreen = (() => {
   function el(id) { return document.getElementById(id); }
 
   function init() {
+    initVendorComboboxes();
     bindEvents();
     setDefaultEffectiveDate();
     loadVendors();
@@ -63,55 +64,225 @@ const GenerateScreen = (() => {
     discPrev.textContent = digits.padStart(20, '0');
   }
 
-  function filterVendorDropdown(selectId, searchTerm = '') {
-    const select = el(selectId);
-    if (!select) return;
+  let b1VendorCombobox = null;
+  let manualVendorCombobox = null;
 
-    const term = (searchTerm || '').trim().toLowerCase();
-    const currentVal = select.value;
+  function createSearchableVendorCombobox(config) {
+    const {
+      wrapperId,
+      hiddenInputId,
+      triggerId,
+      labelId,
+      dropdownId,
+      searchInputId,
+      optionsId,
+      onSelect,
+    } = config;
 
-    select.innerHTML = '<option value="">-- Select Vendor --</option>';
+    const wrapper = el(wrapperId);
+    const hiddenInput = el(hiddenInputId);
+    const trigger = el(triggerId);
+    const label = el(labelId);
+    const dropdown = el(dropdownId);
+    const searchInput = el(searchInputId);
+    const optionsContainer = el(optionsId);
 
-    const activeVendors = loadedVendors.filter(v => v.is_active !== false);
-    const filtered = activeVendors.filter(v => {
-      if (!term) return true;
-      const name = (v.name || '').toLowerCase();
-      const refId = ((v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '')).toLowerCase();
-      const routing = (v.routing_number || '').toLowerCase();
-      const acct = (v.account_number || '').toLowerCase();
-      const email = (v.email || '').toLowerCase();
+    let isOpen = false;
+    let vendors = [];
 
-      return name.includes(term) || refId.includes(term) || routing.includes(term) || acct.includes(term) || email.includes(term);
-    });
+    function renderOptions(filterTerm = '') {
+      if (!optionsContainer) return;
+      optionsContainer.innerHTML = '';
 
-    if (filtered.length === 0) {
-      select.innerHTML = '<option value="">No matching vendors found</option>';
-      return;
-    }
+      const term = (filterTerm || '').trim().toLowerCase();
+      const currentSelectedId = hiddenInput ? hiddenInput.value : '';
 
-    filtered.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.id;
-      const vId = (v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '—');
-      opt.textContent = `${v.name} (ID: ${vId}, Routing: ${v.routing_number})`;
-      if (v.id === currentVal) {
-        opt.selected = true;
+      const activeVendors = vendors.filter(v => v.is_active !== false);
+      const filtered = activeVendors.filter(v => {
+        if (!term) return true;
+        const name = (v.name || '').toLowerCase();
+        const refId = ((v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '')).toLowerCase();
+        const routing = (v.routing_number || '').toLowerCase();
+        const acct = (v.account_number || '').toLowerCase();
+        const email = (v.email || '').toLowerCase();
+
+        return name.includes(term) || refId.includes(term) || routing.includes(term) || acct.includes(term) || email.includes(term);
+      });
+
+      if (filtered.length === 0) {
+        const noResults = document.createElement('div');
+        noResults.className = 'custom-select-no-results';
+        noResults.textContent = 'No matching vendors found';
+        optionsContainer.appendChild(noResults);
+        return;
       }
-      select.appendChild(opt);
+
+      filtered.forEach(v => {
+        const opt = document.createElement('div');
+        opt.className = 'custom-select-option';
+        const isSelected = String(v.id) === String(currentSelectedId);
+        if (isSelected) opt.classList.add('selected');
+
+        const vId = (v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '—');
+        opt.innerHTML = `
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-weight: 600; color: var(--color-text);">${v.name}</span>
+            <span class="font-mono text-muted" style="font-size: 11px;">ID: ${vId} · Routing: ${v.routing_number}</span>
+          </div>
+        `;
+
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectVendor(v);
+        });
+
+        optionsContainer.appendChild(opt);
+      });
+    }
+
+    function selectVendor(vendor) {
+      if (!vendor) {
+        if (hiddenInput) hiddenInput.value = '';
+        if (label) {
+          label.textContent = '-- Select Vendor --';
+          label.classList.add('placeholder');
+        }
+      } else {
+        if (hiddenInput) hiddenInput.value = vendor.id;
+        const vId = (vendor.account_number && vendor.account_number.length >= 5) ? vendor.account_number.slice(-5) : (vendor.default_id_number || '—');
+        if (label) {
+          label.textContent = `${vendor.name} (ID: ${vId}, Routing: ${vendor.routing_number})`;
+          label.classList.remove('placeholder');
+        }
+      }
+      close();
+      if (typeof onSelect === 'function') {
+        onSelect(vendor);
+      }
+    }
+
+    function open() {
+      if (isOpen) return;
+      document.querySelectorAll('.custom-select-dropdown').forEach(d => d.style.display = 'none');
+      document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
+
+      isOpen = true;
+      if (dropdown) dropdown.style.display = 'block';
+      if (wrapper) wrapper.classList.add('open');
+      if (searchInput) {
+        searchInput.value = '';
+        renderOptions('');
+        setTimeout(() => searchInput.focus(), 50);
+      }
+    }
+
+    function close() {
+      if (!isOpen) return;
+      isOpen = false;
+      if (dropdown) dropdown.style.display = 'none';
+      if (wrapper) wrapper.classList.remove('open');
+    }
+
+    function toggle() {
+      if (isOpen) close();
+      else open();
+    }
+
+    if (trigger) {
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggle();
+      });
+      trigger.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        } else if (e.key === 'Escape') {
+          close();
+        }
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        renderOptions(searchInput.value);
+      });
+      searchInput.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          close();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const firstOpt = optionsContainer ? optionsContainer.querySelector('.custom-select-option') : null;
+          if (firstOpt) firstOpt.click();
+        }
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (wrapper && !wrapper.contains(e.target)) {
+        close();
+      }
     });
 
-    // If search term filtered to exactly 1 vendor, auto-select it
-    if (term && filtered.length === 1) {
-      select.value = filtered[0].id;
-    }
+    return {
+      setVendors: (newVendors) => {
+        vendors = newVendors || [];
+        renderOptions('');
+      },
+      reset: () => {
+        selectVendor(null);
+        if (searchInput) searchInput.value = '';
+        renderOptions('');
+      },
+      getValue: () => (hiddenInput ? hiddenInput.value : ''),
+      setValue: (vendorId) => {
+        const found = vendors.find(v => String(v.id) === String(vendorId));
+        selectVendor(found || null);
+      },
+      close,
+      open,
+    };
+  }
+
+  function initVendorComboboxes() {
+    b1VendorCombobox = createSearchableVendorCombobox({
+      wrapperId: 'b1ManualVendorWrapper',
+      hiddenInputId: 'b1ManualVendorSelect',
+      triggerId: 'b1ManualVendorTrigger',
+      labelId: 'b1ManualVendorLabel',
+      dropdownId: 'b1ManualVendorDropdown',
+      searchInputId: 'b1ManualVendorSearchInput',
+      optionsId: 'b1ManualVendorOptions',
+      onSelect: () => {
+        const idInput = el('b1ManualIdNumber');
+        if (idInput) idInput.value = ''; // Always stay blank for explicit mandatory entry
+      }
+    });
+
+    manualVendorCombobox = createSearchableVendorCombobox({
+      wrapperId: 'manualVendorWrapper',
+      hiddenInputId: 'manualVendorSelect',
+      triggerId: 'manualVendorTrigger',
+      labelId: 'manualVendorLabel',
+      dropdownId: 'manualVendorDropdown',
+      searchInputId: 'manualVendorSearchInput',
+      optionsId: 'manualVendorOptions',
+      onSelect: () => {
+        const idInput = el('manualIdNumber');
+        if (idInput) idInput.value = ''; // Always stay blank for explicit mandatory entry
+      }
+    });
   }
 
   async function loadVendors() {
     try {
       const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
-      filterVendorDropdown('manualVendorSelect', '');
-      filterVendorDropdown('b1ManualVendorSelect', '');
+      if (b1VendorCombobox) b1VendorCombobox.setVendors(loadedVendors);
+      if (manualVendorCombobox) manualVendorCombobox.setVendors(loadedVendors);
     } catch (err) {
       console.warn('Failed to load vendors for manual entry dropdown:', err);
     }
@@ -194,69 +365,10 @@ const GenerateScreen = (() => {
       addB1ManualBtn.addEventListener('click', handleAddB1ManualEntry);
     }
 
-    const b1ManualVendorSelect = el('b1ManualVendorSelect');
-    if (b1ManualVendorSelect) {
-      b1ManualVendorSelect.addEventListener('change', () => {
-        const idInput = el('b1ManualIdNumber');
-        if (idInput) idInput.value = ''; // Keep blank for explicit mandatory user entry
-      });
-    }
-
-    const b1SearchInput = el('b1ManualVendorSearchInput');
-    const b1SearchBtn = el('b1ManualVendorSearchBtn');
-    if (b1SearchInput) {
-      b1SearchInput.addEventListener('input', () => {
-        filterVendorDropdown('b1ManualVendorSelect', b1SearchInput.value);
-      });
-      b1SearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          filterVendorDropdown('b1ManualVendorSelect', b1SearchInput.value);
-          if (el('b1ManualVendorSelect')) el('b1ManualVendorSelect').focus();
-        }
-      });
-    }
-    if (b1SearchBtn) {
-      b1SearchBtn.addEventListener('click', () => {
-        const val = b1SearchInput ? b1SearchInput.value : '';
-        filterVendorDropdown('b1ManualVendorSelect', val);
-        if (el('b1ManualVendorSelect')) el('b1ManualVendorSelect').focus();
-      });
-    }
-
+    // Batch 2 Manual Entry Form Listeners
     const addManualBtn = el('addManualEntryBtn');
     if (addManualBtn) {
       addManualBtn.addEventListener('click', handleAddManualEntry);
-    }
-
-    const manualVendorSelect = el('manualVendorSelect');
-    if (manualVendorSelect) {
-      manualVendorSelect.addEventListener('change', () => {
-        const idInput = el('manualIdNumber');
-        if (idInput) idInput.value = ''; // Keep blank for explicit mandatory user entry
-      });
-    }
-
-    const manualSearchInput = el('manualVendorSearchInput');
-    const manualSearchBtn = el('manualVendorSearchBtn');
-    if (manualSearchInput) {
-      manualSearchInput.addEventListener('input', () => {
-        filterVendorDropdown('manualVendorSelect', manualSearchInput.value);
-      });
-      manualSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          filterVendorDropdown('manualVendorSelect', manualSearchInput.value);
-          if (el('manualVendorSelect')) el('manualVendorSelect').focus();
-        }
-      });
-    }
-    if (manualSearchBtn) {
-      manualSearchBtn.addEventListener('click', () => {
-        const val = manualSearchInput ? manualSearchInput.value : '';
-        filterVendorDropdown('manualVendorSelect', val);
-        if (el('manualVendorSelect')) el('manualVendorSelect').focus();
-      });
     }
 
     const manualRetryOverrideBtn = el('manualRetryOverrideBtn');
@@ -681,7 +793,6 @@ const GenerateScreen = (() => {
   }
 
   async function handleAddB1ManualEntry() {
-    const vendorSelect = el('b1ManualVendorSelect');
     const amtInput = el('b1ManualAmount');
     const idInput = el('b1ManualIdNumber');
     const dateInput = el('b1ManualEffDate');
@@ -689,7 +800,7 @@ const GenerateScreen = (() => {
 
     if (errBox) errBox.style.display = 'none';
 
-    const vendorId = vendorSelect ? vendorSelect.value : '';
+    const vendorId = b1VendorCombobox ? b1VendorCombobox.getValue() : (el('b1ManualVendorSelect') ? el('b1ManualVendorSelect').value : '');
     const amountVal = amtInput ? amtInput.value.trim() : '';
     const idNum = idInput ? idInput.value.trim() : '';
     const effDate = dateInput ? dateInput.value.trim() : '';
@@ -699,7 +810,7 @@ const GenerateScreen = (() => {
     if (!idNum) return showB1ManualError('Invoice / Ref # is mandatory.');
     if (!effDate) return showB1ManualError('Effective Date is mandatory.');
 
-    const vendorObj = loadedVendors.find(v => v.id === vendorId);
+    const vendorObj = loadedVendors.find(v => String(v.id) === String(vendorId));
     if (!vendorObj) return showB1ManualError('Selected vendor is invalid.');
 
     b1ManualDraftEntries.push({
@@ -714,9 +825,7 @@ const GenerateScreen = (() => {
 
     const success = await handleSubmitB1ManualBatch(false);
     if (success) {
-      if (el('b1ManualVendorSearchInput')) el('b1ManualVendorSearchInput').value = '';
-      filterVendorDropdown('b1ManualVendorSelect', '');
-      if (vendorSelect) vendorSelect.value = '';
+      if (b1VendorCombobox) b1VendorCombobox.reset();
       if (amtInput) amtInput.value = '';
       if (idInput) idInput.value = '';
       if (window.showToast) {
@@ -792,7 +901,6 @@ const GenerateScreen = (() => {
 
   // ── Batch 2: Manual Payment Entry ─────────────────────────────
   async function handleAddManualEntry() {
-    const vendorSelect = el('manualVendorSelect');
     const amtInput = el('manualAmount');
     const idInput = el('manualIdNumber');
     const dateInput = el('manualEffDate');
@@ -800,7 +908,7 @@ const GenerateScreen = (() => {
 
     if (errBox) errBox.style.display = 'none';
 
-    const vendorId = vendorSelect ? vendorSelect.value : '';
+    const vendorId = manualVendorCombobox ? manualVendorCombobox.getValue() : (el('manualVendorSelect') ? el('manualVendorSelect').value : '');
     const amountVal = amtInput ? amtInput.value.trim() : '';
     const idNum = idInput ? idInput.value.trim() : '';
     const effDate = dateInput ? dateInput.value.trim() : '';
@@ -810,7 +918,7 @@ const GenerateScreen = (() => {
     if (!idNum) return showManualError('Invoice / Ref # is mandatory.');
     if (!effDate) return showManualError('Effective Date is mandatory.');
 
-    const vendorObj = loadedVendors.find(v => v.id === vendorId);
+    const vendorObj = loadedVendors.find(v => String(v.id) === String(vendorId));
     if (!vendorObj) return showManualError('Selected vendor is invalid.');
 
     manualDraftEntries.push({
@@ -825,9 +933,7 @@ const GenerateScreen = (() => {
 
     const success = await handleSubmitManualBatch(false);
     if (success) {
-      if (el('manualVendorSearchInput')) el('manualVendorSearchInput').value = '';
-      filterVendorDropdown('manualVendorSelect', '');
-      if (vendorSelect) vendorSelect.value = '';
+      if (manualVendorCombobox) manualVendorCombobox.reset();
       if (amtInput) amtInput.value = '';
       if (idInput) idInput.value = '';
       if (window.showToast) {
