@@ -73,6 +73,7 @@ const GenerateScreen = (() => {
       hiddenInputId,
       triggerId,
       labelId,
+      clearBtnId,
       dropdownId,
       searchInputId,
       optionsId,
@@ -83,16 +84,19 @@ const GenerateScreen = (() => {
     const hiddenInput = el(hiddenInputId);
     const trigger = el(triggerId);
     const label = el(labelId);
+    const clearBtn = el(clearBtnId);
     const dropdown = el(dropdownId);
     const searchInput = el(searchInputId);
     const optionsContainer = el(optionsId);
 
     let isOpen = false;
     let vendors = [];
+    let highlightedIndex = -1;
 
     function renderOptions(filterTerm = '') {
       if (!optionsContainer) return;
       optionsContainer.innerHTML = '';
+      highlightedIndex = -1;
 
       const term = (filterTerm || '').trim().toLowerCase();
       const currentSelectedId = hiddenInput ? hiddenInput.value : '';
@@ -112,23 +116,36 @@ const GenerateScreen = (() => {
       if (filtered.length === 0) {
         const noResults = document.createElement('div');
         noResults.className = 'custom-select-no-results';
-        noResults.textContent = 'No matching vendors found';
+        noResults.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+          <div style="font-weight: 600; color: #475569;">No matching vendors found</div>
+          <div style="font-size: 11px; color: #94a3b8;">Try searching by vendor name, routing #, or ID</div>
+        `;
         optionsContainer.appendChild(noResults);
         return;
       }
 
-      filtered.forEach(v => {
+      filtered.forEach((v, idx) => {
         const opt = document.createElement('div');
-        opt.className = 'custom-select-option';
         const isSelected = String(v.id) === String(currentSelectedId);
-        if (isSelected) opt.classList.add('selected');
+        opt.className = 'custom-select-option' + (isSelected ? ' selected' : '');
+        opt.setAttribute('data-index', idx);
+        opt.setAttribute('role', 'option');
 
         const vId = (v.account_number && v.account_number.length >= 5) ? v.account_number.slice(-5) : (v.default_id_number || '—');
+        const routing = v.routing_number || '—';
+        const acctLast4 = (v.account_number && v.account_number.length >= 4) ? `****${v.account_number.slice(-4)}` : (v.account_number || '');
+
         opt.innerHTML = `
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-weight: 600; color: var(--color-text);">${v.name}</span>
-            <span class="font-mono text-muted" style="font-size: 11px;">ID: ${vId} · Routing: ${v.routing_number}</span>
+          <div class="custom-select-option-main">
+            <span class="custom-select-option-name">${v.name}</span>
+            <div class="custom-select-option-tags">
+              <span class="custom-select-tag">ID: ${vId}</span>
+              <span class="custom-select-tag">Routing: ${routing}</span>
+              ${acctLast4 ? `<span class="custom-select-tag">Acct: ${acctLast4}</span>` : ''}
+            </div>
           </div>
+          ${isSelected ? `<svg class="custom-select-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>` : ''}
         `;
 
         opt.addEventListener('click', (e) => {
@@ -147,6 +164,7 @@ const GenerateScreen = (() => {
           label.textContent = '-- Select Vendor --';
           label.classList.add('placeholder');
         }
+        if (wrapper) wrapper.classList.remove('has-value');
       } else {
         if (hiddenInput) hiddenInput.value = vendor.id;
         const vId = (vendor.account_number && vendor.account_number.length >= 5) ? vendor.account_number.slice(-5) : (vendor.default_id_number || '—');
@@ -154,6 +172,7 @@ const GenerateScreen = (() => {
           label.textContent = `${vendor.name} (ID: ${vId}, Routing: ${vendor.routing_number})`;
           label.classList.remove('placeholder');
         }
+        if (wrapper) wrapper.classList.add('has-value');
       }
       close();
       if (typeof onSelect === 'function') {
@@ -181,6 +200,7 @@ const GenerateScreen = (() => {
       isOpen = false;
       if (dropdown) dropdown.style.display = 'none';
       if (wrapper) wrapper.classList.remove('open');
+      highlightedIndex = -1;
     }
 
     function toggle() {
@@ -190,6 +210,7 @@ const GenerateScreen = (() => {
 
     if (trigger) {
       trigger.addEventListener('click', (e) => {
+        if (e.target.closest('.custom-select-clear-btn')) return;
         e.stopPropagation();
         toggle();
       });
@@ -203,6 +224,13 @@ const GenerateScreen = (() => {
       });
     }
 
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectVendor(null);
+      });
+    }
+
     if (searchInput) {
       searchInput.addEventListener('input', () => {
         renderOptions(searchInput.value);
@@ -211,12 +239,40 @@ const GenerateScreen = (() => {
         e.stopPropagation();
       });
       searchInput.addEventListener('keydown', (e) => {
+        const optionEls = optionsContainer ? optionsContainer.querySelectorAll('.custom-select-option') : [];
+
         if (e.key === 'Escape') {
           close();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (optionEls.length > 0) {
+            highlightedIndex = (highlightedIndex + 1) % optionEls.length;
+            updateHighlight(optionEls);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (optionEls.length > 0) {
+            highlightedIndex = (highlightedIndex - 1 + optionEls.length) % optionEls.length;
+            updateHighlight(optionEls);
+          }
         } else if (e.key === 'Enter') {
           e.preventDefault();
-          const firstOpt = optionsContainer ? optionsContainer.querySelector('.custom-select-option') : null;
-          if (firstOpt) firstOpt.click();
+          if (highlightedIndex >= 0 && optionEls[highlightedIndex]) {
+            optionEls[highlightedIndex].click();
+          } else if (optionEls.length > 0) {
+            optionEls[0].click();
+          }
+        }
+      });
+    }
+
+    function updateHighlight(optionEls) {
+      optionEls.forEach((el, idx) => {
+        if (idx === highlightedIndex) {
+          el.classList.add('highlighted');
+          el.scrollIntoView({ block: 'nearest' });
+        } else {
+          el.classList.remove('highlighted');
         }
       });
     }
@@ -253,6 +309,7 @@ const GenerateScreen = (() => {
       hiddenInputId: 'b1ManualVendorSelect',
       triggerId: 'b1ManualVendorTrigger',
       labelId: 'b1ManualVendorLabel',
+      clearBtnId: 'b1ManualVendorClearBtn',
       dropdownId: 'b1ManualVendorDropdown',
       searchInputId: 'b1ManualVendorSearchInput',
       optionsId: 'b1ManualVendorOptions',
@@ -267,6 +324,7 @@ const GenerateScreen = (() => {
       hiddenInputId: 'manualVendorSelect',
       triggerId: 'manualVendorTrigger',
       labelId: 'manualVendorLabel',
+      clearBtnId: 'manualVendorClearBtn',
       dropdownId: 'manualVendorDropdown',
       searchInputId: 'manualVendorSearchInput',
       optionsId: 'manualVendorOptions',
