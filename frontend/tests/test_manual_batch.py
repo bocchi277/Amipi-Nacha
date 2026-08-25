@@ -116,6 +116,11 @@ def test_valid_manual_batch_entry(page: Page, base_url: str):
     expect(tbody).to_contain_text(inv_ref)
     expect(tbody).to_contain_text("Valid")
 
+    # Staged draft box should be hidden post-submit to prevent visual repetition
+    expect(page.locator("#manualDraftSection")).to_be_hidden()
+    expect(tbody.locator("button:has-text('Edit')")).to_be_visible()
+    expect(tbody.locator("button:has-text('Remove')")).to_be_visible()
+
     # No duplicate warning banner
     expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
 
@@ -136,6 +141,7 @@ def test_flagged_duplicate_manual_entry_override(page: Page, base_url: str):
     page.click("#submitManualBatchBtn")
 
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    expect(page.locator("#manualDraftSection")).to_be_hidden()
     expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
 
     # Second manual entry with EXACT SAME parameters -> duplicate
@@ -157,9 +163,52 @@ def test_flagged_duplicate_manual_entry_override(page: Page, base_url: str):
 
     # Results section should update with override status
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    expect(page.locator("#manualDraftSection")).to_be_hidden()
     expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
 
     # Valid table displays Override Duplicate badge
     tbody = page.locator("#manualValidPaymentsTableBody")
     expect(tbody).to_contain_text(v_name)
     expect(tbody).to_contain_text("Override Duplicate")
+
+
+def test_edit_batch2_saved_payment_and_toggle_draft(page: Page, base_url: str):
+    """Test editing a saved Batch 2 payment row and toggling draft section."""
+    v_name, v_id = _register_login_and_create_vendor(page, base_url)
+
+    inv_ref = f"ED-{uuid.uuid4().hex[:4]}"
+    updated_ref = f"ED2-{uuid.uuid4().hex[:4]}"
+
+    page.select_option("#manualVendorSelect", v_id)
+    page.fill("#manualAmount", "1000.00")
+    page.fill("#manualIdNumber", inv_ref)
+    page.fill("#manualEffDate", "2026-08-15")
+    page.click("#addManualEntryBtn")
+    expect(page.locator("#manualDraftSection")).to_be_visible()
+
+    # Submit batch
+    page.click("#submitManualBatchBtn")
+    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    expect(page.locator("#manualDraftSection")).to_be_hidden()
+
+    # Click Edit button on the saved row
+    page.locator("#manualValidPaymentsTableBody button:has-text('Edit')").click()
+    expect(page.locator("#editPaymentRowModal")).to_be_visible()
+    expect(page.locator("#editPaymentAmount")).to_have_value("1000.00")
+    expect(page.locator("#editPaymentRef")).to_have_value(inv_ref)
+
+    # Modify amount and invoice ref (within NACHA 15 chars limit)
+    page.fill("#editPaymentAmount", "1500.00")
+    page.fill("#editPaymentRef", updated_ref)
+    page.click("#saveEditPaymentBtn")
+
+    # Modal should close and table/stats should update
+    expect(page.locator("#editPaymentRowModal")).to_be_hidden()
+    expect(page.locator("#manualStatTotalAmount")).to_contain_text("$1,500.00")
+    expect(page.locator("#manualValidPaymentsTableBody")).to_contain_text("$1,500.00")
+    expect(page.locator("#manualValidPaymentsTableBody")).to_contain_text(updated_ref)
+
+    # Toggle draft section open to add more lines
+    page.click("#toggleManualDraftBtn")
+    expect(page.locator("#manualDraftSection")).to_be_visible()
+

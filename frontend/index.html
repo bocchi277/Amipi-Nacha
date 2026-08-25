@@ -382,47 +382,6 @@
                 </table>
               </div>
             </div>
-
-
-            <!-- Edit Payment Row Modal -->
-            <div class="modal-backdrop" id="editPaymentRowModal">
-              <div class="modal-card" style="max-width: 680px;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
-                  <h3 class="card-title" style="margin-bottom: 0;">Edit Payment Item Details</h3>
-                  <button type="button" class="btn btn-secondary btn-sm" id="closeEditPaymentModalBtn" style="padding: 2px 8px;">✕</button>
-                </div>
-
-                <div class="alert alert-error" id="editPaymentModalError" style="display: none; margin-bottom: var(--space-md);"></div>
-
-                <form id="editPaymentRowForm" onsubmit="event.preventDefault();">
-                  <input type="hidden" id="editPaymentIndex" />
-                  <input type="hidden" id="editPaymentId" />
-
-                  <div class="form-group" style="margin-bottom: var(--space-md);">
-                    <label class="form-label" for="editPaymentVendorName">Payee / Vendor Name</label>
-                    <input type="text" class="form-input" id="editPaymentVendorName" disabled style="background: var(--color-surface-alt, #f8fafc);" />
-                  </div>
-
-                  <div class="form-group" style="margin-bottom: var(--space-md);">
-                    <label class="form-label" for="editPaymentAmount">Payment Amount ($)</label>
-                    <input type="number" step="0.01" min="0.01" class="form-input font-mono" id="editPaymentAmount" required />
-                  </div>
-
-                  <div class="form-group" style="margin-bottom: var(--space-lg);">
-                    <label class="form-label" for="editPaymentRef">Invoice / Ref # <span class="text-danger" style="color: #dc2626;">*</span></label>
-                    <input type="text" class="form-input font-mono" id="editPaymentRef" required />
-                  </div>
-
-                  <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" id="cancelEditPaymentModalBtn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="saveEditPaymentBtn">
-                      <span class="spinner" id="editPaymentSpinner" style="display: none;"></span>
-                      <span>Save Changes</span>
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
           </div>
 
           <!-- Manual Payment Entry Card (Batch 2) -->
@@ -567,7 +526,12 @@
 
             <!-- Valid Payments List Table -->
             <div class="card">
-              <div class="card-title">Saved Valid Payments (Batch 2)</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                <div class="card-title" style="margin-bottom: 0;">Saved Valid Payments (Batch 2)</div>
+                <button type="button" class="btn btn-secondary btn-sm" id="toggleManualDraftBtn" onclick="GenerateScreen.toggleManualDraftSection()" style="font-size: var(--text-xs); padding: 4px 10px;">
+                  + Add More Lines
+                </button>
+              </div>
               <div class="payments-table-wrap">
                 <table class="data-table">
                   <thead>
@@ -579,7 +543,7 @@
                       <th>Amount ($)</th>
                       <th>Invoice / Ref #</th>
                       <th>Status</th>
-                      <th style="text-align: right; width: 80px;">Action</th>
+                      <th style="text-align: right; width: 140px;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="manualValidPaymentsTableBody"></tbody>
@@ -660,6 +624,46 @@
               <button type="button" class="btn btn-secondary" id="copyNachaBtn">
                 <span>Copy NACHA Text</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Edit Payment Row Modal -->
+          <div class="modal-backdrop" id="editPaymentRowModal">
+            <div class="modal-card" style="max-width: 680px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+                <h3 class="card-title" style="margin-bottom: 0;">Edit Payment Item Details</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeEditPaymentModalBtn" style="padding: 2px 8px;">✕</button>
+              </div>
+
+              <div class="alert alert-error" id="editPaymentModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <form id="editPaymentRowForm" onsubmit="event.preventDefault();">
+                <input type="hidden" id="editPaymentIndex" />
+                <input type="hidden" id="editPaymentId" />
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="editPaymentVendorName">Payee / Vendor Name</label>
+                  <input type="text" class="form-input" id="editPaymentVendorName" disabled style="background: var(--color-surface-alt, #f8fafc);" />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                  <label class="form-label" for="editPaymentAmount">Payment Amount ($)</label>
+                  <input type="number" step="0.01" min="0.01" class="form-input font-mono" id="editPaymentAmount" required />
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-lg);">
+                  <label class="form-label" for="editPaymentRef">Invoice / Ref # <span class="text-danger" style="color: #dc2626;">*</span></label>
+                  <input type="text" class="form-input font-mono" id="editPaymentRef" required />
+                </div>
+
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                  <button type="button" class="btn btn-secondary" id="cancelEditPaymentModalBtn">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="saveEditPaymentBtn">
+                    <span class="spinner" id="editPaymentSpinner" style="display: none;"></span>
+                    <span>Save Changes</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -1432,6 +1436,7 @@
             </div>
           </div>
         </div>
+
     <!-- Global Itemized Invoice Price Breakdown Modal -->
     <div class="modal-backdrop" id="invoiceBreakdownModal">
       <div class="modal-card" style="max-width: 760px;">

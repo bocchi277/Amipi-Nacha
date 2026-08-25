@@ -17,6 +17,8 @@ const GenerateScreen = (() => {
 
   let batch1Id = null;
   let batch2Id = null;
+  let lastBatch2Response = null;
+  let currentEditBatchType = 'batch1';
   let batch2OverrideActive = false;
   let generatedNachaRecord = null;
 
@@ -487,6 +489,8 @@ const GenerateScreen = (() => {
 
     if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', hideEditRowModal);
     if (cancelEditModalBtn) cancelEditModalBtn.addEventListener('click', hideEditRowModal);
+    if (editForm) editForm.addEventListener('submit', handleSaveEditPayment);
+
     // Breakdown Modal Listeners
     const closeBreakdownBtn = el('closeBreakdownModalBtn');
     const cancelBreakdownBtn = el('cancelBreakdownModalBtn');
@@ -494,26 +498,17 @@ const GenerateScreen = (() => {
     if (cancelBreakdownBtn) cancelBreakdownBtn.addEventListener('click', hideBreakdownModal);
   }
 
-  return {
-    init,
-    handleUpload,
-    loadVendors,
-    switchBatch1Mode,
-    handleAddB1ManualEntry,
-    removeB1ManualEntry,
-    handleSubmitB1ManualBatch,
-    removeManualEntry,
-    handleSubmitManualBatch,
-    handleGenerateNacha,
-    handleDownloadNacha,
-    openEditRowModal,
-    openBreakdownModal,
-  };
+  function openEditRowModal(idx, batchType = 'batch1') {
+    currentEditBatchType = batchType;
 
+    let p = null;
+    if (batchType === 'batch2') {
+      p = (lastBatch2Response && lastBatch2Response.valid_payments && lastBatch2Response.valid_payments[idx]) || manualDraftEntries[idx];
+    } else {
+      p = lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments[idx];
+    }
 
-  function openEditRowModal(idx) {
-    if (!lastUploadResponse || !lastUploadResponse.valid_payments || !lastUploadResponse.valid_payments[idx]) return;
-    const p = lastUploadResponse.valid_payments[idx];
+    if (!p) return;
 
     el('editPaymentIndex').value = idx;
     el('editPaymentId').value = p.payment_id || '';
@@ -558,7 +553,6 @@ const GenerateScreen = (() => {
       return;
     }
 
-    const p = lastUploadResponse.valid_payments[idx];
     const newAmount = parseFloat(newAmountVal);
 
     // Sync update to backend PostgreSQL if payment_id is present BEFORE updating UI
@@ -577,23 +571,58 @@ const GenerateScreen = (() => {
       }
     }
 
-    p.amount = newAmount.toFixed(2);
-    p.id_number = newRefVal;
+    if (currentEditBatchType === 'batch2') {
+      if (lastBatch2Response && lastBatch2Response.valid_payments && lastBatch2Response.valid_payments[idx]) {
+        const p = lastBatch2Response.valid_payments[idx];
+        p.amount = newAmount.toFixed(2);
+        p.id_number = newRefVal;
+      }
+      if (manualDraftEntries[idx]) {
+        manualDraftEntries[idx].amount = newAmount.toFixed(2);
+        manualDraftEntries[idx].id_number = newRefVal;
+      }
 
-    // Recalculate summary total amount
-    let sumAmt = 0;
-    lastUploadResponse.valid_payments.forEach(vp => {
-      sumAmt += parseFloat(vp.amount || 0);
-    });
-    if (lastUploadResponse.summary) {
-      lastUploadResponse.summary.total_amount = sumAmt.toFixed(2);
+      // Recalculate summary total amount
+      let sumAmt = 0;
+      if (lastBatch2Response && lastBatch2Response.valid_payments) {
+        lastBatch2Response.valid_payments.forEach(vp => {
+          sumAmt += parseFloat(vp.amount || 0);
+        });
+        if (lastBatch2Response.summary) {
+          lastBatch2Response.summary.total_amount = sumAmt.toFixed(2);
+        }
+      } else {
+        sumAmt = manualDraftEntries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+      }
+      if (el('manualStatTotalAmount')) {
+        el('manualStatTotalAmount').textContent = `$${sumAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+
+      // Re-render Batch 2 valid payments table
+      if (lastBatch2Response && lastBatch2Response.valid_payments) {
+        renderValidPaymentsTable(lastBatch2Response.valid_payments, 'manualValidPaymentsTableBody');
+      }
+    } else {
+      const p = lastUploadResponse.valid_payments[idx];
+      p.amount = newAmount.toFixed(2);
+      p.id_number = newRefVal;
+
+      // Recalculate summary total amount
+      let sumAmt = 0;
+      lastUploadResponse.valid_payments.forEach(vp => {
+        sumAmt += parseFloat(vp.amount || 0);
+      });
+      if (lastUploadResponse.summary) {
+        lastUploadResponse.summary.total_amount = sumAmt.toFixed(2);
+      }
+      el('statTotalAmount').textContent = `$${sumAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      // Re-render Batch 1 valid payments table
+      renderValidPaymentsTable(lastUploadResponse.valid_payments, 'validPaymentsTableBody');
     }
-    el('statTotalAmount').textContent = `$${sumAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-    // Re-render table
-    renderValidPaymentsTable(lastUploadResponse.valid_payments, 'validPaymentsTableBody');
 
     hideEditRowModal();
+    if (window.showToast) window.showToast('Payment item updated successfully.', 'success');
   }
 
 
@@ -780,9 +809,14 @@ const GenerateScreen = (() => {
 
       let actionBtn = '';
       if (isBatch2) {
-        actionBtn = `<button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualEntry(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">Remove</button>`;
+        actionBtn = `
+          <div style="display: flex; gap: 6px; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openEditRowModal(${idx}, 'batch2')" style="padding: 2px 8px; font-size: var(--text-xs);">Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualEntry(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">Remove</button>
+          </div>
+        `;
       } else {
-        actionBtn = `<button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openEditRowModal(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">Edit</button>`;
+        actionBtn = `<button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.openEditRowModal(${idx}, 'batch1')" style="padding: 2px 8px; font-size: var(--text-xs);">Edit</button>`;
       }
 
       tr.innerHTML = `
@@ -1088,19 +1122,37 @@ const GenerateScreen = (() => {
   async function removeManualEntry(index) {
     if (index >= 0 && index < manualDraftEntries.length) {
       const removed = manualDraftEntries.splice(index, 1)[0];
-      renderManualDraftTable();
+      if (lastBatch2Response && lastBatch2Response.valid_payments && lastBatch2Response.valid_payments[index]) {
+        lastBatch2Response.valid_payments.splice(index, 1);
+      }
+
       if (manualDraftEntries.length === 0) {
         batch2Id = null;
+        lastBatch2Response = null;
         batch2OverrideActive = false;
         if (el('manualResultsSection')) el('manualResultsSection').style.display = 'none';
+        if (el('manualDraftSection')) el('manualDraftSection').style.display = 'none';
         checkNachaGenerateButtonState();
         if (window.showToast) window.showToast('Removed all entries from Batch 2.', 'info');
       } else if (batch2Id) {
         await handleSubmitManualBatch(batch2OverrideActive);
         if (window.showToast) window.showToast(`Removed entry for ${removed.vendor_name} from Batch 2.`, 'info');
       } else {
+        renderManualDraftTable();
         if (window.showToast) window.showToast(`Removed staged entry for ${removed.vendor_name}.`, 'info');
       }
+    }
+  }
+
+  function toggleManualDraftSection() {
+    const section = el('manualDraftSection');
+    if (!section) return;
+    if (section.style.display === 'none' || section.style.display === '') {
+      section.style.display = 'block';
+      renderManualDraftTable();
+      section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      section.style.display = 'none';
     }
   }
 
@@ -1129,6 +1181,13 @@ const GenerateScreen = (() => {
     try {
       const response = await API.post('/payments/manual-batch', payload);
       batch2Id = response.batch_id;
+      lastBatch2Response = response;
+
+      // Auto-hide the staged draft box on successful submission to eliminate visual repetition
+      if (el('manualDraftSection')) {
+        el('manualDraftSection').style.display = 'none';
+      }
+
       renderManualBatchResults(response);
       checkNachaGenerateButtonState();
       return true;
@@ -1310,6 +1369,7 @@ const GenerateScreen = (() => {
     loadVendors,
     removeManualDraftEntry,
     renderManualDraftTable,
+    toggleManualDraftSection,
     removeManualEntry,
     handleSubmitManualBatch,
     handleGenerateNacha,
