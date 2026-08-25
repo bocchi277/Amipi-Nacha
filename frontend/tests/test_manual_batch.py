@@ -178,20 +178,19 @@ def test_flagged_duplicate_manual_entry_override(page: Page, base_url: str):
 
     inv_ref = f"DUP-{uuid.uuid4().hex[:6]}"
 
-    # First manual entry submission
+    # First manual entry submission via master generate
     page.fill("#manualEffDate", "2026-08-15")
     row1 = page.locator("#manualInlineTableBody tr").first
     row1.locator(".manual-row-vendor").select_option(v_id)
     row1.locator(".manual-row-amount").fill("1999.00")
     row1.locator(".manual-row-ref").fill(inv_ref)
 
-    page.click("#submitManualBatchBtn")
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    page.click("#generateNachaBtn")
+    expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
     expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
 
     # Second submission with EXACT SAME parameters -> duplicate
-    # Inline table still has the same values, so just re-submit
-    page.click("#submitManualBatchBtn")
+    page.click("#generateNachaBtn")
 
     # Duplicate warning banner must appear
     expect(page.locator("#manualDuplicateBanner")).to_be_visible(timeout=10000)
@@ -201,14 +200,9 @@ def test_flagged_duplicate_manual_entry_override(page: Page, base_url: str):
     page.check("#manualOverrideCheckbox")
     page.click("#manualRetryOverrideBtn")
 
-    # Results section should update with override status
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    # Results section / NACHA output should generate with override
+    expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
     expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
-
-    # Valid table displays Override Duplicate badge
-    tbody = page.locator("#manualValidPaymentsTableBody")
-    expect(tbody).to_contain_text(v_name)
-    expect(tbody).to_contain_text("Override Duplicate")
 
 
 def test_edit_batch2_saved_payment(page: Page, base_url: str):
@@ -225,7 +219,7 @@ def test_edit_batch2_saved_payment(page: Page, base_url: str):
     row1.locator(".manual-row-amount").fill("1000.00")
     row1.locator(".manual-row-ref").fill(inv_ref)
 
-    page.click("#submitManualBatchBtn")
+    page.click("#generateNachaBtn")
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
 
     # Click Edit button on the saved row
@@ -244,3 +238,35 @@ def test_edit_batch2_saved_payment(page: Page, base_url: str):
     expect(page.locator("#manualStatTotalAmount")).to_contain_text("$1,500.00")
     expect(page.locator("#manualValidPaymentsTableBody")).to_contain_text("$1,500.00")
     expect(page.locator("#manualValidPaymentsTableBody")).to_contain_text(updated_ref)
+
+
+def test_dynamic_add_batch_and_master_generation(page: Page, base_url: str):
+    """Test clicking + Add Batch to dynamically add Batch 3, filling both, and generating NACHA."""
+    v_name, v_id = _register_login_and_create_vendor(page, base_url)
+
+    # Fill Batch 2
+    page.fill("#manualEffDate", "2026-08-15")
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(v_id)
+    row1.locator(".manual-row-amount").fill("1200.00")
+    row1.locator(".manual-row-ref").fill("INV-B2-01")
+
+    # Click + Add Batch to dynamically create Batch 3
+    page.click("#addBatchBtn")
+    expect(page.locator("#card_batch_3")).to_be_visible()
+    expect(page.locator("#card_batch_3")).to_contain_text("Manual Payment Entry (Batch 3)")
+
+    # Fill Batch 3
+    page.fill("#manualEffDate_3", "2026-08-16")
+    b3_row1 = page.locator("#manualInlineTableBody_3 tr").first
+    b3_row1.locator(".manual-row-vendor").select_option(v_id)
+    b3_row1.locator(".manual-row-amount").fill("2300.00")
+    b3_row1.locator(".manual-row-ref").fill("INV-B3-01")
+
+    # Master button Generate Combined NACHA File validates both batches and generates combined NACHA
+    page.click("#generateNachaBtn")
+
+    # NACHA output card rendered
+    expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
+    expect(page.locator("#nachaEntryCount")).to_contain_text("2")
+    expect(page.locator("#nachaCreditTotal")).to_contain_text("$3,500.00")

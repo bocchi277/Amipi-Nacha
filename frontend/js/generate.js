@@ -428,7 +428,7 @@ const GenerateScreen = (() => {
     // Batch 2 Inline Multi-Row Entry
     const addManualRowBtn = el('addManualRowBtn');
     if (addManualRowBtn) {
-      addManualRowBtn.addEventListener('click', addManualInlineRow);
+      addManualRowBtn.addEventListener('click', () => addManualInlineRow(2));
     }
 
     const submitManualBtn = el('submitManualBatchBtn');
@@ -1007,11 +1007,44 @@ const GenerateScreen = (() => {
     if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
   }
 
-  // ── Batch 2: Inline Multi-Row Manual Payment Entry ───────────────
-  let manualInlineRowCount = 1; // Start with 1 blank row
+  // ── Batch 2 & Multi-Batch Manual Payment Entry ──────────────────
+  let manualBatches = [
+    { batchNum: 2, rowCount: 1, overrideActive: false, dbBatchId: null }
+  ];
 
-  function renderManualInlineRows() {
-    const tbody = el('manualInlineTableBody');
+  function getManualBatchObj(batchNum = 2) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    let b = manualBatches.find(x => x.batchNum === num);
+    if (!b) {
+      b = { batchNum: num, rowCount: 1, overrideActive: false, dbBatchId: null };
+      manualBatches.push(b);
+    }
+    return b;
+  }
+
+  function getBatchTbody(batchNum = 2) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    return num === 2 ? el('manualInlineTableBody') : el(`manualInlineTableBody_${num}`);
+  }
+
+  function getBatchEffDateInput(batchNum = 2) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    return num === 2 ? el('manualEffDate') : el(`manualEffDate_${num}`);
+  }
+
+  function getBatchErrorBox(batchNum = 2) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    return num === 2 ? el('manualFormError') : el(`manualFormError_${num}`);
+  }
+
+  function getBatchDuplicateBanner(batchNum = 2) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    return num === 2 ? el('manualDuplicateBanner') : el(`manualDuplicateBanner_${num}`);
+  }
+
+  function renderManualInlineRows(batchNum = 2) {
+    const b = getManualBatchObj(batchNum);
+    const tbody = getBatchTbody(batchNum);
     if (!tbody) return;
 
     // Collect existing values to preserve while expanding rows
@@ -1032,7 +1065,7 @@ const GenerateScreen = (() => {
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
       loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
-    for (let i = 0; i < manualInlineRowCount; i++) {
+    for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', i);
       const saved = existingValues[i] || { vendor_id: '', amount: '', ref: '' };
@@ -1061,8 +1094,8 @@ const GenerateScreen = (() => {
           <input type="text" class="form-input manual-row-ref" data-idx="${i}" placeholder="Invoice #" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" maxlength="15" value="${saved.ref}" />
         </td>
         <td style="text-align: center; padding: 4px 6px; vertical-align: middle;">
-          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i})"
-            style="padding: 2px 8px; font-size: 11px;" ${manualInlineRowCount <= 1 ? 'disabled' : ''}>×</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i}, ${batchNum})"
+            style="padding: 2px 8px; font-size: 11px;" ${b.rowCount <= 1 ? 'disabled' : ''}>×</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -1091,13 +1124,14 @@ const GenerateScreen = (() => {
     }
   }
 
-  function addManualInlineRow() {
-    manualInlineRowCount++;
-    renderManualInlineRows();
+  function addManualInlineRow(batchNum = 2) {
+    const b = getManualBatchObj(batchNum);
+    b.rowCount++;
+    renderManualInlineRows(batchNum);
     // Focus the new vendor select
-    const tbody = el('manualInlineTableBody');
+    const tbody = getBatchTbody(batchNum);
     if (tbody) {
-      const lastRow = tbody.querySelector(`tr[data-row-idx="${manualInlineRowCount - 1}"]`);
+      const lastRow = tbody.querySelector(`tr[data-row-idx="${b.rowCount - 1}"]`);
       if (lastRow) {
         const sel = lastRow.querySelector('.manual-row-vendor');
         if (sel) sel.focus();
@@ -1105,10 +1139,15 @@ const GenerateScreen = (() => {
     }
   }
 
-  function removeManualInlineRow(index) {
-    if (manualInlineRowCount <= 1) return;
+  function addManualRow(batchNum = 2) {
+    addManualInlineRow(batchNum);
+  }
 
-    const tbody = el('manualInlineTableBody');
+  function removeManualInlineRow(index, batchNum = 2) {
+    const b = getManualBatchObj(batchNum);
+    if (b.rowCount <= 1) return;
+
+    const tbody = getBatchTbody(batchNum);
     if (!tbody) return;
 
     const allRows = tbody.querySelectorAll('tr');
@@ -1125,13 +1164,13 @@ const GenerateScreen = (() => {
       });
     });
 
-    manualInlineRowCount = values.length || 1;
+    b.rowCount = values.length || 1;
 
     tbody.innerHTML = '';
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
       loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
-    for (let i = 0; i < manualInlineRowCount; i++) {
+    for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', i);
       const saved = values[i] || { vendor_id: '', amount: '', ref: '' };
@@ -1160,8 +1199,8 @@ const GenerateScreen = (() => {
           <input type="text" class="form-input manual-row-ref" data-idx="${i}" placeholder="Invoice #" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" maxlength="15" value="${saved.ref}" />
         </td>
         <td style="text-align: center; padding: 4px 6px; vertical-align: middle;">
-          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i})"
-            style="padding: 2px 8px; font-size: 11px;" ${manualInlineRowCount <= 1 ? 'disabled' : ''}>×</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i}, ${batchNum})"
+            style="padding: 2px 8px; font-size: 11px;" ${b.rowCount <= 1 ? 'disabled' : ''}>×</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -1189,14 +1228,111 @@ const GenerateScreen = (() => {
     }
   }
 
-  function collectManualInlineData() {
-    const tbody = el('manualInlineTableBody');
-    if (!tbody) return { entries: [], errors: [] };
+  function addBatch() {
+    const nextNum = manualBatches.length > 0 ? Math.max(...manualBatches.map(b => b.batchNum)) + 1 : 3;
+    const newBatch = { batchNum: nextNum, rowCount: 1, overrideActive: false, dbBatchId: null };
+    manualBatches.push(newBatch);
+
+    const container = el('additionalBatchesContainer');
+    if (!container) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card_batch_${nextNum}`;
+    card.style.cssText = 'margin-top: var(--space-xl); margin-bottom: var(--space-lg);';
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+        <div class="card-title" style="margin: 0;">Manual Payment Entry (Batch ${nextNum})</div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeBatch(${nextNum})" style="padding: 2px 8px; font-size: 11px;">× Remove Batch</button>
+      </div>
+      <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Enter payment rows below. Click <strong>+ Add Row</strong> to add more. All rows in this batch share the same effective date.</p>
+
+      <!-- Shared Effective Date -->
+      <div class="form-group" style="max-width: 220px; margin-bottom: var(--space-md);">
+        <label class="form-label" for="manualEffDate_${nextNum}">Effective Date <span style="color: #dc2626;">*</span></label>
+        <input class="form-input batch-eff-date" type="date" id="manualEffDate_${nextNum}" value="${todayStr}" />
+      </div>
+
+      <!-- Inline Multi-Row Entry Table -->
+      <div class="payments-table-wrap">
+        <table class="data-table" id="manualInlineTable_${nextNum}">
+          <thead>
+            <tr>
+              <th style="width: 35px;">#</th>
+              <th style="min-width: 170px;">Vendor *</th>
+              <th style="width: 105px;">Routing #</th>
+              <th style="width: 115px;">Account #</th>
+              <th style="width: 80px;">Type</th>
+              <th style="width: 110px;">Amount ($) *</th>
+              <th style="width: 130px;">Invoice / Ref # *</th>
+              <th style="width: 45px; text-align: center;"></th>
+            </tr>
+          </thead>
+          <tbody id="manualInlineTableBody_${nextNum}" class="manual-table-body" data-batch-num="${nextNum}">
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Error display -->
+      <div class="alert alert-error batch-form-error" id="manualFormError_${nextNum}" style="display: none; margin-top: var(--space-md);"></div>
+
+      <!-- Duplicate Warning & Override Banner -->
+      <div class="duplicate-banner batch-duplicate-banner" id="manualDuplicateBanner_${nextNum}" style="display: none; margin-top: var(--space-md);">
+        <div class="duplicate-title">Duplicate Transactions Detected in Batch ${nextNum}</div>
+        <div class="duplicate-sub">One or more manual payment rows match existing transactions previously uploaded to the system.</div>
+        <div class="duplicate-actions">
+          <label class="override-checkbox-label">
+            <input type="checkbox" id="manualOverrideCheckbox_${nextNum}" />
+            Allow Duplicate Override
+          </label>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.retryBatchOverride(${nextNum})">Re-upload with Override</button>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.addManualRow(${nextNum})">
+          + Add Row
+        </button>
+      </div>
+    `;
+
+    container.appendChild(card);
+    renderManualInlineRows(nextNum);
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    checkNachaGenerateButtonState();
+    if (window.showToast) window.showToast(`Batch ${nextNum} added.`, 'info');
+  }
+
+  function removeBatch(batchNum) {
+    const idx = manualBatches.findIndex(b => b.batchNum === Number(batchNum));
+    if (idx !== -1) {
+      manualBatches.splice(idx, 1);
+    }
+    const card = el(`card_batch_${batchNum}`);
+    if (card) card.remove();
+    checkNachaGenerateButtonState();
+    if (window.showToast) window.showToast(`Batch ${batchNum} removed.`, 'info');
+  }
+
+  function retryBatchOverride(batchNum) {
+    const b = getManualBatchObj(batchNum);
+    b.overrideActive = true;
+    handleGenerateNacha();
+  }
+
+  function collectManualBatchData(batchNum = 2) {
+    const tbody = getBatchTbody(batchNum);
+    if (!tbody) return { entries: [], errors: [], hasFilledRows: false, effDate: '' };
 
     const rows = tbody.querySelectorAll('tr');
     const entries = [];
     const errors = [];
-    const effDate = el('manualEffDate') ? el('manualEffDate').value.trim() : '';
+    let hasFilledRows = false;
+    const effInput = getBatchEffDateInput(batchNum);
+    const effDate = effInput ? effInput.value.trim() : '';
 
     rows.forEach((tr, idx) => {
       const vendorSel = tr.querySelector('.manual-row-vendor');
@@ -1206,6 +1342,10 @@ const GenerateScreen = (() => {
       const vendorId = vendorSel ? vendorSel.value : '';
       const amount = amtInput ? amtInput.value.trim() : '';
       const ref = refInput ? refInput.value.trim() : '';
+
+      if (vendorId || amount || ref) {
+        hasFilledRows = true;
+      }
 
       const rowErrors = [];
       if (!vendorId) rowErrors.push('Vendor is required');
@@ -1230,11 +1370,11 @@ const GenerateScreen = (() => {
       }
     });
 
-    return { entries, errors };
+    return { entries, errors, hasFilledRows, effDate };
   }
 
-  function showManualError(msg) {
-    const errBox = el('manualFormError');
+  function showManualError(msg, batchNum = 2) {
+    const errBox = getBatchErrorBox(batchNum);
     if (errBox) {
       errBox.textContent = msg;
       errBox.style.display = 'block';
@@ -1272,217 +1412,209 @@ const GenerateScreen = (() => {
   }
 
   async function handleSubmitManualBatch(overrideFlag = false) {
-    const errBox = el('manualFormError');
-    if (errBox) errBox.style.display = 'none';
-
-    const effDate = el('manualEffDate') ? el('manualEffDate').value.trim() : '';
-    if (!effDate) {
-      showManualError('Effective Date is required for Batch 2.');
-      const errTarget = el('manualEffDate') || el('manualFormError') || el('manualInlineTable');
-      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return false;
-    }
-
-    const { entries, errors } = collectManualInlineData();
-
-    if (errors.length > 0) {
-      const errMsg = errors.map(e => `Row ${e.row}: ${e.messages.join(', ')}`).join('\n');
-      showManualError(errMsg);
-      const errTarget = el('manualFormError') || el('manualInlineTable');
-      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return false;
-    }
-
-    if (entries.length === 0) {
-      showManualError('Please add at least one payment row with a selected vendor.');
-      const errTarget = el('manualFormError') || el('manualInlineTable');
-      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return false;
-    }
-
-    manualDraftEntries = entries;
-
-    if (overrideFlag === true) {
-      batch2OverrideActive = true;
-    }
-    const isOverride = overrideFlag || batch2OverrideActive || Boolean(el('manualOverrideCheckbox')?.checked);
-
-    const payload = {
-      batch_number: 2,
-      filename: "Manual Batch 2",
-      allow_override: isOverride,
-      payments: entries.map(e => ({
-        vendor_id: e.vendor_id,
-        amount: e.amount,
-        id_number: e.id_number,
-        effective_date: e.effective_date,
-      }))
-    };
-
-    setManualLoading(true);
-
-    try {
-      const response = await API.post('/payments/manual-batch', payload);
-      batch2Id = response.batch_id;
-      lastBatch2Response = response;
-
-      renderManualBatchResults(response);
-      checkNachaGenerateButtonState();
-
-      const hasDuplicateError = (response.errors || []).some(e =>
-        e.errors && e.errors.some(msg => msg.toLowerCase().includes('duplicate'))
-      );
-
-      if (hasDuplicateError && !isOverride) {
-        if (el('manualDuplicateBanner')) {
-          el('manualDuplicateBanner').scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        if (window.showToast) window.showToast('Duplicate transactions detected in Batch 2. Review override.', 'warning');
-        return false;
-      }
-
-      if (window.showToast) window.showToast('Batch 2 validated & saved successfully!', 'success');
-      return true;
-    } catch (err) {
-      showManualError(err.message || 'Failed to validate manual batch.');
-      const errTarget = el('manualFormError') || el('manualInlineTable');
-      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return false;
-    } finally {
-      setManualLoading(false);
-    }
+    // Backwards-compatible programmatic submit for Batch 2
+    return await handleGenerateNacha();
   }
 
   function setManualLoading(loading) {
-    const btn = el('submitManualBatchBtn');
     const addBtn = el('addManualRowBtn');
     const spinner = el('manualBatchSpinner');
-    if (btn) btn.disabled = loading;
     if (addBtn) addBtn.disabled = loading;
     if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
   }
 
   function renderManualBatchResults(data) {
-    el('manualResultsSection').style.display = 'block';
+    if (el('manualResultsSection')) el('manualResultsSection').style.display = 'block';
 
     const summary = data.summary || {};
     const validPayments = data.valid_payments || [];
     const errors = data.errors || [];
 
-    el('manualStatTotalRows').textContent = summary.total_rows || 0;
-    el('manualStatValidRows').textContent = summary.valid_rows || validPayments.length;
-    el('manualStatErrorRows').textContent = summary.error_rows || errors.length;
-    el('manualStatTotalAmount').textContent = `$${parseFloat(summary.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (el('manualStatTotalRows')) el('manualStatTotalRows').textContent = summary.total_rows || 0;
+    if (el('manualStatValidRows')) el('manualStatValidRows').textContent = summary.valid_rows || validPayments.length;
+    if (el('manualStatErrorRows')) el('manualStatErrorRows').textContent = summary.error_rows || errors.length;
+    if (el('manualStatTotalAmount')) el('manualStatTotalAmount').textContent = `$${parseFloat(summary.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const hasDuplicateError = errors.some(e =>
       e.errors && e.errors.some(errStr => errStr.toLowerCase().includes('duplicate'))
     );
 
     if (hasDuplicateError) {
-      el('manualDuplicateBanner').style.display = 'block';
+      if (el('manualDuplicateBanner')) el('manualDuplicateBanner').style.display = 'block';
       if (el('manualOverrideCheckbox')) el('manualOverrideCheckbox').checked = batch2OverrideActive;
     } else {
-      el('manualDuplicateBanner').style.display = 'none';
+      if (el('manualDuplicateBanner')) el('manualDuplicateBanner').style.display = 'none';
     }
 
     if (errors.length > 0) {
-      el('manualErrorPanel').style.display = 'block';
-      el('manualErrorCountBadge').textContent = `${errors.length} issue(s)`;
-      renderErrorsTable(errors, 'manualErrorTableBody');
+      if (el('manualErrorPanel')) {
+        el('manualErrorPanel').style.display = 'block';
+        el('manualErrorCountBadge').textContent = `${errors.length} issue(s)`;
+        renderErrorsTable(errors, 'manualErrorTableBody');
+      }
     } else {
-      el('manualErrorPanel').style.display = 'none';
+      if (el('manualErrorPanel')) el('manualErrorPanel').style.display = 'none';
     }
 
-    renderValidPaymentsTable(validPayments, 'manualValidPaymentsTableBody');
+    if (el('manualValidPaymentsTableBody')) {
+      renderValidPaymentsTable(validPayments, 'manualValidPaymentsTableBody');
+    }
   }
 
   function checkNachaGenerateButtonState() {
     const btn = el('generateNachaBtn');
     if (!btn) return;
     const hasBatch1Valid = Boolean(batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0);
-    const hasBatch2Rows = manualInlineRowCount > 0;
-    btn.disabled = !(hasBatch1Valid || hasBatch2Rows || batch2Id);
+    const hasManualRows = manualBatches.some(b => b.rowCount > 0);
+    btn.disabled = !(hasBatch1Valid || hasManualRows || batch2Id);
   }
 
   // ── Phase 4: Combined NACHA File Generation & Download ──────
   async function handleGenerateNacha() {
     if (el('nachaGlobalError')) el('nachaGlobalError').style.display = 'none';
 
-    // 1. If Batch 2 has inline entries, ensure they are validated & submitted first
-    const tbody = el('manualInlineTableBody');
-    const hasInlineRows = tbody && tbody.querySelectorAll('tr').length > 0;
-    
-    // Check if any row has vendor selected or amount entered
-    let hasFilledRow = false;
-    if (hasInlineRows) {
-      const rows = tbody.querySelectorAll('tr');
-      rows.forEach(tr => {
-        const vSel = tr.querySelector('.manual-row-vendor');
-        const aInp = tr.querySelector('.manual-row-amount');
-        if ((vSel && vSel.value) || (aInp && aInp.value)) {
-          hasFilledRow = true;
-        }
-      });
-    }
+    // Hide all batch-level errors before re-validating
+    manualBatches.forEach(b => {
+      const errBox = getBatchErrorBox(b.batchNum);
+      if (errBox) errBox.style.display = 'none';
+    });
 
-    if (hasFilledRow || (hasInlineRows && !batch1Id)) {
-      const b2Success = await handleSubmitManualBatch(batch2OverrideActive || false);
-      if (!b2Success) {
-        if (window.showToast) window.showToast('Please fix the validation issues in Batch 2 before generating NACHA.', 'error');
-        return;
+    // 1. Validate all active manual batches
+    const validBatchesData = [];
+
+    for (const b of manualBatches) {
+      const batchData = collectManualBatchData(b.batchNum);
+
+      // If this batch has rows or entered data, or if no Batch 1 exists
+      if (batchData.hasFilledRows || (!batch1Id && manualBatches.length === 1)) {
+        if (!batchData.effDate) {
+          showManualError(`Effective Date is required for Batch ${b.batchNum}.`, b.batchNum);
+          const errTarget = getBatchEffDateInput(b.batchNum) || getBatchErrorBox(b.batchNum);
+          if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (window.showToast) window.showToast(`Please enter an Effective Date for Batch ${b.batchNum}.`, 'error');
+          return false;
+        }
+
+        if (batchData.errors.length > 0) {
+          const errMsg = batchData.errors.map(e => `Row ${e.row}: ${e.messages.join(', ')}`).join('\n');
+          showManualError(errMsg, b.batchNum);
+          const errTarget = getBatchErrorBox(b.batchNum) || getBatchTbody(b.batchNum);
+          if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (window.showToast) window.showToast(`Please fix the validation issues in Batch ${b.batchNum} before generating NACHA.`, 'error');
+          return false;
+        }
+
+        if (batchData.entries.length === 0) {
+          showManualError(`Please add at least one payment row with a selected vendor in Batch ${b.batchNum}.`, b.batchNum);
+          const errTarget = getBatchErrorBox(b.batchNum) || getBatchTbody(b.batchNum);
+          if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return false;
+        }
+
+        validBatchesData.push({
+          batchNum: b.batchNum,
+          entries: batchData.entries,
+          overrideActive: b.overrideActive || Boolean(el(`manualOverrideCheckbox_${b.batchNum}`)?.checked) || Boolean(el('manualOverrideCheckbox')?.checked),
+        });
       }
     }
 
-    const batchIds = [];
-    if (batch1Id) batchIds.push(batch1Id);
-    if (batch2Id) batchIds.push(batch2Id);
-
-    if (batchIds.length === 0) {
-      showNachaError('Please upload Batch 1 (spreadsheet) or enter valid Batch 2 payments first.');
-      const target = el('batch1Card') || el('batch2Card') || el('nachaGlobalError');
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
-
-    const coName = el('coName').value.trim() || 'AMIPI INC';
-    const chaseAcct = el('chaseAcct').value.trim() || '785957066';
-    const entryDesc = (el('entryDesc').value.trim() || 'EPAYMNT').toUpperCase();
-    const effVal = el('effDate').value.trim();
-    const fileIdMod = el('fileIdMod').value.trim() || 'A';
-    const rawTraceStart = parseInt(el('traceStart').value.trim() || '0', 10);
-    const traceStart = (!isNaN(rawTraceStart) && rawTraceStart > 0) ? rawTraceStart : null;
-
-    if (entryDesc === 'PAYROLL' || entryDesc === 'REVERSAL') {
-      showNachaError('Entry description cannot be PAYROLL or REVERSAL for Chase CCD credits.');
-      if (el('entryDesc')) el('entryDesc').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
-
-    let effDateIso = null;
-    if (effVal && effVal.length === 6) {
-      effDateIso = `20${effVal.substring(0, 2)}-${effVal.substring(2, 4)}-${effVal.substring(4, 6)}`;
-    }
-
-    const payload = {
-      batch_ids: batchIds,
-      company_name: coName,
-      company_account: chaseAcct,
-      entry_description: entryDesc,
-      effective_entry_date: effDateIso,
-      file_id_modifier: fileIdMod,
-      trace_sequence_start: traceStart,
-    };
-
+    // 2. Submit valid manual batches to backend
     setNachaLoading(true);
 
+    const generatedBatchIds = [];
+    if (batch1Id) generatedBatchIds.push(batch1Id);
+
     try {
-      const response = await API.post('/nacha/generate', payload);
+      for (const vb of validBatchesData) {
+        const payload = {
+          batch_number: vb.batchNum,
+          filename: `Manual Batch ${vb.batchNum}`,
+          allow_override: vb.overrideActive,
+          payments: vb.entries.map(e => ({
+            vendor_id: e.vendor_id,
+            amount: e.amount,
+            id_number: e.id_number,
+            effective_date: e.effective_date,
+          }))
+        };
+
+        const response = await API.post('/payments/manual-batch', payload);
+        const b = getManualBatchObj(vb.batchNum);
+        b.dbBatchId = response.batch_id;
+        if (vb.batchNum === 2) {
+          batch2Id = response.batch_id;
+          lastBatch2Response = response;
+          manualDraftEntries = vb.entries;
+          renderManualBatchResults(response);
+        }
+
+        const hasDuplicateError = (response.errors || []).some(e =>
+          e.errors && e.errors.some(msg => msg.toLowerCase().includes('duplicate'))
+        );
+
+        if (hasDuplicateError && !vb.overrideActive) {
+          const dupBanner = getBatchDuplicateBanner(vb.batchNum);
+          if (dupBanner) {
+            dupBanner.style.display = 'block';
+            dupBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          if (window.showToast) window.showToast(`Duplicate transactions detected in Batch ${vb.batchNum}. Review override.`, 'warning');
+          setNachaLoading(false);
+          return false;
+        }
+
+        generatedBatchIds.push(response.batch_id);
+      }
+
+      if (generatedBatchIds.length === 0) {
+        showNachaError('Please upload Batch 1 (spreadsheet) or enter valid manual payments first.');
+        const target = el('batch1Card') || el('additionalBatchesContainer') || el('nachaGlobalError');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setNachaLoading(false);
+        return;
+      }
+
+      // 3. Generate Combined NACHA File
+      const coName = el('coName').value.trim() || 'AMIPI INC';
+      const chaseAcct = el('chaseAcct').value.trim() || '785957066';
+      const entryDesc = (el('entryDesc').value.trim() || 'EPAYMNT').toUpperCase();
+      const effVal = el('effDate').value.trim();
+      const fileIdMod = el('fileIdMod').value.trim() || 'A';
+      const rawTraceStart = parseInt(el('traceStart').value.trim() || '0', 10);
+      const traceStart = (!isNaN(rawTraceStart) && rawTraceStart > 0) ? rawTraceStart : null;
+
+      if (entryDesc === 'PAYROLL' || entryDesc === 'REVERSAL') {
+        showNachaError('Entry description cannot be PAYROLL or REVERSAL for Chase CCD credits.');
+        if (el('entryDesc')) el('entryDesc').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setNachaLoading(false);
+        return;
+      }
+
+      let effDateIso = null;
+      if (effVal && effVal.length === 6) {
+        effDateIso = `20${effVal.substring(0, 2)}-${effVal.substring(2, 4)}-${effVal.substring(4, 6)}`;
+      }
+
+      const nachaPayload = {
+        batch_ids: generatedBatchIds,
+        company_name: coName,
+        company_account: chaseAcct,
+        entry_description: entryDesc,
+        effective_entry_date: effDateIso,
+        file_id_modifier: fileIdMod,
+        trace_sequence_start: traceStart,
+      };
+
+      const response = await API.post('/nacha/generate', nachaPayload);
       generatedNachaRecord = response;
       renderNachaOutputCard(response);
       if (window.showToast) window.showToast('Combined NACHA file generated successfully!', 'success');
+      return true;
     } catch (err) {
       showNachaError(err.message || 'Combined NACHA file generation failed.');
       if (el('nachaGlobalError')) el('nachaGlobalError').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
     } finally {
       setNachaLoading(false);
     }
@@ -1552,7 +1684,11 @@ const GenerateScreen = (() => {
     handleUpload,
     loadVendors,
     addManualInlineRow,
+    addManualRow,
     removeManualInlineRow,
+    addBatch,
+    removeBatch,
+    retryBatchOverride,
     removeManualEntry,
     handleSubmitManualBatch,
     handleGenerateNacha,

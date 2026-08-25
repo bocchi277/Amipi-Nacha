@@ -405,12 +405,15 @@
               <button type="button" class="btn btn-secondary btn-sm" id="addManualRowBtn">
                 + Add Row
               </button>
-              <button type="button" class="btn btn-primary" id="submitManualBatchBtn">
-                <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
-                <span>Validate Batch</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="addBatchBtn" onclick="GenerateScreen.addBatch()">
+                + Add Batch
               </button>
+              <button type="button" id="submitManualBatchBtn" style="display: none;"></button>
             </div>
           </div>
+
+          <!-- Dynamic Container for Additional Batches (Batch 3, Batch 4, etc.) -->
+          <div id="additionalBatchesContainer"></div>
 
           <!-- Manual Batch 2 Results Section (Hidden until submitted) -->
           <div id="manualResultsSection" style="display: none; margin-bottom: var(--space-xl);">
