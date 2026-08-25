@@ -91,18 +91,16 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
 
     # Add Batch 2 Manual Entry
     page.evaluate("async () => { await GenerateScreen.loadVendors(); }")
-    page.wait_for_selector(f"#manualVendorSelect option[value='{vendor_id}']", state="attached", timeout=5000)
-    page.select_option("#manualVendorSelect", vendor_id)
-    page.fill("#manualAmount", "1800.00")
-    page.fill("#manualIdNumber", inv2)
+    page.wait_for_selector(f"#manualInlineTableBody .manual-row-vendor option[value='{vendor_id}']", state="attached", timeout=5000)
     page.fill("#manualEffDate", "2026-08-25")
-    page.click("#addManualEntryBtn")
-    expect(page.locator("#manualDraftSection")).to_be_visible()
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(vendor_id)
+    row1.locator(".manual-row-amount").fill("1800.00")
+    row1.locator(".manual-row-ref").fill(inv2)
     page.click("#submitManualBatchBtn")
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
 
-    # Generate NACHA file -> creates 2 PENDING remittance records
-    page.click("#generateNachaBtn")
+    # NACHA file is auto-generated upon Batch 2 submission
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
 
     # Step 3: Switch to Payment History Tab

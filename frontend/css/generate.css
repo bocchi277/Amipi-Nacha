@@ -546,7 +546,7 @@
 
 /* ── Modern Button Styling for Add & Validate ──────────────────── */
 #addB1ManualEntryBtn,
-#addManualEntryBtn {
+#addManualRowBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -559,13 +559,33 @@
 }
 
 #addB1ManualEntryBtn:hover,
-#addManualEntryBtn:hover {
+#addManualRowBtn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
 }
 
 #addB1ManualEntryBtn:active,
-#addManualEntryBtn:active {
+#addManualRowBtn:active {
   transform: translateY(0);
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+
+/* ── Inline Multi-Row Entry Table ───────────────────────────────── */
+#manualInlineTable td {
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+#manualInlineTable .form-select,
+#manualInlineTable .form-input {
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#manualInlineTable .form-select:focus,
+#manualInlineTable .form-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.12);
+  outline: none;
 }

@@ -184,6 +184,23 @@ const API = (() => {
     return get('/auth/me');
   }
 
+  // ── User Management (Admin) ────────────────────────────────
+  async function getUsers() {
+    return get('/users');
+  }
+
+  async function createUser(email, username, password, role = 'user') {
+    return post('/users', { email, username, password, role });
+  }
+
+  async function updateUserStatus(userId, isActive) {
+    return put(`/users/${userId}/status`, { is_active: isActive });
+  }
+
+  async function resetUserPassword(userId, newPassword) {
+    return post(`/users/${userId}/reset-password`, { new_password: newPassword });
+  }
+
   // ── Public API ─────────────────────────────────────────────
 
   return {
@@ -194,6 +211,8 @@ const API = (() => {
     get, post, put, patch, del, postForm,
     // Auth
     login, register, logout, getProfile,
+    // Users (Admin)
+    getUsers, createUser, updateUserStatus, resetUserPassword,
   };
 })();
 

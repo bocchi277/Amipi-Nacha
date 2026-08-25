@@ -74,7 +74,7 @@ def _fresh_login_page(page: Page, base_url: str):
 
 
 def test_login_screen_renders(page: Page, base_url: str):
-    """Login screen renders on first visit with all expected elements."""
+    """Login screen renders on first visit with all expected elements and no public register button."""
     _fresh_login_page(page, base_url)
 
     expect(page.locator("#loginScreen")).to_be_visible()
@@ -83,7 +83,9 @@ def test_login_screen_renders(page: Page, base_url: str):
     expect(page.locator("#loginUsername")).to_be_visible()
     expect(page.locator("#loginPassword")).to_be_visible()
     expect(page.locator("#loginSubmitBtn")).to_be_visible()
-    expect(page.locator("#modeToggleBtn")).to_be_visible()
+    # Public self-registration elements are completely removed
+    expect(page.locator("#modeToggleBtn")).to_have_count(0)
+    expect(page.locator("#emailGroup")).to_have_count(0)
 
 
 def test_failed_login_shows_error(page: Page, base_url: str):
@@ -151,50 +153,14 @@ def test_password_visibility_toggle(page: Page, base_url: str):
     expect(pw_input).to_have_attribute("type", "password")
 
 
-def test_register_mode_toggle_ui(page: Page, base_url: str):
-    """Register mode toggle shows email field and changes button text."""
+def test_no_public_registration_on_login_screen(page: Page, base_url: str):
+    """Verify that public self-registration is absent and only login is available."""
     _fresh_login_page(page, base_url)
 
-    # Initially login mode — email hidden
-    expect(page.locator("#emailGroup")).to_be_hidden()
+    expect(page.locator("#loginScreen")).to_be_visible()
+    expect(page.locator("#modeToggleBtn")).to_have_count(0)
+    expect(page.locator("#emailGroup")).to_have_count(0)
     expect(page.locator("#loginSubmitBtn")).to_contain_text("Sign In")
-
-    # Toggle to register
-    page.click("#modeToggleBtn")
-    expect(page.locator("#emailGroup")).to_be_visible()
-    expect(page.locator("#loginSubmitBtn")).to_contain_text("Create Account")
-
-    # Toggle back
-    page.click("#modeToggleBtn")
-    expect(page.locator("#emailGroup")).to_be_hidden()
-    expect(page.locator("#loginSubmitBtn")).to_contain_text("Sign In")
-
-
-def test_register_and_auto_login(page: Page, base_url: str):
-    """Registration through UI creates account and auto-logs in."""
-    page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.type}: {msg.text}"))
-    page.on("pageerror", lambda err: print(f"BROWSER ERROR: {err}"))
-
-    _fresh_login_page(page, base_url)
-
-    # Toggle to register mode
-    page.click("#modeToggleBtn")
-    expect(page.locator("#emailGroup")).to_be_visible()
-
-    # Fill registration form
-    page.fill("#loginEmail", REG_EMAIL)
-    page.fill("#loginUsername", REG_USER)
-    page.fill("#loginPassword", REG_PASSWORD)
-
-    # Submit form
-    page.click("#loginSubmitBtn")
-
-    # Should transition to app shell (registration + auto-login)
-    expect(page.locator("#appShell")).to_be_visible(timeout=10000)
-    expect(page.locator("#loginScreen")).to_be_hidden()
-
-    # Header should show username
-    expect(page.locator("#headerUserInfo")).to_contain_text(REG_USER)
 
 
 def test_session_persistence_after_refresh(page: Page, base_url: str):

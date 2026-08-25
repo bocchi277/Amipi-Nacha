@@ -238,13 +238,15 @@ def test_live_site_deep_scan_every_feature(page: Page, base_url: str, run_contex
     )
     assert v1_id is not None
 
-    page.select_option("#manualVendorSelect", v1_id)
-    page.fill("#manualAmount", "2500.00")
-    page.fill("#manualIdNumber", f"INV-202-{uid}")
-    page.fill("#manualEffDate", "2026-08-26")
-    page.click("#addManualEntryBtn")
+    page.evaluate("async () => { await GenerateScreen.loadVendors(); }")
+    page.wait_for_selector(f"#manualInlineTableBody .manual-row-vendor option[value='{v1_id}']", state="attached", timeout=5000)
 
-    expect(page.locator("#manualDraftSection")).to_be_visible()
+    page.fill("#manualEffDate", "2026-08-26")
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(v1_id)
+    row1.locator(".manual-row-amount").fill("2500.00")
+    row1.locator(".manual-row-ref").fill(f"INV-202-{uid}")
+
     page.click("#submitManualBatchBtn")
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
 

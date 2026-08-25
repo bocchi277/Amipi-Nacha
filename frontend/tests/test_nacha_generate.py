@@ -73,7 +73,7 @@ def _register_login_and_create_vendor(page: Page, base_url: str):
     )
 
     page.evaluate("async () => { await GenerateScreen.loadVendors(); }")
-    page.wait_for_selector(f"#manualVendorSelect option[value='{v_res.get('id')}']", state="attached", timeout=5000)
+    page.wait_for_selector(f"#manualInlineTableBody .manual-row-vendor option[value='{v_res.get('id')}']", state="attached", timeout=5000)
 
     return v_name, v_res.get("id")
 
@@ -104,21 +104,20 @@ def test_combined_nacha_file_generation_and_download(page: Page, base_url: str):
     page.click("#uploadBtn")
     expect(page.locator("#resultsSection")).to_be_visible(timeout=10000)
 
-    # Step 2: Submit Batch 2 Manual Entry
+    # Step 2: Submit Batch 2 Manual Entry via inline row
     batch2_inv = f"INV-B2-{uid}"
-    page.select_option("#manualVendorSelect", v_id)
-    page.fill("#manualAmount", "2500.50")
-    page.fill("#manualIdNumber", batch2_inv)
     page.fill("#manualEffDate", "2026-08-20")
-    page.click("#addManualEntryBtn")
-    expect(page.locator("#manualDraftSection")).to_be_visible()
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(v_id)
+    row1.locator(".manual-row-amount").fill("2500.50")
+    row1.locator(".manual-row-ref").fill(batch2_inv)
+
+    # Single click validates, saves, and auto-generates NACHA
     page.click("#submitManualBatchBtn")
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
 
-    # Step 3: Trigger Combined NACHA Generation
-    generate_btn = page.locator("#generateNachaBtn")
-    expect(generate_btn).to_be_enabled()
-    generate_btn.click()
+    # Step 3: NACHA is auto-generated after Batch 2 submit (includes both Batch 1 + 2)
+    # No need to click generateNachaBtn — it's automatic now
 
     # Step 4: Confirm Output Card renders with metadata
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)

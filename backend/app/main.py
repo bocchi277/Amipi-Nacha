@@ -10,6 +10,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.nacha import router as nacha_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.remittances import router as remittances_router
+from app.api.v1.users import router as users_router
 from app.api.v1.vendors import router as vendors_router
 from app.config import settings
 
@@ -88,6 +89,7 @@ async def add_cors_headers(request, call_next):
 
 # Include API v1 Routers
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(payments_router, prefix=settings.API_V1_STR)
 app.include_router(vendors_router, prefix=settings.API_V1_STR)
 app.include_router(nacha_router, prefix=settings.API_V1_STR)

@@ -101,22 +101,22 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
     # STEP 3: Batch 2 Manual Payment Entry & Duplicate Override
     # ------------------------------------------------------------------------
     page.evaluate("async () => { await GenerateScreen.loadVendors(); }")
-    page.wait_for_selector(f"#manualVendorSelect option[value='{vendor_id}']", state="attached", timeout=5000)
-    page.select_option("#manualVendorSelect", vendor_id)
-    page.fill("#manualAmount", "2750.00")
-    page.fill("#manualIdNumber", inv2)
-    page.fill("#manualEffDate", "2026-08-30")
-    page.click("#addManualEntryBtn")
+    page.wait_for_selector(f"#manualInlineTableBody .manual-row-vendor option[value='{vendor_id}']", state="attached", timeout=5000)
 
-    expect(page.locator("#manualDraftSection")).to_be_visible()
+    # Fill the inline row
+    page.fill("#manualEffDate", "2026-08-30")
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(vendor_id)
+    row1.locator(".manual-row-amount").fill("2750.00")
+    row1.locator(".manual-row-ref").fill(inv2)
+
+    # Single click: Validate & Generate NACHA
     page.click("#submitManualBatchBtn")
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
 
     # ------------------------------------------------------------------------
-    # STEP 4: Combined NACHA File Generation & Download
+    # STEP 4: Combined NACHA File Auto-Generated & Download
     # ------------------------------------------------------------------------
-    expect(page.locator("#generateNachaBtn")).to_be_enabled()
-    page.click("#generateNachaBtn")
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
     expect(page.locator("#nachaCreditTotal")).to_contain_text("8,000.00")
 

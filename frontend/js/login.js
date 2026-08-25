@@ -6,8 +6,6 @@
  */
 
 const LoginScreen = (() => {
-  let mode = 'login'; // 'login' | 'register'
-
   // ── DOM refs ───────────────────────────────────────────────
   function el(id) { return document.getElementById(id); }
 
@@ -44,11 +42,7 @@ const LoginScreen = (() => {
     // Login form submission
     el('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (mode === 'login') {
-        await handleLogin();
-      } else {
-        await handleRegister();
-      }
+      await handleLogin();
     });
 
     // SVG Eye icons for password toggle
@@ -63,11 +57,6 @@ const LoginScreen = (() => {
       el('togglePassword').innerHTML = isHidden ? EYE_OFF_ICON : EYE_ICON;
     });
 
-    // Mode toggle (login <-> register)
-    el('modeToggleBtn').addEventListener('click', () => {
-      toggleMode();
-    });
-
     // Enter key in password field
     el('loginPassword').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -75,28 +64,6 @@ const LoginScreen = (() => {
         el('loginForm').requestSubmit();
       }
     });
-  }
-
-  // ── Mode toggle ────────────────────────────────────────────
-  function toggleMode() {
-    mode = mode === 'login' ? 'register' : 'login';
-    clearErrors();
-
-    const btnText = el('loginBtnText');
-
-    if (mode === 'register') {
-      el('loginFormTitle').textContent = 'Create Account';
-      el('loginSubtitle').textContent = 'Register a new account to get started';
-      el('emailGroup').style.display = 'flex';
-      if (btnText) btnText.textContent = 'Create Account';
-      el('modeToggleBtn').textContent = 'Already have an account? Sign in';
-    } else {
-      el('loginFormTitle').textContent = 'AMIPI INC — ACH Generator';
-      el('loginSubtitle').textContent = 'Sign in to access the payment system';
-      el('emailGroup').style.display = 'none';
-      if (btnText) btnText.textContent = 'Sign In';
-      el('modeToggleBtn').textContent = 'Need an account? Register';
-    }
   }
 
   // ── Login handler ──────────────────────────────────────────
@@ -116,38 +83,6 @@ const LoginScreen = (() => {
       initApp();
     } catch (err) {
       showError(err.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ── Register handler ───────────────────────────────────────
-  async function handleRegister() {
-    clearErrors();
-    const email = el('loginEmail').value.trim();
-    const username = el('loginUsername').value.trim();
-    const password = el('loginPassword').value;
-
-    if (!email) return showError('Email is required');
-    if (!username) return showError('Username is required');
-    if (!password) return showError('Password is required');
-    if (password.length < 6) return showError('Password must be at least 6 characters');
-
-    // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return showError('Please enter a valid email address');
-    }
-
-    setLoading(true);
-
-    try {
-      await API.register(email, username, password);
-      // Auto-login after successful registration
-      await API.login(username, password);
-      hideLoginScreen();
-      initApp();
-    } catch (err) {
-      showError(err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }

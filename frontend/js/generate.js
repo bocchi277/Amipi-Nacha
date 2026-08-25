@@ -333,20 +333,7 @@ const GenerateScreen = (() => {
       }
     });
 
-    manualVendorCombobox = createSearchableVendorCombobox({
-      wrapperId: 'manualVendorWrapper',
-      hiddenInputId: 'manualVendorSelect',
-      triggerId: 'manualVendorTrigger',
-      labelId: 'manualVendorLabel',
-      clearBtnId: 'manualVendorClearBtn',
-      dropdownId: 'manualVendorDropdown',
-      searchInputId: 'manualVendorSearchInput',
-      optionsId: 'manualVendorOptions',
-      onSelect: () => {
-        const idInput = el('manualIdNumber');
-        if (idInput) idInput.value = ''; // Always stay blank for explicit mandatory entry
-      }
-    });
+    // Batch 2 vendor combobox is no longer needed — vendors are now inline per-row <select> elements
   }
 
   async function loadVendors() {
@@ -354,7 +341,8 @@ const GenerateScreen = (() => {
       const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
       if (b1VendorCombobox) b1VendorCombobox.setVendors(loadedVendors);
-      if (manualVendorCombobox) manualVendorCombobox.setVendors(loadedVendors);
+      // Render initial blank inline row for Batch 2
+      renderManualInlineRows();
     } catch (err) {
       console.warn('Failed to load vendors for manual entry dropdown:', err);
     }
@@ -437,10 +425,10 @@ const GenerateScreen = (() => {
       addB1ManualBtn.addEventListener('click', handleAddB1ManualEntry);
     }
 
-    // Batch 2 Manual Entry Form Listeners
-    const addManualBtn = el('addManualEntryBtn');
-    if (addManualBtn) {
-      addManualBtn.addEventListener('click', handleAddManualEntry);
+    // Batch 2 Inline Multi-Row Entry
+    const addManualRowBtn = el('addManualRowBtn');
+    if (addManualRowBtn) {
+      addManualRowBtn.addEventListener('click', addManualInlineRow);
     }
 
     const submitManualBtn = el('submitManualBatchBtn');
@@ -1019,96 +1007,179 @@ const GenerateScreen = (() => {
     if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
   }
 
-  // ── Batch 2: Manual Payment Entry ─────────────────────────────
-  function handleAddManualEntry() {
-    const amtInput = el('manualAmount');
-    const idInput = el('manualIdNumber');
-    const dateInput = el('manualEffDate');
-    const errBox = el('manualFormError');
+  // ── Batch 2: Inline Multi-Row Manual Payment Entry ───────────────
+  let manualInlineRowCount = 1; // Start with 1 blank row
 
-    if (errBox) errBox.style.display = 'none';
+  function renderManualInlineRows() {
+    const tbody = el('manualInlineTableBody');
+    if (!tbody) return;
 
-    const vendorId = manualVendorCombobox ? manualVendorCombobox.getValue() : (el('manualVendorSelect') ? el('manualVendorSelect').value : '');
-    const amountVal = amtInput ? amtInput.value.trim() : '';
-    const idNum = idInput ? idInput.value.trim() : '';
-    const effDate = dateInput ? dateInput.value.trim() : '';
+    if (manualInlineRowCount < 1) manualInlineRowCount = 1;
 
-    if (!vendorId) return showManualError('Please select a vendor.');
-    if (!amountVal || isNaN(amountVal) || parseFloat(amountVal) <= 0) return showManualError('Payment Amount ($) is mandatory and must be greater than 0.');
-    if (!idNum) return showManualError('Invoice / Ref # is mandatory.');
-    if (!effDate) return showManualError('Effective Date is mandatory.');
-
-    const vendorObj = loadedVendors.find(v => String(v.id) === String(vendorId));
-    if (!vendorObj) return showManualError('Selected vendor is invalid.');
-
-    manualDraftEntries.push({
-      vendor_id: vendorId,
-      vendor_name: vendorObj.name,
-      routing_number: vendorObj.routing_number,
-      account_number: vendorObj.account_number,
-      amount: parseFloat(amountVal).toFixed(2),
-      id_number: idNum,
-      effective_date: effDate,
+    // Preserve existing values before re-render
+    const existingValues = [];
+    const existingRows = tbody.querySelectorAll('tr');
+    existingRows.forEach((tr) => {
+      const vendorSel = tr.querySelector('.manual-row-vendor');
+      const amtInput = tr.querySelector('.manual-row-amount');
+      const refInput = tr.querySelector('.manual-row-ref');
+      existingValues.push({
+        vendor_id: vendorSel ? vendorSel.value : '',
+        amount: amtInput ? amtInput.value : '',
+        ref: refInput ? refInput.value : '',
+      });
     });
 
-    renderManualDraftTable();
-
-    // Reset input fields for rapid multi-line entry
-    if (manualVendorCombobox) manualVendorCombobox.reset();
-    if (amtInput) amtInput.value = '';
-    if (idInput) idInput.value = '';
-    if (window.showToast) {
-      window.showToast(`Added ${vendorObj.name} ($${parseFloat(amountVal).toFixed(2)}) to staged Batch 2 entries.`, 'info');
-    }
-  }
-
-  function renderManualDraftTable() {
-    const draftSection = el('manualDraftSection');
-    const tbody = el('manualDraftTableBody');
-    const countEl = el('manualDraftCount');
-    const totalEl = el('manualDraftTotalAmount');
-    const submitBtn = el('submitManualBatchBtn');
-
-    if (!draftSection || !tbody) return;
-
-    if (manualDraftEntries.length === 0) {
-      draftSection.style.display = 'none';
-      if (submitBtn) submitBtn.disabled = true;
-      if (countEl) countEl.textContent = '0';
-      if (totalEl) totalEl.textContent = '$0.00';
-      tbody.innerHTML = '';
-      return;
-    }
-
-    draftSection.style.display = 'block';
-    if (submitBtn) submitBtn.disabled = false;
-
-    const totalAmt = manualDraftEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-    if (countEl) countEl.textContent = manualDraftEntries.length;
-    if (totalEl) totalEl.textContent = `$${totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
     tbody.innerHTML = '';
-    manualDraftEntries.forEach((entry, idx) => {
+    const vendorOptions = '<option value="">-- Select --</option>' +
+      loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+    for (let i = 0; i < manualInlineRowCount; i++) {
       const tr = document.createElement('tr');
-      const amtFormatted = `$${parseFloat(entry.amount).toFixed(2)}`;
+      tr.setAttribute('data-row-idx', i);
+      const saved = existingValues[i] || { vendor_id: '', amount: '', ref: '' };
       tr.innerHTML = `
-        <td class="font-mono">${idx + 1}</td>
-        <td class="font-bold">${entry.vendor_name}</td>
-        <td class="font-mono">${entry.routing_number || '—'}</td>
-        <td class="font-mono">${entry.account_number || '—'}</td>
-        <td class="font-mono">${amtFormatted}</td>
-        <td class="font-mono">${entry.id_number || '—'}</td>
-        <td class="font-mono">${entry.effective_date || '—'}</td>
-        <td style="text-align: right;">
-          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualEntry(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">Remove</button>
+        <td class="font-mono" style="vertical-align: middle;">${i + 1}</td>
+        <td style="padding: 4px 6px;">
+          <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
+            ${vendorOptions}
+          </select>
+        </td>
+        <td style="padding: 4px 6px;">
+          <input type="number" class="form-input manual-row-amount" data-idx="${i}" step="0.01" placeholder="0.00" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" value="${saved.amount}" />
+        </td>
+        <td style="padding: 4px 6px;">
+          <input type="text" class="form-input manual-row-ref" data-idx="${i}" placeholder="Invoice #" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" maxlength="15" value="${saved.ref}" />
+        </td>
+        <td style="text-align: center; padding: 4px 6px; vertical-align: middle;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i})"
+            style="padding: 2px 8px; font-size: 11px;" ${manualInlineRowCount <= 1 ? 'disabled' : ''}>×</button>
         </td>
       `;
       tbody.appendChild(tr);
-    });
+
+      // Restore vendor selection
+      if (saved.vendor_id) {
+        const sel = tr.querySelector('.manual-row-vendor');
+        if (sel) sel.value = saved.vendor_id;
+      }
+    }
   }
 
-  function removeManualDraftEntry(index) {
-    removeManualEntry(index);
+  function addManualInlineRow() {
+    manualInlineRowCount++;
+    renderManualInlineRows();
+    // Focus the new vendor select
+    const tbody = el('manualInlineTableBody');
+    if (tbody) {
+      const lastRow = tbody.querySelector(`tr[data-row-idx="${manualInlineRowCount - 1}"]`);
+      if (lastRow) {
+        const sel = lastRow.querySelector('.manual-row-vendor');
+        if (sel) sel.focus();
+      }
+    }
+  }
+
+  function removeManualInlineRow(index) {
+    if (manualInlineRowCount <= 1) return;
+
+    // Collect current values, remove the target, and re-render
+    const tbody = el('manualInlineTableBody');
+    if (!tbody) return;
+
+    const allRows = tbody.querySelectorAll('tr');
+    const values = [];
+    allRows.forEach((tr, i) => {
+      if (i === index) return; // skip the one being removed
+      const vendorSel = tr.querySelector('.manual-row-vendor');
+      const amtInput = tr.querySelector('.manual-row-amount');
+      const refInput = tr.querySelector('.manual-row-ref');
+      values.push({
+        vendor_id: vendorSel ? vendorSel.value : '',
+        amount: amtInput ? amtInput.value : '',
+        ref: refInput ? refInput.value : '',
+      });
+    });
+
+    manualInlineRowCount = values.length || 1;
+
+    // Temporarily store values for re-render
+    tbody.innerHTML = '';
+    const vendorOptions = '<option value="">-- Select --</option>' +
+      loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+    for (let i = 0; i < manualInlineRowCount; i++) {
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-row-idx', i);
+      const saved = values[i] || { vendor_id: '', amount: '', ref: '' };
+      tr.innerHTML = `
+        <td class="font-mono" style="vertical-align: middle;">${i + 1}</td>
+        <td style="padding: 4px 6px;">
+          <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
+            ${vendorOptions}
+          </select>
+        </td>
+        <td style="padding: 4px 6px;">
+          <input type="number" class="form-input manual-row-amount" data-idx="${i}" step="0.01" placeholder="0.00" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" value="${saved.amount}" />
+        </td>
+        <td style="padding: 4px 6px;">
+          <input type="text" class="form-input manual-row-ref" data-idx="${i}" placeholder="Invoice #" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" maxlength="15" value="${saved.ref}" />
+        </td>
+        <td style="text-align: center; padding: 4px 6px; vertical-align: middle;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualInlineRow(${i})"
+            style="padding: 2px 8px; font-size: 11px;" ${manualInlineRowCount <= 1 ? 'disabled' : ''}>×</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      if (saved.vendor_id) {
+        const sel = tr.querySelector('.manual-row-vendor');
+        if (sel) sel.value = saved.vendor_id;
+      }
+    }
+  }
+
+  function collectManualInlineData() {
+    const tbody = el('manualInlineTableBody');
+    if (!tbody) return { entries: [], errors: [] };
+
+    const rows = tbody.querySelectorAll('tr');
+    const entries = [];
+    const errors = [];
+    const effDate = el('manualEffDate') ? el('manualEffDate').value.trim() : '';
+
+    rows.forEach((tr, idx) => {
+      const vendorSel = tr.querySelector('.manual-row-vendor');
+      const amtInput = tr.querySelector('.manual-row-amount');
+      const refInput = tr.querySelector('.manual-row-ref');
+
+      const vendorId = vendorSel ? vendorSel.value : '';
+      const amount = amtInput ? amtInput.value.trim() : '';
+      const ref = refInput ? refInput.value.trim() : '';
+
+      const rowErrors = [];
+      if (!vendorId) rowErrors.push('Vendor is required');
+      if (!amount || isNaN(amount) || parseFloat(amount) <= 0) rowErrors.push('Amount must be > 0');
+      if (!ref) rowErrors.push('Invoice/Ref is required');
+
+      if (rowErrors.length > 0) {
+        errors.push({ row: idx + 1, messages: rowErrors });
+        tr.style.background = 'var(--color-danger-bg, #fef2f2)';
+      } else {
+        tr.style.background = '';
+        const vendorObj = loadedVendors.find(v => String(v.id) === String(vendorId));
+        entries.push({
+          vendor_id: vendorId,
+          vendor_name: vendorObj ? vendorObj.name : '',
+          routing_number: vendorObj ? vendorObj.routing_number : '',
+          account_number: vendorObj ? vendorObj.account_number : '',
+          amount: parseFloat(amount).toFixed(2),
+          id_number: ref,
+          effective_date: effDate,
+        });
+      }
+    });
+
+    return { entries, errors };
   }
 
   function showManualError(msg) {
@@ -1131,33 +1202,50 @@ const GenerateScreen = (() => {
         lastBatch2Response = null;
         batch2OverrideActive = false;
         if (el('manualResultsSection')) el('manualResultsSection').style.display = 'none';
-        if (el('manualDraftSection')) el('manualDraftSection').style.display = 'none';
         checkNachaGenerateButtonState();
         if (window.showToast) window.showToast('Removed all entries from Batch 2.', 'info');
       } else if (batch2Id) {
         await handleSubmitManualBatch(batch2OverrideActive);
         if (window.showToast) window.showToast(`Removed entry for ${removed.vendor_name} from Batch 2.`, 'info');
       } else {
-        renderManualDraftTable();
         if (window.showToast) window.showToast(`Removed staged entry for ${removed.vendor_name}.`, 'info');
       }
     }
   }
 
   function toggleManualDraftSection() {
-    const section = el('manualDraftSection');
-    if (!section) return;
-    if (section.style.display === 'none' || section.style.display === '') {
-      section.style.display = 'block';
-      renderManualDraftTable();
-      section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } else {
-      section.style.display = 'none';
+    // In the new inline design, scroll to the Batch 2 entry card and focus it
+    const inlineTable = el('manualInlineTable');
+    if (inlineTable) {
+      inlineTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 
   async function handleSubmitManualBatch(overrideFlag = false) {
-    if (manualDraftEntries.length === 0) return false;
+    const errBox = el('manualFormError');
+    if (errBox) errBox.style.display = 'none';
+
+    const effDate = el('manualEffDate') ? el('manualEffDate').value.trim() : '';
+    if (!effDate) {
+      showManualError('Effective Date is required.');
+      return false;
+    }
+
+    const { entries, errors } = collectManualInlineData();
+
+    if (errors.length > 0) {
+      const errMsg = errors.map(e => `Row ${e.row}: ${e.messages.join(', ')}`).join('\n');
+      showManualError(errMsg);
+      return false;
+    }
+
+    if (entries.length === 0) {
+      showManualError('Please add at least one payment row.');
+      return false;
+    }
+
+    // Update manualDraftEntries for compatibility with edit/remove in results table
+    manualDraftEntries = entries;
 
     if (overrideFlag === true) {
       batch2OverrideActive = true;
@@ -1168,7 +1256,7 @@ const GenerateScreen = (() => {
       batch_number: 2,
       filename: "Manual Batch 2",
       allow_override: isOverride,
-      payments: manualDraftEntries.map(e => ({
+      payments: entries.map(e => ({
         vendor_id: e.vendor_id,
         amount: e.amount,
         id_number: e.id_number,
@@ -1183,16 +1271,26 @@ const GenerateScreen = (() => {
       batch2Id = response.batch_id;
       lastBatch2Response = response;
 
-      // Auto-hide the staged draft box on successful submission to eliminate visual repetition
-      if (el('manualDraftSection')) {
-        el('manualDraftSection').style.display = 'none';
-      }
-
       renderManualBatchResults(response);
       checkNachaGenerateButtonState();
+
+      // AUTO-GENERATE NACHA if no errors and no duplicate warnings
+      const hasErrors = (response.errors || []).length > 0;
+      const hasDuplicates = (response.errors || []).some(e =>
+        e.errors && e.errors.some(msg => msg.toLowerCase().includes('duplicate'))
+      );
+
+      if (!hasErrors && !hasDuplicates) {
+        // Auto-trigger NACHA generation — no extra click needed
+        await handleGenerateNacha();
+        if (window.showToast) window.showToast('Batch 2 validated & NACHA file generated!', 'success');
+      } else {
+        if (window.showToast) window.showToast('Batch 2 submitted — review validation results below.', 'info');
+      }
+
       return true;
     } catch (err) {
-      showManualError(err.message || 'Failed to submit and validate manual batch.');
+      showManualError(err.message || 'Failed to validate manual batch.');
       return false;
     } finally {
       setManualLoading(false);
@@ -1201,7 +1299,7 @@ const GenerateScreen = (() => {
 
   function setManualLoading(loading) {
     const btn = el('submitManualBatchBtn');
-    const addBtn = el('addManualEntryBtn');
+    const addBtn = el('addManualRowBtn');
     const spinner = el('manualBatchSpinner');
     if (btn) btn.disabled = loading;
     if (addBtn) addBtn.disabled = loading;
@@ -1367,15 +1465,16 @@ const GenerateScreen = (() => {
     init,
     handleUpload,
     loadVendors,
-    removeManualDraftEntry,
-    renderManualDraftTable,
-    toggleManualDraftSection,
+    addManualInlineRow,
+    removeManualInlineRow,
     removeManualEntry,
     handleSubmitManualBatch,
     handleGenerateNacha,
     handleDownloadNacha,
     openEditRowModal,
     openBreakdownModal,
+    toggleManualDraftSection,
+    renderManualInlineRows,
   };
 })();
 

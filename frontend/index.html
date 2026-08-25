@@ -48,18 +48,6 @@
           </p>
 
           <form class="login-form" id="loginForm" autocomplete="off">
-            <!-- Email (register mode only) -->
-            <div class="form-group" id="emailGroup" style="display: none">
-              <label class="form-label" for="loginEmail">Email address</label>
-              <input
-                class="form-input"
-                type="email"
-                id="loginEmail"
-                placeholder="you@amipi.com"
-                autocomplete="email"
-              />
-            </div>
-
             <!-- Username -->
             <div class="form-group">
               <label class="form-label" for="loginUsername">Username</label>
@@ -111,13 +99,6 @@
               <span class="btn-text" id="loginBtnText">Sign In</span>
             </button>
           </form>
-
-          <!-- Mode toggle -->
-          <div class="login-mode-toggle" id="loginModeToggle">
-            <button type="button" id="modeToggleBtn">
-              Need an account? Register
-            </button>
-          </div>
 
           <div class="login-footer">
             Chase CCD Credits · NACHA File Specifications<br />
@@ -387,86 +368,44 @@
           <!-- Manual Payment Entry Card (Batch 2) -->
           <div class="card" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg)">
             <div class="card-title">Manual Payment Entry (Batch 2)</div>
-            <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Directly enter manual payments for Batch 2. All fields are mandatory.</p>
+            <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Enter payment rows below. Click <strong>+ Add Row</strong> to add more. All rows share the same effective date.</p>
 
-            <!-- Entry Input Form -->
-            <div class="grid-4">
-              <div class="form-group">
-                <label class="form-label" for="manualVendorSelect">Select Vendor <span class="text-danger" style="color: #dc2626;">*</span></label>
-                <div class="custom-select-wrapper" id="manualVendorWrapper">
-                  <select id="manualVendorSelect" class="form-select" style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"><option value="">-- Select Vendor --</option></select>
-                  <div class="custom-select-trigger" id="manualVendorTrigger" tabindex="0">
-                    <div class="custom-select-trigger-content">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-trigger-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                      <span class="custom-select-label placeholder" id="manualVendorLabel">-- Select Vendor --</span>
-                    </div>
-                    <div class="custom-select-trigger-actions">
-                      <button type="button" class="custom-select-clear-btn" id="manualVendorClearBtn" title="Clear selection">&times;</button>
-                      <span class="custom-select-arrow">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                      </span>
-                    </div>
-                  </div>
-                  <div class="custom-select-dropdown" id="manualVendorDropdown" style="display: none;">
-                    <div class="custom-select-search-wrap">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-search-icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                      <input type="text" class="custom-select-search-input" id="manualVendorSearchInput" placeholder="Search name, ID, or routing..." autocomplete="off" />
-                    </div>
-                    <div class="custom-select-options" id="manualVendorOptions"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manualAmount">Amount ($) <span class="text-danger" style="color: #dc2626;">*</span></label>
-                <input class="form-input" type="number" id="manualAmount" step="0.01" placeholder="0.00" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manualIdNumber">Invoice / Ref # <span class="text-danger" style="color: #dc2626;">*</span></label>
-                <input class="form-input" type="text" id="manualIdNumber" placeholder="Enter invoice / ref #" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manualEffDate">Effective Date <span class="text-danger" style="color: #dc2626;">*</span></label>
-                <input class="form-input" type="date" id="manualEffDate" />
-              </div>
+            <!-- Shared Effective Date -->
+            <div class="form-group" style="max-width: 220px; margin-bottom: var(--space-md);">
+              <label class="form-label" for="manualEffDate">Effective Date <span style="color: #dc2626;">*</span></label>
+              <input class="form-input" type="date" id="manualEffDate" />
             </div>
 
+            <!-- Inline Multi-Row Entry Table -->
+            <div class="payments-table-wrap">
+              <table class="data-table" id="manualInlineTable">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th style="min-width: 200px;">Vendor *</th>
+                    <th style="width: 130px;">Amount ($) *</th>
+                    <th style="width: 160px;">Invoice / Ref # *</th>
+                    <th style="width: 60px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="manualInlineTableBody">
+                  <!-- Rows rendered dynamically by JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Error display -->
             <div class="alert alert-error" id="manualFormError" style="display: none; margin-top: var(--space-md);"></div>
 
-            <div style="margin-top: var(--space-base); display: flex; gap: var(--space-md); align-items: center;">
-              <button type="button" class="btn btn-secondary" id="addManualEntryBtn">
-                <span class="spinner" id="manualAddSpinner" style="display: none"></span>
-                <span>+ Add Entry to Batch 2 List</span>
+            <!-- Action Buttons -->
+            <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" id="addManualRowBtn">
+                + Add Row
               </button>
-            </div>
-
-            <!-- Staged Entries Table (Batch 2) -->
-            <div id="manualDraftSection" style="display: none; margin-top: var(--space-lg);">
-              <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--space-sm);">Staged Manual Payment Entries (Batch 2)</div>
-              <div class="payments-table-wrap">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 50px;">#</th>
-                      <th>Payee / Vendor Name</th>
-                      <th>Routing #</th>
-                      <th>Account #</th>
-                      <th>Amount ($)</th>
-                      <th>Invoice / ID Ref</th>
-                      <th>Effective Date</th>
-                      <th style="width: 80px; text-align: right;">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="manualDraftTableBody"></tbody>
-                </table>
-              </div>
-
-              <div class="draft-summary-bar" style="margin-top: var(--space-md); display: flex; justify-content: space-between; align-items: center; background: var(--color-surface-alt); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
-                <div style="font-size: var(--text-sm);">Staged Entries: <strong id="manualDraftCount">0</strong> · Total: <strong id="manualDraftTotalAmount">$0.00</strong></div>
-                <button type="button" class="btn btn-primary" id="submitManualBatchBtn" disabled>
-                  <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
-                  <span>Submit & Save Manual Batch 2</span>
-                </button>
-              </div>
+              <button type="button" class="btn btn-primary" id="submitManualBatchBtn">
+                <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
+                <span>Validate &amp; Generate NACHA</span>
+              </button>
             </div>
           </div>
 
@@ -932,6 +871,45 @@
                     </tr>
                   </thead>
                   <tbody id="adminRequestsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- User Accounts & Access Control Card -->
+            <div class="card" style="margin-top: var(--space-xl);">
+              <div style="display: flex; gap: var(--space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: var(--space-md);">
+                <div>
+                  <div class="card-title" style="margin-bottom: 4px;">User Accounts & Access Control</div>
+                  <div class="text-xs text-muted">Provision new user accounts, manage roles, toggle activation status, and reset user passwords.</div>
+                </div>
+                <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                  <span class="badge badge-info" id="adminUserCountBadge">0 Users</span>
+                  <button type="button" class="btn btn-secondary btn-sm" id="refreshAdminUsersBtn">
+                    <span class="spinner" id="adminUsersSpinner" style="display: none;"></span>
+                    <span>Refresh Users</span>
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" id="openAddUserModalBtn" style="font-weight: 600;">
+                    + Add New User
+                  </button>
+                </div>
+              </div>
+
+              <div class="alert alert-success" id="adminUserGlobalAlert" style="display: none; margin-bottom: var(--space-md);"></div>
+
+              <div class="payments-table-wrap">
+                <table class="data-table" id="adminUsersTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Username</th>
+                      <th>Email Address</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Created Date</th>
+                      <th style="width: 200px; text-align: right;">Admin Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminUsersTableBody"></tbody>
                 </table>
               </div>
             </div>
@@ -1907,6 +1885,86 @@
             <span>Resend This Email</span>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Add New User Modal (Admin Only) -->
+    <div class="modal-backdrop" id="addUserModal">
+      <div class="modal-card" style="max-width: 480px; width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <div>
+            <h3 class="card-title" style="margin-bottom: 2px;">Provision New User Account</h3>
+            <div class="text-xs text-muted">Create a new user account with specified system role.</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeAddUserModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <form id="addUserForm" autocomplete="off">
+          <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label class="form-label" for="newUsername">Username <span style="color: #dc2626;">*</span></label>
+            <input type="text" class="form-input" id="newUsername" placeholder="e.g. jsmith" required />
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label class="form-label" for="newUserEmail">Email Address <span style="color: #dc2626;">*</span></label>
+            <input type="email" class="form-input" id="newUserEmail" placeholder="e.g. jsmith@amipi.com" required />
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label class="form-label" for="newUserPassword">Initial Password <span style="color: #dc2626;">*</span></label>
+            <input type="password" class="form-input" id="newUserPassword" placeholder="Min 8 characters" required />
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label class="form-label" for="newUserRole">User Role <span style="color: #dc2626;">*</span></label>
+            <select class="form-select" id="newUserRole">
+              <option value="user" selected>Standard User (Payments, Uploads, Change Requests)</option>
+              <option value="admin">Administrator (Full Access + Approvals + User Mgmt)</option>
+            </select>
+          </div>
+
+          <div class="alert alert-error" id="addUserModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+          <div style="display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-lg);">
+            <button type="button" class="btn btn-secondary" id="cancelAddUserModalBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="submitAddUserBtn">
+              <span class="spinner" id="addUserSpinner" style="display: none;"></span>
+              <span>Create User Account</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Admin Reset Password Modal -->
+    <div class="modal-backdrop" id="resetPasswordModal">
+      <div class="modal-card" style="max-width: 440px; width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <div>
+            <h3 class="card-title" style="margin-bottom: 2px;">Reset User Password</h3>
+            <div class="text-xs text-muted" id="resetPasswordUserLabel">Set a new password for this user.</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeResetPasswordModalBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <form id="resetPasswordForm" autocomplete="off">
+          <input type="hidden" id="resetPasswordUserId" />
+
+          <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label class="form-label" for="resetPasswordNewPassword">New Password <span style="color: #dc2626;">*</span></label>
+            <input type="password" class="form-input" id="resetPasswordNewPassword" placeholder="Min 8 characters" required />
+          </div>
+
+          <div class="alert alert-error" id="resetPasswordModalError" style="display: none; margin-bottom: var(--space-md);"></div>
+
+          <div style="display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-lg);">
+            <button type="button" class="btn btn-secondary" id="cancelResetPasswordModalBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="submitResetPasswordBtn">
+              <span class="spinner" id="resetPasswordSpinner" style="display: none;"></span>
+              <span>Update Password</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
