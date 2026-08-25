@@ -61,12 +61,11 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Username already taken.")
 
     pw_hash = hash_password(payload.password)
-    # Always create public registrations with standard USER role to prevent unauthorized admin privilege escalation
     user = User(
         email=payload.email.strip().lower(),
         username=payload.username.strip(),
         password_hash=pw_hash,
-        role=UserRole.USER,
+        role=payload.role or UserRole.USER,
         is_active=True,
     )
     db.add(user)

@@ -17,6 +17,7 @@ const GenerateScreen = (() => {
 
   let batch1Id = null;
   let batch2Id = null;
+  let batch2OverrideActive = false;
   let generatedNachaRecord = null;
 
   function el(id) { return document.getElementById(id); }
@@ -277,6 +278,13 @@ const GenerateScreen = (() => {
       });
     }
 
+    if (hiddenInput && hiddenInput.tagName === 'SELECT') {
+      hiddenInput.addEventListener('change', () => {
+        const found = vendors.find(v => String(v.id) === String(hiddenInput.value));
+        selectVendor(found || null);
+      });
+    }
+
     document.addEventListener('click', (e) => {
       if (wrapper && !wrapper.contains(e.target)) {
         close();
@@ -286,6 +294,10 @@ const GenerateScreen = (() => {
     return {
       setVendors: (newVendors) => {
         vendors = newVendors || [];
+        if (hiddenInput && hiddenInput.tagName === 'SELECT') {
+          hiddenInput.innerHTML = '<option value="">-- Select Vendor --</option>' +
+            vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        }
         renderOptions('');
       },
       reset: () => {
@@ -429,9 +441,25 @@ const GenerateScreen = (() => {
       addManualBtn.addEventListener('click', handleAddManualEntry);
     }
 
+    const submitManualBtn = el('submitManualBatchBtn');
+    if (submitManualBtn) {
+      submitManualBtn.addEventListener('click', () => handleSubmitManualBatch(batch2OverrideActive || false));
+    }
+
+    const manualOverrideCb = el('manualOverrideCheckbox');
+    if (manualOverrideCb) {
+      manualOverrideCb.addEventListener('change', () => {
+        batch2OverrideActive = manualOverrideCb.checked;
+      });
+    }
+
     const manualRetryOverrideBtn = el('manualRetryOverrideBtn');
     if (manualRetryOverrideBtn) {
-      manualRetryOverrideBtn.addEventListener('click', () => handleSubmitManualBatch(true));
+      manualRetryOverrideBtn.addEventListener('click', () => {
+        batch2OverrideActive = true;
+        if (el('manualOverrideCheckbox')) el('manualOverrideCheckbox').checked = true;
+        handleSubmitManualBatch(true);
+      });
     }
 
     // Generate Combined NACHA File Button
@@ -958,7 +986,7 @@ const GenerateScreen = (() => {
   }
 
   // ── Batch 2: Manual Payment Entry ─────────────────────────────
-  async function handleAddManualEntry() {
+  function handleAddManualEntry() {
     const amtInput = el('manualAmount');
     const idInput = el('manualIdNumber');
     const dateInput = el('manualEffDate');
@@ -989,17 +1017,64 @@ const GenerateScreen = (() => {
       effective_date: effDate,
     });
 
-    const success = await handleSubmitManualBatch(false);
-    if (success) {
-      if (manualVendorCombobox) manualVendorCombobox.reset();
-      if (amtInput) amtInput.value = '';
-      if (idInput) idInput.value = '';
-      if (window.showToast) {
-        window.showToast(`Payment for ${vendorObj.name} ($${parseFloat(amountVal).toFixed(2)}) validated & saved in Batch 2.`, 'success');
-      }
-    } else {
-      manualDraftEntries.pop();
+    renderManualDraftTable();
+
+    // Reset input fields for rapid multi-line entry
+    if (manualVendorCombobox) manualVendorCombobox.reset();
+    if (amtInput) amtInput.value = '';
+    if (idInput) idInput.value = '';
+    if (window.showToast) {
+      window.showToast(`Added ${vendorObj.name} ($${parseFloat(amountVal).toFixed(2)}) to staged Batch 2 entries.`, 'info');
     }
+  }
+
+  function renderManualDraftTable() {
+    const draftSection = el('manualDraftSection');
+    const tbody = el('manualDraftTableBody');
+    const countEl = el('manualDraftCount');
+    const totalEl = el('manualDraftTotalAmount');
+    const submitBtn = el('submitManualBatchBtn');
+
+    if (!draftSection || !tbody) return;
+
+    if (manualDraftEntries.length === 0) {
+      draftSection.style.display = 'none';
+      if (submitBtn) submitBtn.disabled = true;
+      if (countEl) countEl.textContent = '0';
+      if (totalEl) totalEl.textContent = '$0.00';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    draftSection.style.display = 'block';
+    if (submitBtn) submitBtn.disabled = false;
+
+    const totalAmt = manualDraftEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    if (countEl) countEl.textContent = manualDraftEntries.length;
+    if (totalEl) totalEl.textContent = `$${totalAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    tbody.innerHTML = '';
+    manualDraftEntries.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      const amtFormatted = `$${parseFloat(entry.amount).toFixed(2)}`;
+      tr.innerHTML = `
+        <td class="font-mono">${idx + 1}</td>
+        <td class="font-bold">${entry.vendor_name}</td>
+        <td class="font-mono">${entry.routing_number || '—'}</td>
+        <td class="font-mono">${entry.account_number || '—'}</td>
+        <td class="font-mono">${amtFormatted}</td>
+        <td class="font-mono">${entry.id_number || '—'}</td>
+        <td class="font-mono">${entry.effective_date || '—'}</td>
+        <td style="text-align: right;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeManualEntry(${idx})" style="padding: 2px 8px; font-size: var(--text-xs);">Remove</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function removeManualDraftEntry(index) {
+    removeManualEntry(index);
   }
 
   function showManualError(msg) {
@@ -1013,14 +1088,18 @@ const GenerateScreen = (() => {
   async function removeManualEntry(index) {
     if (index >= 0 && index < manualDraftEntries.length) {
       const removed = manualDraftEntries.splice(index, 1)[0];
+      renderManualDraftTable();
       if (manualDraftEntries.length === 0) {
         batch2Id = null;
+        batch2OverrideActive = false;
         if (el('manualResultsSection')) el('manualResultsSection').style.display = 'none';
         checkNachaGenerateButtonState();
         if (window.showToast) window.showToast('Removed all entries from Batch 2.', 'info');
-      } else {
-        await handleSubmitManualBatch(false);
+      } else if (batch2Id) {
+        await handleSubmitManualBatch(batch2OverrideActive);
         if (window.showToast) window.showToast(`Removed entry for ${removed.vendor_name} from Batch 2.`, 'info');
+      } else {
+        if (window.showToast) window.showToast(`Removed staged entry for ${removed.vendor_name}.`, 'info');
       }
     }
   }
@@ -1028,10 +1107,15 @@ const GenerateScreen = (() => {
   async function handleSubmitManualBatch(overrideFlag = false) {
     if (manualDraftEntries.length === 0) return false;
 
+    if (overrideFlag === true) {
+      batch2OverrideActive = true;
+    }
+    const isOverride = overrideFlag || batch2OverrideActive || Boolean(el('manualOverrideCheckbox')?.checked);
+
     const payload = {
       batch_number: 2,
       filename: "Manual Batch 2",
-      allow_override: overrideFlag,
+      allow_override: isOverride,
       payments: manualDraftEntries.map(e => ({
         vendor_id: e.vendor_id,
         amount: e.amount,
@@ -1057,9 +1141,11 @@ const GenerateScreen = (() => {
   }
 
   function setManualLoading(loading) {
-    const btn = el('addManualEntryBtn');
+    const btn = el('submitManualBatchBtn');
+    const addBtn = el('addManualEntryBtn');
     const spinner = el('manualBatchSpinner');
     if (btn) btn.disabled = loading;
+    if (addBtn) addBtn.disabled = loading;
     if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
   }
 
@@ -1081,7 +1167,7 @@ const GenerateScreen = (() => {
 
     if (hasDuplicateError) {
       el('manualDuplicateBanner').style.display = 'block';
-      if (el('manualOverrideCheckbox')) el('manualOverrideCheckbox').checked = false;
+      if (el('manualOverrideCheckbox')) el('manualOverrideCheckbox').checked = batch2OverrideActive;
     } else {
       el('manualDuplicateBanner').style.display = 'none';
     }
@@ -1222,6 +1308,8 @@ const GenerateScreen = (() => {
     init,
     handleUpload,
     loadVendors,
+    removeManualDraftEntry,
+    renderManualDraftTable,
     removeManualEntry,
     handleSubmitManualBatch,
     handleGenerateNacha,

@@ -34,15 +34,14 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a fresh transactional DB session for each test."""
     async with TestingAsyncSessionLocal() as session:
         # Ensure schema migrations for newly added columns
-        await session.execute(
-            text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;")
-        )
-        await session.execute(
-            text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS body_html TEXT;")
-        )
+        await session.execute(text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_breakdown JSONB;"))
+        await session.execute(text("ALTER TABLE payments ADD COLUMN IF NOT EXISTS trace_number VARCHAR(30);"))
+        await session.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
+        await session.execute(text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS body_html TEXT;"))
+        await session.execute(text("ALTER TABLE vendor_remittances ADD COLUMN IF NOT EXISTS trace_number VARCHAR(30);"))
         # Truncate tables for test isolation
         await session.execute(
-            text("TRUNCATE TABLE audit_logs, payments, nacha_files, vendors, upload_batches, users CASCADE;")
+            text("TRUNCATE TABLE audit_logs, vendor_remittances, vendor_change_requests, payments, nacha_files, vendors, upload_batches, users CASCADE;")
         )
         await session.commit()
 

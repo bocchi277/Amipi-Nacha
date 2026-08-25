@@ -259,7 +259,7 @@
                 <div class="form-group">
                   <label class="form-label" for="b1ManualVendorSelect">Select Vendor <span class="text-danger" style="color: #dc2626;">*</span></label>
                   <div class="custom-select-wrapper" id="b1ManualVendorWrapper">
-                    <input type="hidden" id="b1ManualVendorSelect" value="" />
+                    <select id="b1ManualVendorSelect" class="form-select" style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"><option value="">-- Select Vendor --</option></select>
                     <div class="custom-select-trigger" id="b1ManualVendorTrigger" tabindex="0">
                       <div class="custom-select-trigger-content">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-trigger-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -435,7 +435,7 @@
               <div class="form-group">
                 <label class="form-label" for="manualVendorSelect">Select Vendor <span class="text-danger" style="color: #dc2626;">*</span></label>
                 <div class="custom-select-wrapper" id="manualVendorWrapper">
-                  <input type="hidden" id="manualVendorSelect" value="" />
+                  <select id="manualVendorSelect" class="form-select" style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"><option value="">-- Select Vendor --</option></select>
                   <div class="custom-select-trigger" id="manualVendorTrigger" tabindex="0">
                     <div class="custom-select-trigger-content">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-trigger-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -474,10 +474,40 @@
             <div class="alert alert-error" id="manualFormError" style="display: none; margin-top: var(--space-md);"></div>
 
             <div style="margin-top: var(--space-base); display: flex; gap: var(--space-md); align-items: center;">
-              <button type="button" class="btn btn-primary" id="addManualEntryBtn">
-                <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
-                <span>+ Add & Validate Payment (Batch 2)</span>
+              <button type="button" class="btn btn-secondary" id="addManualEntryBtn">
+                <span class="spinner" id="manualAddSpinner" style="display: none"></span>
+                <span>+ Add Entry to Batch 2 List</span>
               </button>
+            </div>
+
+            <!-- Staged Entries Table (Batch 2) -->
+            <div id="manualDraftSection" style="display: none; margin-top: var(--space-lg);">
+              <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--space-sm);">Staged Manual Payment Entries (Batch 2)</div>
+              <div class="payments-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Payee / Vendor Name</th>
+                      <th>Routing #</th>
+                      <th>Account #</th>
+                      <th>Amount ($)</th>
+                      <th>Invoice / ID Ref</th>
+                      <th>Effective Date</th>
+                      <th style="width: 80px; text-align: right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="manualDraftTableBody"></tbody>
+                </table>
+              </div>
+
+              <div class="draft-summary-bar" style="margin-top: var(--space-md); display: flex; justify-content: space-between; align-items: center; background: var(--color-surface-alt); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
+                <div style="font-size: var(--text-sm);">Staged Entries: <strong id="manualDraftCount">0</strong> · Total: <strong id="manualDraftTotalAmount">$0.00</strong></div>
+                <button type="button" class="btn btn-primary" id="submitManualBatchBtn" disabled>
+                  <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
+                  <span>Submit & Save Manual Batch 2</span>
+                </button>
+              </div>
             </div>
           </div>
 
