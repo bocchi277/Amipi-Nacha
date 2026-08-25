@@ -80,7 +80,7 @@ def _register_login_and_create_vendor(page: Page, base_url: str):
 
 
 def test_valid_manual_batch_entry(page: Page, base_url: str):
-    """Test adding a valid manual entry inline and submitting — results + auto NACHA generation."""
+    """Test adding a valid manual entry inline, verifying visible bank details, and submitting."""
     v_name, v_id = _register_login_and_create_vendor(page, base_url)
 
     inv_ref = f"MAN-{uuid.uuid4().hex[:6]}"
@@ -88,17 +88,24 @@ def test_valid_manual_batch_entry(page: Page, base_url: str):
     # Fill shared effective date
     page.fill("#manualEffDate", "2026-08-15")
 
-    # Fill inline row 1
+    # Select vendor on row 1
     row1 = page.locator("#manualInlineTableBody tr").first
     row1.locator(".manual-row-vendor").select_option(v_id)
+
+    # Verify that Routing # and Account # are immediately visible in the table row
+    expect(row1.locator(".manual-row-routing")).to_contain_text("026013356")
+    expect(row1.locator(".manual-row-account")).to_contain_text("5544332211")
+
+    # Fill amount and invoice ref
     row1.locator(".manual-row-amount").fill("3450.75")
     row1.locator(".manual-row-ref").fill(inv_ref)
 
-    # Click Validate & Generate NACHA (single button)
-    page.click("#submitManualBatchBtn")
+    # Click Generate Combined NACHA File (validates Batch 2 and generates file)
+    page.click("#generateNachaBtn")
 
-    # Results section should display
+    # Results section and NACHA output card should display
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
 
     # Stat values check
     expect(page.locator("#manualStatTotalRows")).to_contain_text("1")
@@ -111,18 +118,28 @@ def test_valid_manual_batch_entry(page: Page, base_url: str):
     expect(tbody).to_contain_text(v_name)
     expect(tbody).to_contain_text(inv_ref)
     expect(tbody).to_contain_text("Valid")
-    expect(tbody.locator("button:has-text('Edit')")).to_be_visible()
-    expect(tbody.locator("button:has-text('Remove')")).to_be_visible()
 
-    # No duplicate warning banner
-    expect(page.locator("#manualDuplicateBanner")).to_be_hidden()
 
-    # NACHA file should be auto-generated (no need to click Generate separately)
-    expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
+def test_validation_error_on_generate_nacha(page: Page, base_url: str):
+    """Clicking Generate Combined NACHA with invalid Batch 2 row displays error and scrolls to problem block."""
+    v_name, v_id = _register_login_and_create_vendor(page, base_url)
+
+    # Leave amount empty
+    row1 = page.locator("#manualInlineTableBody tr").first
+    row1.locator(".manual-row-vendor").select_option(v_id)
+    row1.locator(".manual-row-ref").fill("INV-ERR-01")
+
+    # Click master Generate NACHA File button
+    page.click("#generateNachaBtn")
+
+    # Error message should appear in Batch 2 error panel
+    error_el = page.locator("#manualFormError")
+    expect(error_el).to_be_visible(timeout=5000)
+    expect(error_el).to_contain_text("Row 1: Amount must be > 0")
 
 
 def test_multi_row_manual_batch_entry(page: Page, base_url: str):
-    """Test adding multiple rows inline and submitting all in one click."""
+    """Test adding multiple rows inline and generating NACHA."""
     v_name, v_id = _register_login_and_create_vendor(page, base_url)
 
     # Fill shared effective date
@@ -142,8 +159,8 @@ def test_multi_row_manual_batch_entry(page: Page, base_url: str):
     row2.locator(".manual-row-amount").fill("2000.00")
     row2.locator(".manual-row-ref").fill("INV-002")
 
-    # Single click validates + generates
-    page.click("#submitManualBatchBtn")
+    # Click Generate Combined NACHA File (validates both rows & generates NACHA)
+    page.click("#generateNachaBtn")
 
     # Results appear
     expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
@@ -151,7 +168,7 @@ def test_multi_row_manual_batch_entry(page: Page, base_url: str):
     expect(page.locator("#manualStatValidRows")).to_contain_text("2")
     expect(page.locator("#manualStatTotalAmount")).to_contain_text("$3,000.00")
 
-    # NACHA auto-generated
+    # NACHA generated
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
 
 

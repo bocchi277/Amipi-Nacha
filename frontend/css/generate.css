@@ -589,3 +589,16 @@
   box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.12);
   outline: none;
 }
+
+#manualInlineTable .manual-row-routing,
+#manualInlineTable .manual-row-account {
+  font-size: 11px;
+  color: var(--color-text-secondary, #475569);
+  letter-spacing: 0.02em;
+}
+
+#manualInlineTable .manual-row-type .badge {
+  font-weight: 500;
+  padding: 2px 6px;
+}
+

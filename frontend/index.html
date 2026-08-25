@@ -381,11 +381,14 @@
               <table class="data-table" id="manualInlineTable">
                 <thead>
                   <tr>
-                    <th style="width: 40px;">#</th>
-                    <th style="min-width: 200px;">Vendor *</th>
-                    <th style="width: 130px;">Amount ($) *</th>
-                    <th style="width: 160px;">Invoice / Ref # *</th>
-                    <th style="width: 60px;"></th>
+                    <th style="width: 35px;">#</th>
+                    <th style="min-width: 170px;">Vendor *</th>
+                    <th style="width: 105px;">Routing #</th>
+                    <th style="width: 115px;">Account #</th>
+                    <th style="width: 80px;">Type</th>
+                    <th style="width: 110px;">Amount ($) *</th>
+                    <th style="width: 130px;">Invoice / Ref # *</th>
+                    <th style="width: 45px; text-align: center;"></th>
                   </tr>
                 </thead>
                 <tbody id="manualInlineTableBody">
@@ -404,7 +407,7 @@
               </button>
               <button type="button" class="btn btn-primary" id="submitManualBatchBtn">
                 <span class="spinner" id="manualBatchSpinner" style="display: none"></span>
-                <span>Validate &amp; Generate NACHA</span>
+                <span>Validate Batch</span>
               </button>
             </div>
           </div>
@@ -493,7 +496,7 @@
           </div>
 
           <!-- Combined NACHA File Generation Card -->
-          <div class="card" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg); border-top: 3px solid var(--color-primary);">
+          <div class="card" id="combinedGenerateSection" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg); border-top: 3px solid var(--color-primary);">
             <div class="card-title">Generate Combined Chase NACHA File</div>
             <p class="text-sm text-muted" style="margin-bottom: var(--space-md);">
               Combines all parsed valid payments from Batch 1 (Spreadsheet) and Batch 2 (Manual Entry) into a single Chase CCD credit NACHA file (94 characters fixed-width per record, 10-record block padded).

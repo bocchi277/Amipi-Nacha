@@ -97,10 +97,8 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
     row1.locator(".manual-row-vendor").select_option(vendor_id)
     row1.locator(".manual-row-amount").fill("1800.00")
     row1.locator(".manual-row-ref").fill(inv2)
-    page.click("#submitManualBatchBtn")
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
-
-    # NACHA file is auto-generated upon Batch 2 submission
+    # Generate Combined NACHA File (validates Batch 2 and generates combined file)
+    page.click("#generateNachaBtn")
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
 
     # Step 3: Switch to Payment History Tab

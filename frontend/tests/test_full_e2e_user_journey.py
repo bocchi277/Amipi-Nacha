@@ -107,15 +107,19 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
     page.fill("#manualEffDate", "2026-08-30")
     row1 = page.locator("#manualInlineTableBody tr").first
     row1.locator(".manual-row-vendor").select_option(vendor_id)
+
+    # Verify visible bank details
+    expect(row1.locator(".manual-row-routing")).to_contain_text(orig_routing)
+    expect(row1.locator(".manual-row-account")).to_contain_text(orig_account)
+
     row1.locator(".manual-row-amount").fill("2750.00")
     row1.locator(".manual-row-ref").fill(inv2)
 
-    # Single click: Validate & Generate NACHA
-    page.click("#submitManualBatchBtn")
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    # Click Generate Combined NACHA File (validates Batch 2 and generates combined file)
+    page.click("#generateNachaBtn")
 
     # ------------------------------------------------------------------------
-    # STEP 4: Combined NACHA File Auto-Generated & Download
+    # STEP 4: Combined NACHA File Generated & Download
     # ------------------------------------------------------------------------
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
     expect(page.locator("#nachaCreditTotal")).to_contain_text("8,000.00")

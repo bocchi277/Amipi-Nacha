@@ -1014,12 +1014,10 @@ const GenerateScreen = (() => {
     const tbody = el('manualInlineTableBody');
     if (!tbody) return;
 
-    if (manualInlineRowCount < 1) manualInlineRowCount = 1;
-
-    // Preserve existing values before re-render
-    const existingValues = [];
+    // Collect existing values to preserve while expanding rows
     const existingRows = tbody.querySelectorAll('tr');
-    existingRows.forEach((tr) => {
+    const existingValues = [];
+    existingRows.forEach(tr => {
       const vendorSel = tr.querySelector('.manual-row-vendor');
       const amtInput = tr.querySelector('.manual-row-amount');
       const refInput = tr.querySelector('.manual-row-ref');
@@ -1031,19 +1029,30 @@ const GenerateScreen = (() => {
     });
 
     tbody.innerHTML = '';
-    const vendorOptions = '<option value="">-- Select --</option>' +
+    const vendorOptions = '<option value="">-- Select Vendor --</option>' +
       loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
     for (let i = 0; i < manualInlineRowCount; i++) {
       const tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', i);
       const saved = existingValues[i] || { vendor_id: '', amount: '', ref: '' };
+      const vendorObj = saved.vendor_id ? loadedVendors.find(v => String(v.id) === String(saved.vendor_id)) : null;
+
       tr.innerHTML = `
-        <td class="font-mono" style="vertical-align: middle;">${i + 1}</td>
+        <td class="font-mono" style="vertical-align: middle; text-align: center; color: var(--color-text-muted); font-size: 11px;">${i + 1}</td>
         <td style="padding: 4px 6px;">
           <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
             ${vendorOptions}
           </select>
+        </td>
+        <td class="font-mono manual-row-routing" style="vertical-align: middle; padding: 4px 6px; font-size: 11px; color: var(--color-text-muted);">
+          ${vendorObj ? vendorObj.routing_number : '—'}
+        </td>
+        <td class="font-mono manual-row-account" style="vertical-align: middle; padding: 4px 6px; font-size: 11px; color: var(--color-text-muted);">
+          ${vendorObj ? (vendorObj.account_number || '••••••') : '—'}
+        </td>
+        <td class="manual-row-type" style="vertical-align: middle; padding: 4px 6px; font-size: 11px;">
+          ${vendorObj ? `<span class="badge badge-neutral" style="font-size: 10px; text-transform: capitalize;">${vendorObj.account_type || 'Checking'}</span>` : '—'}
         </td>
         <td style="padding: 4px 6px;">
           <input type="number" class="form-input manual-row-amount" data-idx="${i}" step="0.01" placeholder="0.00" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" value="${saved.amount}" />
@@ -1058,10 +1067,26 @@ const GenerateScreen = (() => {
       `;
       tbody.appendChild(tr);
 
-      // Restore vendor selection
-      if (saved.vendor_id) {
-        const sel = tr.querySelector('.manual-row-vendor');
-        if (sel) sel.value = saved.vendor_id;
+      // Restore vendor selection and attach change listener
+      const sel = tr.querySelector('.manual-row-vendor');
+      if (sel) {
+        if (saved.vendor_id) sel.value = saved.vendor_id;
+        sel.addEventListener('change', (e) => {
+          const vid = e.target.value;
+          const v = loadedVendors.find(x => String(x.id) === String(vid));
+          const rCell = tr.querySelector('.manual-row-routing');
+          const aCell = tr.querySelector('.manual-row-account');
+          const tCell = tr.querySelector('.manual-row-type');
+          if (rCell) rCell.textContent = v ? v.routing_number : '—';
+          if (aCell) aCell.textContent = v ? (v.account_number || '••••••') : '—';
+          if (tCell) tCell.innerHTML = v ? `<span class="badge badge-neutral" style="font-size: 10px; text-transform: capitalize;">${v.account_type || 'Checking'}</span>` : '—';
+          checkNachaGenerateButtonState();
+        });
+      }
+
+      const amtInp = tr.querySelector('.manual-row-amount');
+      if (amtInp) {
+        amtInp.addEventListener('input', checkNachaGenerateButtonState);
       }
     }
   }
@@ -1083,14 +1108,13 @@ const GenerateScreen = (() => {
   function removeManualInlineRow(index) {
     if (manualInlineRowCount <= 1) return;
 
-    // Collect current values, remove the target, and re-render
     const tbody = el('manualInlineTableBody');
     if (!tbody) return;
 
     const allRows = tbody.querySelectorAll('tr');
     const values = [];
     allRows.forEach((tr, i) => {
-      if (i === index) return; // skip the one being removed
+      if (i === index) return;
       const vendorSel = tr.querySelector('.manual-row-vendor');
       const amtInput = tr.querySelector('.manual-row-amount');
       const refInput = tr.querySelector('.manual-row-ref');
@@ -1103,21 +1127,31 @@ const GenerateScreen = (() => {
 
     manualInlineRowCount = values.length || 1;
 
-    // Temporarily store values for re-render
     tbody.innerHTML = '';
-    const vendorOptions = '<option value="">-- Select --</option>' +
+    const vendorOptions = '<option value="">-- Select Vendor --</option>' +
       loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
     for (let i = 0; i < manualInlineRowCount; i++) {
       const tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', i);
       const saved = values[i] || { vendor_id: '', amount: '', ref: '' };
+      const vendorObj = saved.vendor_id ? loadedVendors.find(v => String(v.id) === String(saved.vendor_id)) : null;
+
       tr.innerHTML = `
-        <td class="font-mono" style="vertical-align: middle;">${i + 1}</td>
+        <td class="font-mono" style="vertical-align: middle; text-align: center; color: var(--color-text-muted); font-size: 11px;">${i + 1}</td>
         <td style="padding: 4px 6px;">
           <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
             ${vendorOptions}
           </select>
+        </td>
+        <td class="font-mono manual-row-routing" style="vertical-align: middle; padding: 4px 6px; font-size: 11px; color: var(--color-text-muted);">
+          ${vendorObj ? vendorObj.routing_number : '—'}
+        </td>
+        <td class="font-mono manual-row-account" style="vertical-align: middle; padding: 4px 6px; font-size: 11px; color: var(--color-text-muted);">
+          ${vendorObj ? (vendorObj.account_number || '••••••') : '—'}
+        </td>
+        <td class="manual-row-type" style="vertical-align: middle; padding: 4px 6px; font-size: 11px;">
+          ${vendorObj ? `<span class="badge badge-neutral" style="font-size: 10px; text-transform: capitalize;">${vendorObj.account_type || 'Checking'}</span>` : '—'}
         </td>
         <td style="padding: 4px 6px;">
           <input type="number" class="form-input manual-row-amount" data-idx="${i}" step="0.01" placeholder="0.00" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;" value="${saved.amount}" />
@@ -1131,9 +1165,26 @@ const GenerateScreen = (() => {
         </td>
       `;
       tbody.appendChild(tr);
-      if (saved.vendor_id) {
-        const sel = tr.querySelector('.manual-row-vendor');
-        if (sel) sel.value = saved.vendor_id;
+
+      const sel = tr.querySelector('.manual-row-vendor');
+      if (sel) {
+        if (saved.vendor_id) sel.value = saved.vendor_id;
+        sel.addEventListener('change', (e) => {
+          const vid = e.target.value;
+          const v = loadedVendors.find(x => String(x.id) === String(vid));
+          const rCell = tr.querySelector('.manual-row-routing');
+          const aCell = tr.querySelector('.manual-row-account');
+          const tCell = tr.querySelector('.manual-row-type');
+          if (rCell) rCell.textContent = v ? v.routing_number : '—';
+          if (aCell) aCell.textContent = v ? (v.account_number || '••••••') : '—';
+          if (tCell) tCell.innerHTML = v ? `<span class="badge badge-neutral" style="font-size: 10px; text-transform: capitalize;">${v.account_type || 'Checking'}</span>` : '—';
+          checkNachaGenerateButtonState();
+        });
+      }
+
+      const amtInp = tr.querySelector('.manual-row-amount');
+      if (amtInp) {
+        amtInp.addEventListener('input', checkNachaGenerateButtonState);
       }
     }
   }
@@ -1214,7 +1265,6 @@ const GenerateScreen = (() => {
   }
 
   function toggleManualDraftSection() {
-    // In the new inline design, scroll to the Batch 2 entry card and focus it
     const inlineTable = el('manualInlineTable');
     if (inlineTable) {
       inlineTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1227,7 +1277,9 @@ const GenerateScreen = (() => {
 
     const effDate = el('manualEffDate') ? el('manualEffDate').value.trim() : '';
     if (!effDate) {
-      showManualError('Effective Date is required.');
+      showManualError('Effective Date is required for Batch 2.');
+      const errTarget = el('manualEffDate') || el('manualFormError') || el('manualInlineTable');
+      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
 
@@ -1236,15 +1288,18 @@ const GenerateScreen = (() => {
     if (errors.length > 0) {
       const errMsg = errors.map(e => `Row ${e.row}: ${e.messages.join(', ')}`).join('\n');
       showManualError(errMsg);
+      const errTarget = el('manualFormError') || el('manualInlineTable');
+      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
 
     if (entries.length === 0) {
-      showManualError('Please add at least one payment row.');
+      showManualError('Please add at least one payment row with a selected vendor.');
+      const errTarget = el('manualFormError') || el('manualInlineTable');
+      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
 
-    // Update manualDraftEntries for compatibility with edit/remove in results table
     manualDraftEntries = entries;
 
     if (overrideFlag === true) {
@@ -1274,23 +1329,24 @@ const GenerateScreen = (() => {
       renderManualBatchResults(response);
       checkNachaGenerateButtonState();
 
-      // AUTO-GENERATE NACHA if no errors and no duplicate warnings
-      const hasErrors = (response.errors || []).length > 0;
-      const hasDuplicates = (response.errors || []).some(e =>
+      const hasDuplicateError = (response.errors || []).some(e =>
         e.errors && e.errors.some(msg => msg.toLowerCase().includes('duplicate'))
       );
 
-      if (!hasErrors && !hasDuplicates) {
-        // Auto-trigger NACHA generation — no extra click needed
-        await handleGenerateNacha();
-        if (window.showToast) window.showToast('Batch 2 validated & NACHA file generated!', 'success');
-      } else {
-        if (window.showToast) window.showToast('Batch 2 submitted — review validation results below.', 'info');
+      if (hasDuplicateError && !isOverride) {
+        if (el('manualDuplicateBanner')) {
+          el('manualDuplicateBanner').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (window.showToast) window.showToast('Duplicate transactions detected in Batch 2. Review override.', 'warning');
+        return false;
       }
 
+      if (window.showToast) window.showToast('Batch 2 validated & saved successfully!', 'success');
       return true;
     } catch (err) {
       showManualError(err.message || 'Failed to validate manual batch.');
+      const errTarget = el('manualFormError') || el('manualInlineTable');
+      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     } finally {
       setManualLoading(false);
@@ -1344,18 +1400,47 @@ const GenerateScreen = (() => {
     const btn = el('generateNachaBtn');
     if (!btn) return;
     const hasBatch1Valid = Boolean(batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0);
-    const hasBatch2Valid = Boolean(batch2Id);
-    btn.disabled = !(hasBatch1Valid || hasBatch2Valid);
+    const hasBatch2Rows = manualInlineRowCount > 0;
+    btn.disabled = !(hasBatch1Valid || hasBatch2Rows || batch2Id);
   }
 
   // ── Phase 4: Combined NACHA File Generation & Download ──────
   async function handleGenerateNacha() {
+    if (el('nachaGlobalError')) el('nachaGlobalError').style.display = 'none';
+
+    // 1. If Batch 2 has inline entries, ensure they are validated & submitted first
+    const tbody = el('manualInlineTableBody');
+    const hasInlineRows = tbody && tbody.querySelectorAll('tr').length > 0;
+    
+    // Check if any row has vendor selected or amount entered
+    let hasFilledRow = false;
+    if (hasInlineRows) {
+      const rows = tbody.querySelectorAll('tr');
+      rows.forEach(tr => {
+        const vSel = tr.querySelector('.manual-row-vendor');
+        const aInp = tr.querySelector('.manual-row-amount');
+        if ((vSel && vSel.value) || (aInp && aInp.value)) {
+          hasFilledRow = true;
+        }
+      });
+    }
+
+    if (hasFilledRow || (hasInlineRows && !batch1Id)) {
+      const b2Success = await handleSubmitManualBatch(batch2OverrideActive || false);
+      if (!b2Success) {
+        if (window.showToast) window.showToast('Please fix the validation issues in Batch 2 before generating NACHA.', 'error');
+        return;
+      }
+    }
+
     const batchIds = [];
     if (batch1Id) batchIds.push(batch1Id);
     if (batch2Id) batchIds.push(batch2Id);
 
     if (batchIds.length === 0) {
-      showNachaError('Please upload Batch 1 (spreadsheet) or submit Batch 2 (manual entry) first.');
+      showNachaError('Please upload Batch 1 (spreadsheet) or enter valid Batch 2 payments first.');
+      const target = el('batch1Card') || el('batch2Card') || el('nachaGlobalError');
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -1369,6 +1454,7 @@ const GenerateScreen = (() => {
 
     if (entryDesc === 'PAYROLL' || entryDesc === 'REVERSAL') {
       showNachaError('Entry description cannot be PAYROLL or REVERSAL for Chase CCD credits.');
+      if (el('entryDesc')) el('entryDesc').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -1387,16 +1473,16 @@ const GenerateScreen = (() => {
       trace_sequence_start: traceStart,
     };
 
-
     setNachaLoading(true);
-    if (el('nachaGlobalError')) el('nachaGlobalError').style.display = 'none';
 
     try {
       const response = await API.post('/nacha/generate', payload);
       generatedNachaRecord = response;
       renderNachaOutputCard(response);
+      if (window.showToast) window.showToast('Combined NACHA file generated successfully!', 'success');
     } catch (err) {
       showNachaError(err.message || 'Combined NACHA file generation failed.');
+      if (el('nachaGlobalError')) el('nachaGlobalError').scrollIntoView({ behavior: 'smooth', block: 'center' });
     } finally {
       setNachaLoading(false);
     }

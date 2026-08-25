@@ -112,12 +112,8 @@ def test_combined_nacha_file_generation_and_download(page: Page, base_url: str):
     row1.locator(".manual-row-amount").fill("2500.50")
     row1.locator(".manual-row-ref").fill(batch2_inv)
 
-    # Single click validates, saves, and auto-generates NACHA
-    page.click("#submitManualBatchBtn")
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
-
-    # Step 3: NACHA is auto-generated after Batch 2 submit (includes both Batch 1 + 2)
-    # No need to click generateNachaBtn — it's automatic now
+    # Click Generate Combined NACHA File (validates Batch 2 and generates combined file)
+    page.click("#generateNachaBtn")
 
     # Step 4: Confirm Output Card renders with metadata
     expect(page.locator("#nachaOutputCard")).to_be_visible(timeout=10000)
