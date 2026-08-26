@@ -1463,10 +1463,7 @@ const GenerateScreen = (() => {
 
   function checkNachaGenerateButtonState() {
     const btn = el('generateNachaBtn');
-    if (!btn) return;
-    const hasBatch1Valid = Boolean(batch1Id && lastUploadResponse && lastUploadResponse.valid_payments && lastUploadResponse.valid_payments.length > 0);
-    const hasManualRows = manualBatches.some(b => b.rowCount > 0);
-    btn.disabled = !(hasBatch1Valid || hasManualRows || batch2Id);
+    if (btn) btn.disabled = false;
   }
 
   // ── Phase 4: Combined NACHA File Generation & Download ──────
@@ -1478,6 +1475,14 @@ const GenerateScreen = (() => {
       const errBox = getBatchErrorBox(b.batchNum);
       if (errBox) errBox.style.display = 'none';
     });
+
+    const entryDesc = (el('entryDesc') ? el('entryDesc').value.trim() : 'EPAYMNT').toUpperCase();
+    if (entryDesc === 'PAYROLL' || entryDesc === 'REVERSAL') {
+      showNachaError('Entry description cannot be PAYROLL or REVERSAL for CCD SEC code per Chase NACHA guidelines.');
+      const errTarget = el('entryDesc') || el('nachaGlobalError');
+      if (errTarget) errTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
 
     // 1. Validate all active manual batches
     const validBatchesData = [];
