@@ -658,7 +658,7 @@ const HistoryScreen = (() => {
         </td>
         <td class="font-mono font-bold">${amtFormatted} ${breakdownBadge}</td>
         <td class="font-mono text-xs">${r.invoice_reference || '—'}</td>
-        <td class="font-mono text-xs" style="white-space: nowrap;">${r.sequence_id ? `<span class="badge" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #1E293B; font-size: 11px; padding: 2px 6px; font-family: monospace; letter-spacing: 0.5px;">${r.sequence_id}</span>` : '<span class="text-muted">—</span>'}</td>
+        <td class="font-mono text-xs" style="white-space: nowrap;">${r.sequence_id ? `<span class="badge" title="Full Trace: ${r.sequence_id}" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #1E293B; font-size: 11px; padding: 2px 6px; font-family: monospace; letter-spacing: 0.5px;">${r.sequence_id.length > 6 ? r.sequence_id.slice(-6) : r.sequence_id}</span>` : '<span class="text-muted">—</span>'}</td>
         <td class="font-mono text-xs"><span class="badge badge-secondary" style="background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; padding: 2px 6px;">${r.created_by_username || 'admin'}</span></td>
         <td>${statusBadge}</td>
         <td class="font-mono text-xs text-muted">${formattedSentDate}</td>

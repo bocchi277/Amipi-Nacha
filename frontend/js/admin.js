@@ -334,7 +334,7 @@ const AdminScreen = (() => {
     if (modal) {
       modal.classList.add('active');
       modal.style.display = 'flex';
-      setTimeout(() => el('newUsername')?.focus(), 50);
+      el('newUsername')?.focus();
     }
   }
 
@@ -425,7 +425,7 @@ const AdminScreen = (() => {
     if (modal) {
       modal.classList.add('active');
       modal.style.display = 'flex';
-      setTimeout(() => el('resetPasswordNewPassword')?.focus(), 50);
+      el('resetPasswordNewPassword')?.focus();
     }
   }
 

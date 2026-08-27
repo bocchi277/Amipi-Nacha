@@ -87,11 +87,12 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
 
     page.click("#openAddUserModalBtn")
     expect(page.locator("#addUserModal")).to_be_visible()
+    expect(page.locator("#newUsername")).to_be_visible()
 
-    page.fill("#newUsername", new_username)
-    page.fill("#newUserEmail", new_email)
-    page.fill("#newUserPassword", new_password)
-    page.select_option("#newUserRole", "user")
+    page.locator("#newUsername").fill(new_username)
+    page.locator("#newUserEmail").fill(new_email)
+    page.locator("#newUserPassword").fill(new_password)
+    page.locator("#newUserRole").select_option("user")
     page.click("#submitAddUserBtn")
 
     # Modal closes and table shows new user

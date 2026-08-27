@@ -125,7 +125,22 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
     expect(tbody).to_contain_text(inv1)
     expect(tbody).to_contain_text(inv2)
 
+    # Verify Sequence column displays 6-digit truncated format with full trace in title tooltip
+    seq_badge = tbody.locator("tr").first.locator("td:nth-child(8) .badge")
+    if seq_badge.count() > 0 and seq_badge.text_content():
+        seq_text = seq_badge.text_content().strip()
+        assert len(seq_text) <= 6, f"Sequence display length must be <= 6, got '{seq_text}'"
+        assert seq_badge.get_attribute("title").startswith("Full Trace:"), "Tooltip must include full trace"
+
+    # Filter by Sequence Column
+    page.click("#clearAllColFilters")
+    page.fill("#colFilterSequence", "000001")
+    # Table should react without errors
+    expect(tbody).to_be_visible()
+
     # Step 5: Test Multi-Select Checkboxes & Select All
+    page.click("#clearAllColFilters")
+    page.fill("#colFilterVendor", v_name)
     page.check("#historySelectAllCb")
     expect(page.locator("#historyBulkBar")).to_be_visible()
     expect(page.locator("#historySelectedCount")).to_contain_text("2")

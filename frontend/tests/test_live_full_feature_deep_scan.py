@@ -247,8 +247,8 @@ def test_live_site_deep_scan_every_feature(page: Page, base_url: str, run_contex
     row1.locator(".manual-row-amount").fill("2500.00")
     row1.locator(".manual-row-ref").fill(f"INV-202-{uid}")
 
-    page.click("#submitManualBatchBtn")
-    expect(page.locator("#manualResultsSection")).to_be_visible(timeout=10000)
+    page.click("#validateBatch2Btn")
+    expect(page.locator("#batch2ValidateSummary")).to_be_visible(timeout=5000)
 
     # =========================================================================
     # 4. NACHA FILE GENERATION & DOWNLOAD

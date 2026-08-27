@@ -413,6 +413,19 @@
             <!-- Error display -->
             <div class="alert alert-error" id="manualFormError" style="display: none; margin-top: var(--space-md);"></div>
 
+            <!-- Duplicate Warning & Override Banner for Batch 2 -->
+            <div class="duplicate-banner batch-duplicate-banner" id="manualDuplicateBanner" style="display: none; margin-top: var(--space-md);">
+              <div class="duplicate-title">Duplicate Transactions Detected in Batch 2</div>
+              <div class="duplicate-sub">One or more manual payment entries match existing transactions previously submitted.</div>
+              <div class="duplicate-actions">
+                <label class="override-checkbox-label">
+                  <input type="checkbox" id="manualOverrideCheckbox" onchange="GenerateScreen.toggleOverride(2, this.checked)" />
+                  Allow Duplicate Override
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="manualRetryOverrideBtn" onclick="GenerateScreen.handleGenerateNacha()">Re-upload with Override</button>
+              </div>
+            </div>
+
             <!-- Action Buttons -->
             <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
               <button type="button" class="btn btn-secondary btn-sm" id="addManualRowBtn">
@@ -451,89 +464,6 @@
 
           <!-- Dynamic Container for Additional Batches (Batch 3, Batch 4, etc.) -->
           <div id="additionalBatchesContainer"></div>
-
-          <!-- Manual Batch 2 Results Section (Hidden until submitted) -->
-          <div id="manualResultsSection" style="display: none; margin-bottom: var(--space-xl);">
-
-            <!-- Summary Bar -->
-            <div class="summary-bar">
-              <div class="summary-card">
-                <div class="summary-val" id="manualStatTotalRows">0</div>
-                <div class="summary-lbl">Total Rows (Batch 2)</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-val" id="manualStatValidRows" style="color: var(--color-success)">0</div>
-                <div class="summary-lbl">Valid Rows</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-val" id="manualStatErrorRows" style="color: var(--color-danger)">0</div>
-                <div class="summary-lbl">Validation Issues</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-val" id="manualStatTotalAmount">$0.00</div>
-                <div class="summary-lbl">Total Credit Amount</div>
-              </div>
-            </div>
-
-            <!-- Duplicate Warning & Override Banner -->
-            <div class="duplicate-banner" id="manualDuplicateBanner" style="display: none">
-              <div class="duplicate-title">Duplicate Transactions Detected in Batch 2</div>
-              <div class="duplicate-sub">One or more manual payment entries match existing transactions previously submitted.</div>
-              <div class="duplicate-actions">
-                <label class="override-checkbox-label">
-                  <input type="checkbox" id="manualOverrideCheckbox" />
-                  Allow Duplicate Override
-                </label>
-                <button type="button" class="btn btn-secondary btn-sm" id="manualRetryOverrideBtn">Re-upload with Override</button>
-              </div>
-            </div>
-
-            <!-- Error Details Panel -->
-            <div class="error-panel" id="manualErrorPanel" style="display: none">
-              <div class="error-panel-title">
-                <span>Batch 2 Validation Issues</span>
-                <span class="badge badge-danger" id="manualErrorCountBadge" style="margin-left: auto;">0 issue(s)</span>
-              </div>
-              <table class="error-table">
-                <thead>
-                  <tr>
-                    <th style="width: 80px;">Row #</th>
-                    <th>Raw Data</th>
-                    <th>Validation Errors</th>
-                  </tr>
-                </thead>
-                <tbody id="manualErrorTableBody"></tbody>
-              </table>
-            </div>
-
-            <!-- Valid Payments List Table -->
-            <div class="card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
-                <div class="card-title" style="margin-bottom: 0;">Saved Valid Payments (Batch 2)</div>
-                <button type="button" class="btn btn-secondary btn-sm" id="toggleManualDraftBtn" onclick="GenerateScreen.toggleManualDraftSection()" style="font-size: var(--text-xs); padding: 4px 10px;">
-                  + Add More Lines
-                </button>
-              </div>
-              <div class="payments-table-wrap">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 50px;">#</th>
-                      <th>Payee / Vendor Name</th>
-                      <th>Routing #</th>
-                      <th>Account #</th>
-                      <th>Amount ($)</th>
-                      <th>Invoice / Ref #</th>
-                      <th>Status</th>
-                      <th style="text-align: right; width: 140px;">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="manualValidPaymentsTableBody"></tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
 
           <!-- Combined NACHA File Generation Card -->
           <div class="card" id="combinedGenerateSection" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg); border-top: 3px solid var(--color-primary);">
@@ -1144,7 +1074,7 @@
                     <th>Recipient Email</th>
                     <th>Amount ($)</th>
                     <th>Invoice / Ref #</th>
-                    <th style="width: 160px;">Sequence ID</th>
+                    <th style="width: 110px;">Sequence #</th>
                     <th>Generated By</th>
                     <th>Status</th>
                     <th>Sent Timestamp</th>

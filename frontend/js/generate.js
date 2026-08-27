@@ -1338,8 +1338,13 @@ const GenerateScreen = (() => {
 
   function retryBatchOverride(batchNum) {
     const b = getManualBatchObj(batchNum);
-    b.overrideActive = true;
+    if (b) b.overrideActive = true;
     handleGenerateNacha();
+  }
+
+  function toggleOverride(batchNum, checked) {
+    const b = getManualBatchObj(batchNum);
+    if (b) b.overrideActive = Boolean(checked);
   }
 
   function collectManualBatchData(batchNum = 2) {
@@ -1605,10 +1610,14 @@ const GenerateScreen = (() => {
           return false;
         }
 
+        const isOverrideChecked = b.batchNum === 2
+          ? Boolean(el('manualOverrideCheckbox')?.checked)
+          : Boolean(el(`manualOverrideCheckbox_${b.batchNum}`)?.checked);
+
         validBatchesData.push({
           batchNum: b.batchNum,
           entries: batchData.entries,
-          overrideActive: b.overrideActive || Boolean(el(`manualOverrideCheckbox_${b.batchNum}`)?.checked) || Boolean(el('manualOverrideCheckbox')?.checked),
+          overrideActive: b.overrideActive || isOverrideChecked,
         });
       }
     }
@@ -1644,7 +1653,6 @@ const GenerateScreen = (() => {
           batch2Id = response.batch_id;
           lastBatch2Response = response;
           manualDraftEntries = vb.entries;
-          renderManualBatchResults(response);
         }
 
         const hasDuplicateError = (response.errors || []).some(e =>
@@ -1660,6 +1668,9 @@ const GenerateScreen = (() => {
           if (window.showToast) window.showToast(`Duplicate transactions detected in Batch ${vb.batchNum}. Review override.`, 'warning');
           setNachaLoading(false);
           return false;
+        } else {
+          const dupBanner = getBatchDuplicateBanner(vb.batchNum);
+          if (dupBanner) dupBanner.style.display = 'none';
         }
 
         generatedBatchIds.push(response.batch_id);
@@ -1796,6 +1807,7 @@ const GenerateScreen = (() => {
     toggleManualDraftSection,
     renderManualInlineRows,
     validateBatch,
+    toggleOverride,
   };
 })();
 

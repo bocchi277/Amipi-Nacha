@@ -175,6 +175,7 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
 
     page.click("#logoutBtn")
     expect(page.locator("#loginForm")).to_be_visible(timeout=5000)
+    page.wait_for_load_state("networkidle")
 
     page.fill("#loginUsername", admin_user)
     page.fill("#loginPassword", admin_password)
