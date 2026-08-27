@@ -640,41 +640,44 @@ const HistoryScreen = (() => {
         <td style="text-align: center;">
           <input type="checkbox" class="history-row-cb" data-remittance-id="${r.id}" ${isChecked ? 'checked' : ''} onchange="HistoryScreen.toggleRowSelection('${r.id}', this.checked)" />
         </td>
-        <td class="font-mono">${globalIdx}</td>
-        <td class="font-mono text-xs">${formattedEffDate}</td>
-        <td class="font-bold">${r.vendor_name}</td>
+        <td class="font-mono" style="text-align: center; color: #64748B; font-size: 12px;">${globalIdx}</td>
+        <td class="font-mono text-xs" style="text-align: center; color: #334155;">${formattedEffDate}</td>
+        <td class="font-bold" style="color: #0F172A; font-size: 13px;">${r.vendor_name}</td>
         <td class="font-mono text-xs text-muted" id="email-cell-${r.id}">
-          <div id="email-display-${r.id}" style="display: inline-flex; align-items: center; gap: 6px;">
+          <div id="email-display-${r.id}" style="display: inline-flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px;">
             <span>${r.recipient_email}</span>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.editRowEmail('${r.id}')" style="padding: 1px 4px; font-size: 10px; line-height: 1;" title="Edit Recipient Email Address">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.editRowEmail('${r.id}')" style="padding: 2px 5px; font-size: 10px; line-height: 1; border-radius: 4px;" title="Edit Recipient Email Address">
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
             </button>
           </div>
-          <div id="email-edit-${r.id}" style="display: none; align-items: center; gap: 4px;">
-            <input type="email" class="form-input form-input-sm" id="email-input-${r.id}" value="${r.recipient_email}" style="padding: 2px 6px; font-size: 11px; width: 175px;" onkeydown="if(event.key==='Enter'){HistoryScreen.saveRowEmail('${r.id}');}if(event.key==='Escape'){HistoryScreen.cancelRowEmailEdit('${r.id}');}" />
+          <div id="email-edit-${r.id}" style="display: none; align-items: center; gap: 4px; width: 100%;">
+            <input type="email" class="form-input form-input-sm" id="email-input-${r.id}" value="${r.recipient_email}" style="padding: 3px 8px; font-size: 12px; width: 175px;" onkeydown="if(event.key==='Enter'){HistoryScreen.saveRowEmail('${r.id}');}if(event.key==='Escape'){HistoryScreen.cancelRowEmailEdit('${r.id}');}" />
             <button type="button" class="btn btn-primary btn-sm" onclick="HistoryScreen.saveRowEmail('${r.id}')" style="padding: 2px 6px; font-size: 10px;" title="Save Email">✓</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.cancelRowEmailEdit('${r.id}')" style="padding: 2px 6px; font-size: 10px;" title="Cancel">✕</button>
           </div>
         </td>
-        <td class="font-mono font-bold">${amtFormatted} ${breakdownBadge}</td>
-        <td class="font-mono text-xs">${r.invoice_reference || '—'}</td>
-        <td class="font-mono text-xs" style="white-space: nowrap;">${r.sequence_id ? `<span class="badge" title="Full Trace: ${r.sequence_id}" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #1E293B; font-size: 11px; padding: 2px 6px; font-family: monospace; letter-spacing: 0.5px;">${r.sequence_id.length > 6 ? r.sequence_id.slice(-6) : r.sequence_id}</span>` : '<span class="text-muted">—</span>'}</td>
-        <td class="font-mono text-xs"><span class="badge badge-secondary" style="background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; padding: 2px 6px;">${r.created_by_username || 'admin'}</span></td>
-        <td>${statusBadge}</td>
-        <td class="font-mono text-xs text-muted">${formattedSentDate}</td>
-        <td style="text-align: right; white-space: nowrap;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openViewEmailModal('${r.id}')" style="padding: 2px 6px; font-size: 10px; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px;" title="View Rendered Tabular Email">
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span>View</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.sendSingleRemittanceEmail('${r.id}')" style="padding: 2px 6px; font-size: 10px; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px;" title="Send Remittance Email to ${r.recipient_email}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-            <span>${isSent ? 'Resend' : 'Send'}</span>
-          </button>
-          ${isAdmin() ? `
-          <button type="button" class="btn btn-sm" onclick="HistoryScreen.openConfirmDeleteSingleHistory('${r.id}')" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 6px; font-weight: 600; font-size: 10px;" title="Delete Record (Admin Only)">
-            🗑 Delete
-          </button>` : ''}
+        <td class="font-mono font-bold" style="text-align: right; color: #0F172A; font-size: 13px;">${amtFormatted} ${breakdownBadge}</td>
+        <td class="font-mono text-xs" style="color: #334155;">${r.invoice_reference || '—'}</td>
+        <td class="font-mono text-xs" style="text-align: center; white-space: nowrap;">${r.sequence_id ? `<span class="badge" title="Full Trace: ${r.sequence_id}" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #1E293B; font-size: 11px; padding: 2px 8px; font-family: monospace; letter-spacing: 0.5px; border-radius: 5px;">${r.sequence_id.length > 6 ? r.sequence_id.slice(-6) : r.sequence_id}</span>` : '<span class="text-muted">—</span>'}</td>
+        <td class="font-mono text-xs" style="text-align: center;"><span class="badge badge-secondary" style="background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; padding: 2px 8px; border-radius: 5px;">${r.created_by_username || 'admin'}</span></td>
+        <td style="text-align: center;">${statusBadge}</td>
+        <td class="font-mono text-xs text-muted" style="text-align: center;">${formattedSentDate}</td>
+        <td style="text-align: center; white-space: nowrap;">
+          <div class="history-action-group">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.openViewEmailModal('${r.id}')" style="padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border-radius: 5px;" title="View Rendered Tabular Email">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>View</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="HistoryScreen.sendSingleRemittanceEmail('${r.id}')" style="padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border-radius: 5px;" title="Send Remittance Email to ${r.recipient_email}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              <span>${isSent ? 'Resend' : 'Send'}</span>
+            </button>
+            ${isAdmin() ? `
+            <button type="button" class="btn btn-sm" onclick="HistoryScreen.openConfirmDeleteSingleHistory('${r.id}')" style="background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; padding: 3px 8px; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border-radius: 5px;" title="Delete Record (Admin Only)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              <span>Delete</span>
+            </button>` : ''}
+          </div>
         </td>
       `;
 
@@ -724,7 +727,7 @@ const HistoryScreen = (() => {
     if (!tbody) return;
     tbody.innerHTML = `
       <tr>
-        <td colspan="11" class="text-center text-muted" style="padding: var(--space-xl);">
+        <td colspan="12" class="text-center text-muted" style="padding: var(--space-xl);">
           ${message}
         </td>
       </tr>

@@ -651,3 +651,91 @@
   font-weight: 500;
   padding: 2px 6px;
 }
+
+/* ── Payment History Table Enhancements ─────────────────────────── */
+#historyTableWrap {
+  overflow-x: auto;
+  width: 100%;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  background: #FFFFFF;
+}
+
+#historyTableWrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+#historyTableWrap::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+
+#historyTableWrap::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+#historyTableWrap::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+#historyTable {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+#historyTable th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.04em;
+  background: #F8FAFC;
+  border-bottom: 2px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+#historyTable td {
+  padding: 11px 14px;
+  border-bottom: 1px solid #F1F5F9;
+  vertical-align: middle;
+  transition: background 0.12s ease;
+}
+
+#historyTable tbody tr:hover td {
+  background: #F8FAFC;
+}
+
+.history-filter-row th {
+  padding: 6px 10px !important;
+  background: #F8FAFC !important;
+  border-bottom: 2px solid #CBD5E1 !important;
+}
+
+.history-col-filter {
+  height: 30px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  border-radius: 5px !important;
+  border: 1.5px solid #CBD5E1 !important;
+  background: #FFFFFF !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.history-col-filter:focus {
+  border-color: #3B82F6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+  outline: none !important;
+}
+
+.history-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
