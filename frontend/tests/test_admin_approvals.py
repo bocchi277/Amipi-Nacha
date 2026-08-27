@@ -63,6 +63,7 @@ def test_admin_approve_and_reject_vendor_change_requests(page: Page, base_url: s
     _register_api(page, base_url, admin_email, admin_user, admin_password, "admin")
 
     # Login as Admin to seed vendor
+    page.wait_for_selector("#loginUsername", state="visible")
     page.fill("#loginUsername", admin_user)
     page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")

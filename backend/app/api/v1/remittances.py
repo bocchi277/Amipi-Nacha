@@ -184,7 +184,7 @@ async def update_email_template(
 
 
 def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
-    from app.core.email_templates import render_email_template
+    from app.core.email_templates import ACTIVE_TEMPLATE, render_email_template
     from sqlalchemy.inspection import inspect
 
     insp = inspect(r)
@@ -199,7 +199,6 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
         if "created_by_user" in nf_insp.dict and r.nacha_file.created_by_user is not None:
             created_by_user = r.nacha_file.created_by_user.username
 
-    html_content = getattr(r, "body_html", None)
     seq_id = getattr(r, "trace_number", None)
     if not seq_id and "payment" in insp.dict and r.payment is not None:
         seq_id = getattr(r.payment, "trace_number", None)
@@ -215,22 +214,21 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
         except Exception:
             pass
 
-    if not html_content:
-        eff_str = r.effective_date.strftime("%m-%d-%Y") if hasattr(r.effective_date, "strftime") else str(r.effective_date)
-        _, _, html_content = render_email_template(
-            r.subject,
-            r.body_text,
-            {
-                "vendor_name": r.vendor_name,
-                "amount": f"{float(r.amount):,.2f}",
-                "invoice_ref": r.invoice_reference or "N/A",
-                "effective_date": eff_str,
-                "company_name": "AMIPI INC",
-                "payment_method": "ACH/Wire",
-                "deposit_ref": seq_id or (str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970"),
-            },
-            invoice_items=breakdown,
-        )
+    eff_str = r.effective_date.strftime("%m-%d-%Y") if hasattr(r.effective_date, "strftime") else str(r.effective_date)
+    subject_rendered, body_text_rendered, html_content = render_email_template(
+        ACTIVE_TEMPLATE["subject"],
+        ACTIVE_TEMPLATE["body"],
+        {
+            "vendor_name": r.vendor_name,
+            "amount": f"{float(r.amount):,.2f}",
+            "invoice_ref": r.invoice_reference or "N/A",
+            "effective_date": eff_str,
+            "company_name": ACTIVE_TEMPLATE.get("company_name", "AMIPI INC"),
+            "payment_method": "ACH/Wire",
+            "deposit_ref": seq_id or (str(r.nacha_file_id)[:8] if r.nacha_file_id else "12970"),
+        },
+        invoice_items=breakdown,
+    )
 
     return RemittanceResponseSchema(
         id=str(r.id),
@@ -240,8 +238,8 @@ def _build_remittance_response(r: VendorRemittance) -> RemittanceResponseSchema:
         amount=str(r.amount),
         effective_date=r.effective_date.isoformat(),
         invoice_reference=r.invoice_reference,
-        subject=r.subject,
-        body_text=r.body_text,
+        subject=subject_rendered,
+        body_text=body_text_rendered,
         body_html=html_content,
         status=r.status.value,
         sent_at=r.sent_at.isoformat() if r.sent_at else None,

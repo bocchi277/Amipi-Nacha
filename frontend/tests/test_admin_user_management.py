@@ -63,6 +63,7 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
     _register_api(page, base_url, admin_email, admin_user, admin_password, "admin")
 
     # Log in as Admin
+    page.wait_for_selector("#loginUsername", state="visible")
     page.fill("#loginUsername", admin_user)
     page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")

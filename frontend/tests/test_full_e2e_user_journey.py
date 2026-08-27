@@ -49,6 +49,7 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
         [base_url, std_email, std_user, std_password],
     )
 
+    page.wait_for_selector("#loginUsername", state="visible")
     page.fill("#loginUsername", std_user)
     page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
