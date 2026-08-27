@@ -17,18 +17,16 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-STD_USER = f"e2e_std_{_RUN_ID}"
-STD_EMAIL = f"{STD_USER}@amipi.com"
-STD_PASSWORD = "E2eStdPassword123!"
-
-ADMIN_USER = f"e2e_admin_{_RUN_ID}"
-ADMIN_EMAIL = f"{ADMIN_USER}@amipi.com"
-ADMIN_PASSWORD = "E2eAdminPassword123!"
-
-
 def test_full_continuous_user_journey(page: Page, base_url: str):
     """Run the complete end-to-end application lifecycle as one continuous flow."""
+    run_id = uuid.uuid4().hex[:6]
+    std_user = f"e2e_std_{run_id}"
+    std_email = f"{std_user}@amipi.com"
+    std_password = "E2eStdPassword123!"
+
+    admin_user = f"e2e_admin_{run_id}"
+    admin_email = f"{admin_user}@amipi.com"
+    admin_password = "E2eAdminPassword123!"
 
     # ------------------------------------------------------------------------
     # STEP 1: Standard User Registration & Login
@@ -48,11 +46,11 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
             });
         }
         """,
-        [base_url, STD_EMAIL, STD_USER, STD_PASSWORD],
+        [base_url, std_email, std_user, std_password],
     )
 
-    page.fill("#loginUsername", STD_USER)
-    page.fill("#loginPassword", STD_PASSWORD)
+    page.fill("#loginUsername", std_user)
+    page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
     expect(page.locator("#userRoleBadge")).to_be_visible()
@@ -172,14 +170,14 @@ def test_full_continuous_user_journey(page: Page, base_url: str):
             });
         }
         """,
-        [base_url, ADMIN_EMAIL, ADMIN_USER, ADMIN_PASSWORD],
+        [base_url, admin_email, admin_user, admin_password],
     )
 
     page.click("#logoutBtn")
     expect(page.locator("#loginForm")).to_be_visible(timeout=5000)
 
-    page.fill("#loginUsername", ADMIN_USER)
-    page.fill("#loginPassword", ADMIN_PASSWORD)
+    page.fill("#loginUsername", admin_user)
+    page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
     expect(page.locator("#adminRoleBadge")).to_be_visible()

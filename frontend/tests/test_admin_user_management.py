@@ -14,17 +14,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-ADMIN_USER = f"adm_mgmt_{_RUN_ID}"
-ADMIN_EMAIL = f"{ADMIN_USER}@amipi.com"
-ADMIN_PASSWORD = "AdminMgmtPass123!"
-
-STD_USER = f"std_mgmt_{_RUN_ID}"
-STD_EMAIL = f"{STD_USER}@amipi.com"
-STD_PASSWORD = "StdMgmtPass123!"
-
-
-def _register_api(page: Page, base_url: str, email: str, username: str, password: str, role: str):
+def _register_api(page: Page, base_url: str, email: str, username: str, password: str, role: str = "user"):
     """Seed user via API helper."""
     page.evaluate(
         """
@@ -46,10 +36,14 @@ def test_standard_user_cannot_see_admin_tab(page: Page, base_url: str):
     page.evaluate("sessionStorage.clear()")
     page.reload()
 
-    _register_api(page, base_url, STD_EMAIL, STD_USER, STD_PASSWORD, "user")
+    std_user = f"std_{uuid.uuid4().hex[:6]}"
+    std_email = f"{std_user}@amipi.com"
+    std_password = "StdMgmtPass123!"
 
-    page.fill("#loginUsername", STD_USER)
-    page.fill("#loginPassword", STD_PASSWORD)
+    _register_api(page, base_url, std_email, std_user, std_password, "user")
+
+    page.fill("#loginUsername", std_user)
+    page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 
@@ -62,11 +56,15 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
     page.evaluate("sessionStorage.clear()")
     page.reload()
 
-    _register_api(page, base_url, ADMIN_EMAIL, ADMIN_USER, ADMIN_PASSWORD, "admin")
+    admin_user = f"adm_{uuid.uuid4().hex[:6]}"
+    admin_email = f"{admin_user}@amipi.com"
+    admin_password = "AdminMgmtPass123!"
 
-    # Login as Admin
-    page.fill("#loginUsername", ADMIN_USER)
-    page.fill("#loginPassword", ADMIN_PASSWORD)
+    _register_api(page, base_url, admin_email, admin_user, admin_password, "admin")
+
+    # Log in as Admin
+    page.fill("#loginUsername", admin_user)
+    page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
     expect(page.locator("#adminTabBtn")).to_be_visible()
@@ -77,7 +75,7 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
 
     # Check Users table is rendered
     expect(page.locator("#adminUsersTable")).to_be_visible(timeout=5000)
-    expect(page.locator("#adminUsersTableBody")).to_contain_text(ADMIN_USER)
+    expect(page.locator("#adminUsersTableBody")).to_contain_text(admin_user)
 
     # ------------------------------------------------------------------------
     # STEP 1: Provision a New Standard User via In-App Modal
@@ -117,6 +115,7 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
     # Logout and attempt login with deactivated account -> blocked
     page.click("#logoutBtn")
     expect(page.locator("#loginForm")).to_be_visible(timeout=5000)
+    page.wait_for_load_state("networkidle")
 
     page.fill("#loginUsername", new_username)
     page.fill("#loginPassword", new_password)
@@ -127,8 +126,8 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
     # ------------------------------------------------------------------------
     # STEP 3: Admin Re-activates User and Resets Password
     # ------------------------------------------------------------------------
-    page.fill("#loginUsername", ADMIN_USER)
-    page.fill("#loginPassword", ADMIN_PASSWORD)
+    page.fill("#loginUsername", admin_user)
+    page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 
@@ -154,6 +153,7 @@ def test_admin_user_management_lifecycle(page: Page, base_url: str):
     # ------------------------------------------------------------------------
     page.click("#logoutBtn")
     expect(page.locator("#loginForm")).to_be_visible(timeout=5000)
+    page.wait_for_load_state("networkidle")
 
     page.fill("#loginUsername", new_username)
     page.fill("#loginPassword", updated_password)

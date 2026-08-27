@@ -602,3 +602,52 @@
   padding: 2px 6px;
 }
 
+
+/* ── Batch Validate Summary Bar ─────────────────────────────────── */
+.batch-validate-summary {
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface-alt, #f8fafc);
+  padding: 8px;
+  gap: 8px;
+}
+
+/* Apply same input/select styling to Batch 1 manual inline table and dynamic batch tables */
+#b1ManualInlineTable .form-select,
+[id^="manualInlineTable_"] .form-select {
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: #fff;
+}
+
+#b1ManualInlineTable .form-input,
+[id^="manualInlineTable_"] .form-input {
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#b1ManualInlineTable .form-select:focus,
+#b1ManualInlineTable .form-input:focus,
+[id^="manualInlineTable_"] .form-select:focus,
+[id^="manualInlineTable_"] .form-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.12);
+  outline: none;
+}
+
+#b1ManualInlineTable .manual-row-routing,
+#b1ManualInlineTable .manual-row-account,
+[id^="manualInlineTable_"] .manual-row-routing,
+[id^="manualInlineTable_"] .manual-row-account {
+  font-size: 11px;
+  color: var(--color-text-secondary, #475569);
+  letter-spacing: 0.02em;
+}
+
+#b1ManualInlineTable .manual-row-type .badge,
+[id^="manualInlineTable_"] .manual-row-type .badge {
+  font-weight: 500;
+  padding: 2px 6px;
+}

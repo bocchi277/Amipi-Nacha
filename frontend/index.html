@@ -235,53 +235,66 @@
 
             <!-- Mode 2: Manual Payment Entry Panel for Batch 1 -->
             <div id="batch1ManualPanel" style="display: none;">
-              <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Directly enter manual payments for Batch 1 instead of uploading a spreadsheet. All fields are mandatory.</p>
-              <div class="grid-4">
-                <div class="form-group">
-                  <label class="form-label" for="b1ManualVendorSelect">Select Vendor <span class="text-danger" style="color: #dc2626;">*</span></label>
-                  <div class="custom-select-wrapper" id="b1ManualVendorWrapper">
-                    <select id="b1ManualVendorSelect" class="form-select" style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"><option value="">-- Select Vendor --</option></select>
-                    <div class="custom-select-trigger" id="b1ManualVendorTrigger" tabindex="0">
-                      <div class="custom-select-trigger-content">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-trigger-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        <span class="custom-select-label placeholder" id="b1ManualVendorLabel">-- Select Vendor --</span>
-                      </div>
-                      <div class="custom-select-trigger-actions">
-                        <button type="button" class="custom-select-clear-btn" id="b1ManualVendorClearBtn" title="Clear selection">&times;</button>
-                        <span class="custom-select-arrow">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                        </span>
-                      </div>
-                    </div>
-                    <div class="custom-select-dropdown" id="b1ManualVendorDropdown" style="display: none;">
-                      <div class="custom-select-search-wrap">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="custom-select-search-icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        <input type="text" class="custom-select-search-input" id="b1ManualVendorSearchInput" placeholder="Search name, ID, or routing..." autocomplete="off" />
-                      </div>
-                      <div class="custom-select-options" id="b1ManualVendorOptions"></div>
-                    </div>
-                  </div>
+              <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Enter manual payments for Batch 1 below. Click <strong>+ Add Row</strong> to add more. All rows share the same effective date.</p>
+
+              <!-- Shared Effective Date -->
+              <div class="form-group" style="max-width: 220px; margin-bottom: var(--space-md);">
+                <label class="form-label" for="b1ManualEffDate">Effective Date <span style="color: #dc2626;">*</span></label>
+                <input class="form-input" type="date" id="b1ManualEffDate" />
+              </div>
+
+              <!-- Inline Multi-Row Entry Table (same layout as Batch 2) -->
+              <div class="payments-table-wrap">
+                <table class="data-table" id="b1ManualInlineTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 35px;">#</th>
+                      <th style="min-width: 170px;">Vendor *</th>
+                      <th style="width: 105px;">Routing #</th>
+                      <th style="width: 115px;">Account #</th>
+                      <th style="width: 80px;">Type</th>
+                      <th style="width: 110px;">Amount ($) *</th>
+                      <th style="width: 130px;">Invoice / Ref # *</th>
+                      <th style="width: 45px; text-align: center;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="b1ManualInlineTableBody">
+                    <!-- Rows rendered dynamically by JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Error display -->
+              <div class="alert alert-error" id="b1ManualFormError" style="display: none; margin-top: var(--space-md);"></div>
+
+              <!-- Validation Summary (hidden until Validate is clicked) -->
+              <div class="summary-bar batch-validate-summary" id="b1ManualValidateSummary" style="display: none; margin-top: var(--space-md);">
+                <div class="summary-card">
+                  <div class="summary-val" id="b1ManualStatTotalRows">0</div>
+                  <div class="summary-lbl">Total Rows</div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label" for="b1ManualAmount">Amount ($) <span class="text-danger" style="color: #dc2626;">*</span></label>
-                  <input class="form-input" type="number" id="b1ManualAmount" step="0.01" placeholder="0.00" />
+                <div class="summary-card">
+                  <div class="summary-val" id="b1ManualStatValidRows" style="color: var(--color-success)">0</div>
+                  <div class="summary-lbl">Valid Rows</div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label" for="b1ManualIdNumber">Invoice / Ref # <span class="text-danger" style="color: #dc2626;">*</span></label>
-                  <input class="form-input" type="text" id="b1ManualIdNumber" placeholder="Enter invoice / ref #" />
+                <div class="summary-card">
+                  <div class="summary-val" id="b1ManualStatErrorRows" style="color: var(--color-danger)">0</div>
+                  <div class="summary-lbl">Validation Issues</div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label" for="b1ManualEffDate">Effective Date <span class="text-danger" style="color: #dc2626;">*</span></label>
-                  <input class="form-input" type="date" id="b1ManualEffDate" />
+                <div class="summary-card">
+                  <div class="summary-val" id="b1ManualStatTotalAmount">$0.00</div>
+                  <div class="summary-lbl">Total Credit Amount</div>
                 </div>
               </div>
 
-              <div class="alert alert-error" id="b1ManualFormError" style="display: none; margin-top: var(--space-md);"></div>
-
-              <div style="margin-top: var(--space-base);">
-                <button type="button" class="btn btn-primary" id="addB1ManualEntryBtn">
-                  <span class="spinner" id="b1ManualBatchSpinner" style="display: none"></span>
-                  <span>+ Add & Validate Payment (Batch 1)</span>
+              <!-- Action Buttons -->
+              <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="addB1ManualRowBtn">
+                  + Add Row
+                </button>
+                <button type="button" class="btn btn-sm" id="validateB1ManualBtn"
+                  style="font-weight: 600; padding: 4px 14px; font-size: 12px; border: 1.5px solid var(--color-primary); color: var(--color-primary); background: transparent;">
+                  Validate Batch
                 </button>
               </div>
             </div>
@@ -408,7 +421,31 @@
               <button type="button" class="btn btn-secondary btn-sm" id="addBatchBtn" onclick="GenerateScreen.addBatch()">
                 + Add Batch
               </button>
+              <button type="button" class="btn btn-sm" id="validateBatch2Btn" onclick="GenerateScreen.validateBatch(2)"
+                style="font-weight: 600; padding: 4px 14px; font-size: 12px; border: 1.5px solid var(--color-primary); color: var(--color-primary); background: transparent;">
+                Validate Batch
+              </button>
               <button type="button" id="submitManualBatchBtn" style="display: none;"></button>
+            </div>
+
+            <!-- Validation Summary for Batch 2 (hidden until Validate is clicked) -->
+            <div class="summary-bar batch-validate-summary" id="batch2ValidateSummary" style="display: none; margin-top: var(--space-md);">
+              <div class="summary-card">
+                <div class="summary-val" id="batch2StatTotalRows">0</div>
+                <div class="summary-lbl">Total Rows</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="batch2StatValidRows" style="color: var(--color-success)">0</div>
+                <div class="summary-lbl">Valid Rows</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="batch2StatErrorRows" style="color: var(--color-danger)">0</div>
+                <div class="summary-lbl">Validation Issues</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-val" id="batch2StatTotalAmount">$0.00</div>
+                <div class="summary-lbl">Total Credit Amount</div>
+              </div>
             </div>
           </div>
 

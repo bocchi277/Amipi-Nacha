@@ -318,22 +318,7 @@ const GenerateScreen = (() => {
   }
 
   function initVendorComboboxes() {
-    b1VendorCombobox = createSearchableVendorCombobox({
-      wrapperId: 'b1ManualVendorWrapper',
-      hiddenInputId: 'b1ManualVendorSelect',
-      triggerId: 'b1ManualVendorTrigger',
-      labelId: 'b1ManualVendorLabel',
-      clearBtnId: 'b1ManualVendorClearBtn',
-      dropdownId: 'b1ManualVendorDropdown',
-      searchInputId: 'b1ManualVendorSearchInput',
-      optionsId: 'b1ManualVendorOptions',
-      onSelect: () => {
-        const idInput = el('b1ManualIdNumber');
-        if (idInput) idInput.value = ''; // Always stay blank for explicit mandatory entry
-      }
-    });
-
-    // Batch 2 vendor combobox is no longer needed — vendors are now inline per-row <select> elements
+    // Both Batch 1 and Batch 2 (and dynamic batches) now use inline per-row <select> elements
   }
 
   async function loadVendors() {
@@ -341,7 +326,8 @@ const GenerateScreen = (() => {
       const vendors = await API.get('/vendors?include_inactive=false');
       loadedVendors = vendors || [];
       if (b1VendorCombobox) b1VendorCombobox.setVendors(loadedVendors);
-      // Render initial blank inline row for Batch 2
+      // Render initial blank inline row for Batch 1 manual and Batch 2
+      renderManualInlineRows(1);
       renderManualInlineRows();
     } catch (err) {
       console.warn('Failed to load vendors for manual entry dropdown:', err);
@@ -419,10 +405,14 @@ const GenerateScreen = (() => {
     if (b1TabUploadBtn) b1TabUploadBtn.addEventListener('click', () => switchBatch1Mode('upload'));
     if (b1TabManualBtn) b1TabManualBtn.addEventListener('click', () => switchBatch1Mode('manual'));
 
-    // Batch 1 Manual Entry Form Listeners
-    const addB1ManualBtn = el('addB1ManualEntryBtn');
-    if (addB1ManualBtn) {
-      addB1ManualBtn.addEventListener('click', handleAddB1ManualEntry);
+    // Batch 1 Manual Entry: Inline Multi-Row + Validate
+    const addB1ManualRowBtn = el('addB1ManualRowBtn');
+    if (addB1ManualRowBtn) {
+      addB1ManualRowBtn.addEventListener('click', () => addManualInlineRow(1));
+    }
+    const validateB1ManualBtn = el('validateB1ManualBtn');
+    if (validateB1ManualBtn) {
+      validateB1ManualBtn.addEventListener('click', () => validateBatch(1));
     }
 
     // Batch 2 Inline Multi-Row Entry
@@ -1009,6 +999,7 @@ const GenerateScreen = (() => {
 
   // ── Batch 2 & Multi-Batch Manual Payment Entry ──────────────────
   let manualBatches = [
+    { batchNum: 1, rowCount: 1, overrideActive: false, dbBatchId: null },
     { batchNum: 2, rowCount: 1, overrideActive: false, dbBatchId: null }
   ];
 
@@ -1024,21 +1015,25 @@ const GenerateScreen = (() => {
 
   function getBatchTbody(batchNum = 2) {
     const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    if (num === 1) return el('b1ManualInlineTableBody');
     return num === 2 ? el('manualInlineTableBody') : el(`manualInlineTableBody_${num}`);
   }
 
   function getBatchEffDateInput(batchNum = 2) {
     const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    if (num === 1) return el('b1ManualEffDate');
     return num === 2 ? el('manualEffDate') : el(`manualEffDate_${num}`);
   }
 
   function getBatchErrorBox(batchNum = 2) {
     const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    if (num === 1) return el('b1ManualFormError');
     return num === 2 ? el('manualFormError') : el(`manualFormError_${num}`);
   }
 
   function getBatchDuplicateBanner(batchNum = 2) {
     const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    if (num === 1) return el('duplicateBanner');
     return num === 2 ? el('manualDuplicateBanner') : el(`manualDuplicateBanner_${num}`);
   }
 
@@ -1296,6 +1291,30 @@ const GenerateScreen = (() => {
         <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.addManualRow(${nextNum})">
           + Add Row
         </button>
+        <button type="button" class="btn btn-sm" onclick="GenerateScreen.validateBatch(${nextNum})"
+          style="font-weight: 600; padding: 4px 14px; font-size: 12px; border: 1.5px solid var(--color-primary); color: var(--color-primary); background: transparent;">
+          Validate Batch
+        </button>
+      </div>
+
+      <!-- Validation Summary (hidden until Validate is clicked) -->
+      <div class="summary-bar batch-validate-summary" id="batch${nextNum}ValidateSummary" style="display: none; margin-top: var(--space-md);">
+        <div class="summary-card">
+          <div class="summary-val" id="batch${nextNum}StatTotalRows">0</div>
+          <div class="summary-lbl">Total Rows</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-val" id="batch${nextNum}StatValidRows" style="color: var(--color-success)">0</div>
+          <div class="summary-lbl">Valid Rows</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-val" id="batch${nextNum}StatErrorRows" style="color: var(--color-danger)">0</div>
+          <div class="summary-lbl">Validation Issues</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-val" id="batch${nextNum}StatTotalAmount">$0.00</div>
+          <div class="summary-lbl">Total Credit Amount</div>
+        </div>
       </div>
     `;
 
@@ -1466,6 +1485,72 @@ const GenerateScreen = (() => {
     if (btn) btn.disabled = false;
   }
 
+  // ── Validate Batch (client-side only, non-blocking) ─────────
+  function validateBatch(batchNum) {
+    const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+    const batchData = collectManualBatchData(num);
+
+    // Count total rows in the tbody (including invalid/empty rows)
+    const tbody = getBatchTbody(num);
+    const totalRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+    const validRows = batchData.entries.length;
+    const errorCount = batchData.errors.length;
+    const totalCredit = batchData.entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+    // Determine which summary bar to populate
+    let summaryId, totalRowsId, validRowsId, errorRowsId, totalAmtId;
+    if (num === 1) {
+      summaryId = 'b1ManualValidateSummary';
+      totalRowsId = 'b1ManualStatTotalRows';
+      validRowsId = 'b1ManualStatValidRows';
+      errorRowsId = 'b1ManualStatErrorRows';
+      totalAmtId = 'b1ManualStatTotalAmount';
+    } else if (num === 2) {
+      summaryId = 'batch2ValidateSummary';
+      totalRowsId = 'batch2StatTotalRows';
+      validRowsId = 'batch2StatValidRows';
+      errorRowsId = 'batch2StatErrorRows';
+      totalAmtId = 'batch2StatTotalAmount';
+    } else {
+      summaryId = `batch${num}ValidateSummary`;
+      totalRowsId = `batch${num}StatTotalRows`;
+      validRowsId = `batch${num}StatValidRows`;
+      errorRowsId = `batch${num}StatErrorRows`;
+      totalAmtId = `batch${num}StatTotalAmount`;
+    }
+
+    // Show the summary bar
+    const summaryBar = el(summaryId);
+    if (summaryBar) summaryBar.style.display = 'grid';
+
+    // Populate values
+    if (el(totalRowsId)) el(totalRowsId).textContent = totalRows;
+    if (el(validRowsId)) el(validRowsId).textContent = validRows;
+    if (el(errorRowsId)) el(errorRowsId).textContent = errorCount;
+    if (el(totalAmtId)) el(totalAmtId).textContent = `$${totalCredit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // Show error details in the batch error box
+    if (batchData.errors.length > 0) {
+      const errMsg = batchData.errors.map(e => `Row ${e.row}: ${e.messages.join(', ')}`).join('\n');
+      showManualError(errMsg, num);
+    } else {
+      const errBox = getBatchErrorBox(num);
+      if (errBox) errBox.style.display = 'none';
+    }
+
+    // Effective date validation
+    if (!batchData.effDate) {
+      showManualError(`Effective Date is required for Batch ${num}.`, num);
+    }
+
+    // Toast feedback
+    if (errorCount === 0 && batchData.effDate) {
+      if (window.showToast) window.showToast(`Batch ${num}: All ${validRows} row(s) valid. Total: $${totalCredit.toFixed(2)}`, 'success');
+    } else {
+      if (window.showToast) window.showToast(`Batch ${num}: ${errorCount} validation issue(s) found.`, 'warning');
+    }
+  }
+
   // ── Phase 4: Combined NACHA File Generation & Download ──────
   async function handleGenerateNacha() {
     if (el('nachaGlobalError')) el('nachaGlobalError').style.display = 'none';
@@ -1486,12 +1571,16 @@ const GenerateScreen = (() => {
 
     // 1. Validate all active manual batches
     const validBatchesData = [];
+    const batch1InManualMode = el('batch1ManualPanel') && el('batch1ManualPanel').style.display !== 'none';
 
     for (const b of manualBatches) {
+      // Skip Batch 1 from manual processing if it's in spreadsheet upload mode
+      if (b.batchNum === 1 && !batch1InManualMode) continue;
+
       const batchData = collectManualBatchData(b.batchNum);
 
-      // If this batch has rows or entered data, or if no Batch 1 exists
-      if (batchData.hasFilledRows || (!batch1Id && manualBatches.length === 1)) {
+      // If this batch has rows or entered data
+      if (batchData.hasFilledRows || (!batch1Id && manualBatches.filter(x => batch1InManualMode || x.batchNum !== 1).length === 1)) {
         if (!batchData.effDate) {
           showManualError(`Effective Date is required for Batch ${b.batchNum}.`, b.batchNum);
           const errTarget = getBatchEffDateInput(b.batchNum) || getBatchErrorBox(b.batchNum);
@@ -1528,7 +1617,8 @@ const GenerateScreen = (() => {
     setNachaLoading(true);
 
     const generatedBatchIds = [];
-    if (batch1Id) generatedBatchIds.push(batch1Id);
+    // Only include spreadsheet batch1Id if Batch 1 is in upload mode
+    if (batch1Id && !batch1InManualMode) generatedBatchIds.push(batch1Id);
 
     try {
       for (const vb of validBatchesData) {
@@ -1547,7 +1637,10 @@ const GenerateScreen = (() => {
         const response = await API.post('/payments/manual-batch', payload);
         const b = getManualBatchObj(vb.batchNum);
         b.dbBatchId = response.batch_id;
-        if (vb.batchNum === 2) {
+        if (vb.batchNum === 1) {
+          batch1Id = response.batch_id;
+          lastUploadResponse = response;
+        } else if (vb.batchNum === 2) {
           batch2Id = response.batch_id;
           lastBatch2Response = response;
           manualDraftEntries = vb.entries;
@@ -1702,6 +1795,7 @@ const GenerateScreen = (() => {
     openBreakdownModal,
     toggleManualDraftSection,
     renderManualInlineRows,
+    validateBatch,
   };
 })();
 

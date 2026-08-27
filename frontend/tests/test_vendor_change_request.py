@@ -11,18 +11,17 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-STD_USER = f"std_user_{_RUN_ID}"
-STD_EMAIL = f"{STD_USER}@amipi.com"
-STD_PASSWORD = "StdUserPass123!"
-
-ADMIN_USER = f"admin_user_{_RUN_ID}"
-ADMIN_EMAIL = f"{ADMIN_USER}@amipi.com"
-ADMIN_PASSWORD = "AdminUserPass123!"
-
-
 def test_standard_user_bank_change_request_remains_pending(page: Page, base_url: str):
     """Test standard user submitting bank change request -> request shows PENDING, vendor bank details remain UNCHANGED."""
+    run_id = uuid.uuid4().hex[:6]
+    std_user = f"std_user_{run_id}"
+    std_email = f"{std_user}@amipi.com"
+    std_password = "StdUserPass123!"
+
+    admin_user = f"admin_user_{run_id}"
+    admin_email = f"{admin_user}@amipi.com"
+    admin_password = "AdminUserPass123!"
+
     page.goto(base_url)
     page.evaluate("sessionStorage.clear()")
     page.reload()
@@ -39,12 +38,12 @@ def test_standard_user_bank_change_request_remains_pending(page: Page, base_url:
             });
         }
         """,
-        [base_url, ADMIN_EMAIL, ADMIN_USER, ADMIN_PASSWORD],
+        [base_url, admin_email, admin_user, admin_password],
     )
 
     # Login as Admin temporarily via UI to create a vendor
-    page.fill("#loginUsername", ADMIN_USER)
-    page.fill("#loginPassword", ADMIN_PASSWORD)
+    page.fill("#loginUsername", admin_user)
+    page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 
@@ -81,6 +80,7 @@ def test_standard_user_bank_change_request_remains_pending(page: Page, base_url:
     # Step 2: Register & Log in as Standard User (non-admin)
     page.click("#logoutBtn")
     expect(page.locator("#loginScreen")).to_be_visible(timeout=5000)
+    page.wait_for_load_state("networkidle")
 
     page.evaluate(
         """
@@ -92,11 +92,11 @@ def test_standard_user_bank_change_request_remains_pending(page: Page, base_url:
             });
         }
         """,
-        [base_url, STD_EMAIL, STD_USER, STD_PASSWORD],
+        [base_url, std_email, std_user, std_password],
     )
 
-    page.fill("#loginUsername", STD_USER)
-    page.fill("#loginPassword", STD_PASSWORD)
+    page.fill("#loginUsername", std_user)
+    page.fill("#loginPassword", std_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
     expect(page.locator("#adminRoleBadge")).to_be_hidden()  # Confirm Standard User role

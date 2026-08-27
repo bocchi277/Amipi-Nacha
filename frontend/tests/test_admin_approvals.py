@@ -11,14 +11,20 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-STD_USER = f"std_user_p6_{_RUN_ID}"
-STD_EMAIL = f"{STD_USER}@amipi.com"
-STD_PASSWORD = "StdUserPass123!"
-
-ADMIN_USER = f"admin_user_p6_{_RUN_ID}"
-ADMIN_EMAIL = f"{ADMIN_USER}@amipi.com"
-ADMIN_PASSWORD = "AdminUserPass123!"
+def _register_api(page: Page, base_url: str, email: str, username: str, password: str, role: str = "user"):
+    """Seed user via API helper."""
+    page.evaluate(
+        """
+        async ([url, email, username, password, role]) => {
+            await fetch(url + '/api/v1/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, username, password, role })
+            });
+        }
+        """,
+        [base_url, email, username, password, role],
+    )
 
 
 def test_standard_user_cannot_access_admin_review(page: Page, base_url: str):
@@ -27,24 +33,12 @@ def test_standard_user_cannot_access_admin_review(page: Page, base_url: str):
     page.evaluate("sessionStorage.clear()")
     page.reload()
 
-    run_id = uuid.uuid4().hex[:6]
-    std_user = f"std_user_p6_{run_id}"
+    std_user = f"std_{uuid.uuid4().hex[:6]}"
     std_email = f"{std_user}@amipi.com"
     std_password = "StdUserPass123!"
 
     # Register standard user via API
-    page.evaluate(
-        """
-        async ([url, email, username, password]) => {
-            await fetch(url + '/api/v1/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, username, password, role: 'user' })
-            });
-        }
-        """,
-        [base_url, std_email, std_user, std_password],
-    )
+    _register_api(page, base_url, std_email, std_user, std_password, "user")
 
     page.fill("#loginUsername", std_user)
     page.fill("#loginPassword", std_password)
@@ -61,23 +55,16 @@ def test_admin_approve_and_reject_vendor_change_requests(page: Page, base_url: s
     page.evaluate("sessionStorage.clear()")
     page.reload()
 
+    admin_user = f"adm_{uuid.uuid4().hex[:6]}"
+    admin_email = f"{admin_user}@amipi.com"
+    admin_password = "AdminUserPass123!"
+
     # Create Admin user via API
-    page.evaluate(
-        """
-        async ([url, email, username, password]) => {
-            await fetch(url + '/api/v1/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, username, password, role: 'admin' })
-            });
-        }
-        """,
-        [base_url, ADMIN_EMAIL, ADMIN_USER, ADMIN_PASSWORD],
-    )
+    _register_api(page, base_url, admin_email, admin_user, admin_password, "admin")
 
     # Login as Admin to seed vendor
-    page.fill("#loginUsername", ADMIN_USER)
-    page.fill("#loginPassword", ADMIN_PASSWORD)
+    page.fill("#loginUsername", admin_user)
+    page.fill("#loginPassword", admin_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
     expect(page.locator("#adminRoleBadge")).to_be_visible()

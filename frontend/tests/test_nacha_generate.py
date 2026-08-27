@@ -13,14 +13,13 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-_RUN_ID = uuid.uuid4().hex[:6]
-TEST_USER = f"nacha_user_{_RUN_ID}"
-TEST_EMAIL = f"{TEST_USER}@amipi.com"
-TEST_PASSWORD = "TestNachaPass123!"
-
-
 def _register_login_and_create_vendor(page: Page, base_url: str):
     """Helper: register user, log in through UI, and create a test vendor via API."""
+    run_id = uuid.uuid4().hex[:6]
+    test_user = f"nacha_user_{run_id}"
+    test_email = f"{test_user}@amipi.com"
+    test_password = "TestNachaPass123!"
+
     page.goto(base_url)
     page.evaluate("sessionStorage.clear()")
     page.reload()
@@ -37,12 +36,12 @@ def _register_login_and_create_vendor(page: Page, base_url: str):
             });
         }
         """,
-        [base_url, TEST_EMAIL, TEST_USER, TEST_PASSWORD],
+        [base_url, test_email, test_user, test_password],
     )
 
     # Login via UI
-    page.fill("#loginUsername", TEST_USER)
-    page.fill("#loginPassword", TEST_PASSWORD)
+    page.fill("#loginUsername", test_user)
+    page.fill("#loginPassword", test_password)
     page.click("#loginSubmitBtn")
     expect(page.locator("#appShell")).to_be_visible(timeout=5000)
 
