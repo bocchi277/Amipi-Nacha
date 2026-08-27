@@ -680,8 +680,8 @@ code, pre {
    ================================================================ */
 
 .main-container {
-  max-width: 1440px;
-  width: 95%;
+  max-width: 1780px;
+  width: 96%;
   margin: var(--space-xl) auto;
   padding: 0 var(--space-base);
 }

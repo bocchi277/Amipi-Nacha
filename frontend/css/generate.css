@@ -653,9 +653,13 @@
 }
 
 /* ── Payment History Table Enhancements ─────────────────────────── */
+#view-history .card {
+  padding: var(--space-base) var(--space-lg);
+}
+
 #historyTableWrap {
-  overflow-x: auto;
   width: 100%;
+  overflow-x: auto;
   border-radius: var(--radius-md, 8px);
   border: 1px solid #E2E8F0;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
@@ -663,17 +667,17 @@
 }
 
 #historyTableWrap::-webkit-scrollbar {
-  height: 8px;
+  height: 6px;
 }
 
 #historyTableWrap::-webkit-scrollbar-track {
   background: #F1F5F9;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 #historyTableWrap::-webkit-scrollbar-thumb {
   background: #CBD5E1;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 #historyTableWrap::-webkit-scrollbar-thumb:hover {
@@ -682,23 +686,24 @@
 
 #historyTable {
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
   width: 100%;
+  table-layout: auto;
 }
 
 #historyTable th {
-  padding: 10px 14px;
-  font-size: 11px;
+  padding: 8px 6px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #475569;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   background: #F8FAFC;
   border-bottom: 2px solid #E2E8F0;
   white-space: nowrap;
 }
 
 #historyTable td {
-  padding: 11px 14px;
+  padding: 8px 6px;
   border-bottom: 1px solid #F1F5F9;
   vertical-align: middle;
   transition: background 0.12s ease;
@@ -709,17 +714,17 @@
 }
 
 .history-filter-row th {
-  padding: 6px 10px !important;
+  padding: 4px 4px !important;
   background: #F8FAFC !important;
   border-bottom: 2px solid #CBD5E1 !important;
 }
 
 .history-col-filter {
-  height: 30px !important;
-  padding: 4px 8px !important;
-  font-size: 12px !important;
-  border-radius: 5px !important;
-  border: 1.5px solid #CBD5E1 !important;
+  height: 26px !important;
+  padding: 2px 4px !important;
+  font-size: 10.5px !important;
+  border-radius: 4px !important;
+  border: 1px solid #CBD5E1 !important;
   background: #FFFFFF !important;
   width: 100% !important;
   box-sizing: border-box !important;
@@ -736,6 +741,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 3px;
   flex-wrap: nowrap;
 }

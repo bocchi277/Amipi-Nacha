@@ -138,6 +138,18 @@ def test_transaction_history_filtering_multiselect_confirm_and_bulk_resend(page:
     # Table should react without errors
     expect(tbody).to_be_visible()
 
+    # Verify no horizontal scrollbar on standard desktop viewport
+    wrap_info = page.evaluate("""
+        () => {
+            const el = document.getElementById('historyTableWrap');
+            return {
+                scrollWidth: el.scrollWidth,
+                clientWidth: el.clientWidth
+            };
+        }
+    """)
+    assert wrap_info['scrollWidth'] <= wrap_info['clientWidth'] + 2, f"Payment history table should fit without horizontal scroll: {wrap_info}"
+
     # Step 5: Test Multi-Select Checkboxes & Select All
     page.click("#clearAllColFilters")
     page.fill("#colFilterVendor", v_name)
