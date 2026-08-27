@@ -95,13 +95,16 @@ def test_help_screen_content_rendering_and_template_downloads(page: Page, base_u
     expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("TOT")
     expect(page.locator("#helpPreviewHtmlContainer")).to_contain_text("$53,413.06")
 
-    # Test Reset to Default
+    # Test Reset to Default with Confirmation Popup & Auto-Save
     page.click("#resetHelpTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_visible()
+    expect(page.locator("#resetTemplateConfirmModal")).to_contain_text("Are you sure you want to reset to default?")
+
+    # Click Confirm Reset & Save
+    page.click("#confirmResetTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_hidden()
     expect(page.locator("#helpTmplBody")).to_have_value(
         re.compile("We would like to inform you that we have processed the following payment")
     )
-
-    # Test Saving Template
-    page.click("#saveHelpTmplBtn")
     expect(page.locator("#helpTmplSuccess")).to_be_visible()
-    expect(page.locator("#helpTmplSuccess")).to_contain_text("Remittance email template saved successfully")
+    expect(page.locator("#helpTmplSuccess")).to_contain_text("Remittance email template reset to default and saved successfully")

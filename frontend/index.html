@@ -1831,6 +1831,29 @@
       </div>
     </div>
 
+    <!-- Confirm Reset Email Template to Default Modal -->
+    <div class="modal-backdrop" id="resetTemplateConfirmModal" style="z-index: 1100;">
+      <div class="modal-card" style="max-width: 480px; border-top: 4px solid var(--color-warning, #f59e0b);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <h3 class="card-title" style="margin-bottom: 0;">Reset Email Template?</h3>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeResetTmplConfirmBtn" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <div class="alert alert-warning show" style="margin-bottom: var(--space-md); font-size: var(--text-xs); line-height: 1.5;">
+          <strong>Are you sure you want to reset to default?</strong><br/>
+          This will restore the standard default email wording and automatically save the template. Any custom text or edits will be replaced.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-lg);">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelResetTmplConfirmBtn">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="confirmResetTmplBtn" style="background: #D97706; border-color: #B45309; font-weight: 600;">
+            <span class="spinner" id="resetTmplConfirmSpinner" style="display: none;"></span>
+            <span>Yes, Reset &amp; Save</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- View Specific Remittance Email Modal -->
     <div class="modal-backdrop" id="viewRemittanceEmailModal">
       <div class="modal-card" style="max-width: 760px; border-top: 4px solid var(--color-primary);">

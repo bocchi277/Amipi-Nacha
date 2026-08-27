@@ -47,7 +47,15 @@ const HelpScreen = (() => {
     const saveBtn = el('saveHelpTmplBtn');
     const resetBtn = el('resetHelpTmplBtn');
     if (saveBtn) saveBtn.addEventListener('click', handleSaveTemplate);
-    if (resetBtn) resetBtn.addEventListener('click', resetToDefault);
+    if (resetBtn) resetBtn.addEventListener('click', openResetConfirmModal);
+
+    const closeResetConfirmBtn = el('closeResetTmplConfirmBtn');
+    const cancelResetConfirmBtn = el('cancelResetTmplConfirmBtn');
+    const confirmResetBtn = el('confirmResetTmplBtn');
+
+    if (closeResetConfirmBtn) closeResetConfirmBtn.addEventListener('click', hideResetConfirmModal);
+    if (cancelResetConfirmBtn) cancelResetConfirmBtn.addEventListener('click', hideResetConfirmModal);
+    if (confirmResetBtn) confirmResetBtn.addEventListener('click', handleConfirmResetAndSave);
 
     // Load template data when switching to Help tab
     document.querySelectorAll('#mainTabs .tab').forEach(tab => {
@@ -225,14 +233,74 @@ const HelpScreen = (() => {
     }
   }
 
+  const DEFAULT_SUBJECT_TEMPLATE = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
+  const DEFAULT_BODY_TEMPLATE = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable`;
+
+  function openResetConfirmModal() {
+    const modal = el('resetTemplateConfirmModal');
+    if (modal) {
+      modal.setAttribute('data-source', 'help');
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function hideResetConfirmModal() {
+    const modal = el('resetTemplateConfirmModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
   function resetToDefault() {
     if (el('helpTmplSubject')) {
-      el('helpTmplSubject').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
+      el('helpTmplSubject').value = DEFAULT_SUBJECT_TEMPLATE;
     }
     if (el('helpTmplBody')) {
-      el('helpTmplBody').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable`;
+      el('helpTmplBody').value = DEFAULT_BODY_TEMPLATE;
     }
     updateLivePreview();
+  }
+
+  async function handleConfirmResetAndSave() {
+    const modal = el('resetTemplateConfirmModal');
+    const source = modal ? modal.getAttribute('data-source') : 'help';
+    if (source !== 'help') return;
+
+    const spinner = el('resetTmplConfirmSpinner');
+    const confirmBtn = el('confirmResetTmplBtn');
+    const succBox = el('helpTmplSuccess');
+    const errBox = el('helpTmplError');
+
+    if (spinner) spinner.style.display = 'inline-block';
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    try {
+      resetToDefault();
+      await API.put('/remittances/template', {
+        subject_template: DEFAULT_SUBJECT_TEMPLATE,
+        body_template: DEFAULT_BODY_TEMPLATE,
+      });
+
+      updateLivePreview();
+      hideResetConfirmModal();
+
+      if (succBox) {
+        succBox.textContent = 'Remittance email template reset to default and saved successfully!';
+        succBox.style.display = 'block';
+        setTimeout(() => { succBox.style.display = 'none'; }, 4000);
+      }
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to reset email template.';
+        errBox.style.display = 'block';
+      }
+      hideResetConfirmModal();
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+      if (confirmBtn) confirmBtn.disabled = false;
+    }
   }
 
   async function handleSaveTemplate() {

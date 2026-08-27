@@ -55,10 +55,18 @@ const HistoryScreen = (() => {
 
     if (openTmplBtn) openTmplBtn.addEventListener('click', openEmailTemplateModal);
     if (closeTmplBtn) closeTmplBtn.addEventListener('click', hideEmailTemplateModal);
-    if (resetTmplBtn) resetTmplBtn.addEventListener('click', resetEmailTemplateToDefault);
+    if (resetTmplBtn) resetTmplBtn.addEventListener('click', openResetConfirmModal);
     if (tmplForm) tmplForm.addEventListener('submit', handleSaveEmailTemplate);
     if (tmplTabEdit) tmplTabEdit.addEventListener('click', () => switchTmplTab('edit'));
     if (tmplTabPreview) tmplTabPreview.addEventListener('click', () => switchTmplTab('preview'));
+
+    const closeResetConfirmBtn = el('closeResetTmplConfirmBtn');
+    const cancelResetConfirmBtn = el('cancelResetTmplConfirmBtn');
+    const confirmResetBtn = el('confirmResetTmplBtn');
+
+    if (closeResetConfirmBtn) closeResetConfirmBtn.addEventListener('click', hideResetConfirmModal);
+    if (cancelResetConfirmBtn) cancelResetConfirmBtn.addEventListener('click', hideResetConfirmModal);
+    if (confirmResetBtn) confirmResetBtn.addEventListener('click', handleConfirmResetAndSave);
 
     // View Email Modal listeners
     const closeViewEmailBtn = el('closeViewEmailModalBtn');
@@ -157,8 +165,13 @@ const HistoryScreen = (() => {
   // ── Email Template Management ──────────────────────────────────
   let activeTemplateData = null;
   let viewingRemittanceItem = null;
+  let tmplCloseTimer = null;
 
   async function openEmailTemplateModal() {
+    if (tmplCloseTimer) {
+      clearTimeout(tmplCloseTimer);
+      tmplCloseTimer = null;
+    }
     switchTmplTab('edit');
     const modal = el('emailTemplateModal');
     const errBox = el('emailTmplError');
@@ -186,6 +199,10 @@ const HistoryScreen = (() => {
   }
 
   function hideEmailTemplateModal() {
+    if (tmplCloseTimer) {
+      clearTimeout(tmplCloseTimer);
+      tmplCloseTimer = null;
+    }
     const modal = el('emailTemplateModal');
     if (modal) {
       modal.classList.remove('active');
@@ -242,12 +259,77 @@ const HistoryScreen = (() => {
     activeEl.selectionStart = activeEl.selectionEnd = start + tag.length;
   }
 
+  const DEFAULT_SUBJECT_TEMPLATE = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
+  const DEFAULT_BODY_TEMPLATE = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable`;
+
+  function openResetConfirmModal() {
+    const modal = el('resetTemplateConfirmModal');
+    if (modal) {
+      modal.setAttribute('data-source', 'history');
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function hideResetConfirmModal() {
+    const modal = el('resetTemplateConfirmModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
   function resetEmailTemplateToDefault() {
     if (el('tmplSubjectInput')) {
-      el('tmplSubjectInput').value = 'Payment Remittance Advice — {{vendor_name}} (${{amount}})';
+      el('tmplSubjectInput').value = DEFAULT_SUBJECT_TEMPLATE;
     }
     if (el('tmplBodyInput')) {
-      el('tmplBodyInput').value = `Dear {{vendor_name}},\n\nWe would like to inform you that we have processed the following payment and applied the invoices accordingly.\n\nPayment Amount: \${{amount}}\nEffective Date: {{effective_date}}\n\nInvoices applied:\n\nIf you have any questions regarding this payment remittance, please contact Accounts Payable.\n\n{{company_name}} Accounts Payable`;
+      el('tmplBodyInput').value = DEFAULT_BODY_TEMPLATE;
+    }
+  }
+
+  async function handleConfirmResetAndSave() {
+    const modal = el('resetTemplateConfirmModal');
+    const source = modal ? modal.getAttribute('data-source') : 'history';
+    if (source !== 'history') return;
+
+    const spinner = el('resetTmplConfirmSpinner');
+    const confirmBtn = el('confirmResetTmplBtn');
+    const succBox = el('emailTmplSuccess');
+    const errBox = el('emailTmplError');
+
+    if (spinner) spinner.style.display = 'inline-block';
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    try {
+      resetEmailTemplateToDefault();
+      await API.put('/remittances/template', {
+        subject_template: DEFAULT_SUBJECT_TEMPLATE,
+        body_template: DEFAULT_BODY_TEMPLATE,
+      });
+
+      // Refresh remittances list so table and view previews reflect the reset template immediately
+      await loadData();
+      hideResetConfirmModal();
+
+      if (succBox) {
+        succBox.textContent = 'Email template reset to default and saved successfully!';
+        succBox.style.display = 'block';
+      }
+
+      if (tmplCloseTimer) clearTimeout(tmplCloseTimer);
+      tmplCloseTimer = setTimeout(() => {
+        hideEmailTemplateModal();
+      }, 1800);
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Failed to reset email template.';
+        errBox.style.display = 'block';
+      }
+      hideResetConfirmModal();
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+      if (confirmBtn) confirmBtn.disabled = false;
     }
   }
 
@@ -289,7 +371,8 @@ const HistoryScreen = (() => {
         succBox.style.display = 'block';
       }
 
-      setTimeout(() => {
+      if (tmplCloseTimer) clearTimeout(tmplCloseTimer);
+      tmplCloseTimer = setTimeout(() => {
         hideEmailTemplateModal();
       }, 1800);
     } catch (err) {

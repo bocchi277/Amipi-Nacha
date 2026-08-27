@@ -120,6 +120,7 @@ def test_accessibility_and_zero_emojis(page: Page, base_url: str):
     expect(page.locator("label[for='loginPassword']")).to_be_visible()
 
     # Log in
+    page.wait_for_selector("#loginUsername", state="visible")
     page.fill("#loginUsername", ADMIN_USER)
     page.fill("#loginPassword", ADMIN_PASSWORD)
     page.click("#loginSubmitBtn")

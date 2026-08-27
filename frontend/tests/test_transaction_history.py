@@ -8,6 +8,7 @@ Tests:
 3. Confirmation Step & Bulk Resend: Clicking 'Bulk Resend' opens confirmation modal, displaying selected vendors.
    Cancelling closes modal. Confirming dispatches emails and updates status from PENDING to SENT.
 """
+import re
 import tempfile
 import uuid
 import pytest
@@ -269,8 +270,7 @@ def test_custom_email_template_sync_and_view_modal(page: Page, base_url: str):
     expect(page.locator("#emailTmplSuccess")).to_be_visible(timeout=5000)
 
     # Close modal
-    page.click("#closeEmailTemplateModalBtn")
-    expect(page.locator("#emailTemplateModal")).to_be_hidden()
+    expect(page.locator("#emailTemplateModal")).to_be_hidden(timeout=5000)
 
     # 4. Click "View" on the transaction in Payment History
     page.fill("#colFilterVendor", v_name)
@@ -282,3 +282,33 @@ def test_custom_email_template_sync_and_view_modal(page: Page, base_url: str):
     expect(page.locator("#viewEmailHtmlBody")).to_contain_text(custom_text)
     expect(page.locator("#viewEmailHtmlBody")).to_contain_text(v_name)
     expect(page.locator("#viewEmailHtmlBody")).to_contain_text("5,000.00")
+
+    # 6. Test Reset to Default with Confirmation Popup and Auto-Save in Payment History
+    page.click("#closeViewEmailModalBtn")
+    expect(page.locator("#viewRemittanceEmailModal")).to_be_hidden()
+
+    page.click("#openEmailTemplateModalBtn")
+    expect(page.locator("#emailTemplateModal")).to_be_visible()
+
+    page.click("#resetDefaultTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_visible()
+    expect(page.locator("#resetTemplateConfirmModal")).to_contain_text("Are you sure you want to reset to default?")
+
+    # Click Confirm Reset & Save
+    page.click("#confirmResetTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_hidden()
+    expect(page.locator("#emailTmplSuccess")).to_be_visible()
+    expect(page.locator("#emailTmplSuccess")).to_contain_text("Email template reset to default and saved successfully")
+
+    # Verify input values restored
+    expect(page.locator("#tmplBodyInput")).to_have_value(
+        re.compile("We would like to inform you that we have processed the following payment")
+    )
+
+    expect(page.locator("#emailTemplateModal")).to_be_hidden(timeout=5000)
+
+    # 7. View transaction again -> verify it now displays the auto-saved default template (no custom text)
+    row.locator("button:has-text('View')").click()
+    expect(page.locator("#viewRemittanceEmailModal")).to_be_visible()
+    expect(page.locator("#viewEmailHtmlBody")).not_to_contain_text(custom_text)
+    expect(page.locator("#viewEmailHtmlBody")).to_contain_text("We would like to inform you that we have processed the following payment")
