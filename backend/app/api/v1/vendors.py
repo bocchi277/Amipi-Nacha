@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
@@ -243,7 +243,7 @@ async def create_vendor(
     - If differences: returns 409 Conflict with diff details if allow_update=False
     - If allow_update=True: updates existing vendor (admin permission required for bank details).
     """
-    name_clean = payload.name.strip()[:22]
+    name_clean = " ".join(payload.name.strip().split())[:22]
     rt = "".join(filter(str.isdigit, payload.routing_number.strip()))
     acc = payload.account_number.strip()
 
@@ -253,10 +253,10 @@ async def create_vendor(
     if not acc:
         raise HTTPException(status_code=400, detail="Account number is required.")
 
-    # Check for existing vendor by name or bank details
+    # Check for existing vendor by name or bank details with normalized trim/upper
     res = await db.execute(
         select(Vendor).where(
-            (func.upper(Vendor.name) == name_clean.upper()) |
+            (func.upper(func.trim(Vendor.name)) == name_clean.upper()) |
             ((Vendor.routing_number == rt) & (Vendor.account_number == acc))
         )
     )
@@ -492,7 +492,7 @@ async def bulk_preview_vendors(
     # Fetch existing vendors
     res = await db.execute(select(Vendor))
     existing_vendors = res.scalars().all()
-    existing_by_name = {v.name.strip().upper(): v for v in existing_vendors}
+    existing_by_name = {" ".join(v.name.strip().upper().split()): v for v in existing_vendors}
     existing_by_bank = {(v.routing_number.strip(), v.account_number.strip()): v for v in existing_vendors}
 
     new_vendors = []
@@ -510,7 +510,7 @@ async def bulk_preview_vendors(
         default_ref = r.get("invoice ref") or r.get("invoice_ref") or r.get("default_id_number") or r.get("ref") or None
         email = r.get("email") or r.get("vendor email") or r.get("vendor_email") or None
 
-        name_clean = name.strip()[:22]
+        name_clean = " ".join(name.strip().split())[:22]
         routing_clean = "".join(filter(str.isdigit, routing.strip()))
         account_clean = account.strip()
 
@@ -629,13 +629,44 @@ async def bulk_confirm_vendors(
     updated_count = 0
     skipped_count = 0
 
-    # 1. Insert new vendors
+    # Fetch all existing vendors from database to prevent duplicate inserts
+    res = await db.execute(select(Vendor))
+    db_vendors = list(res.scalars().all())
+    existing_by_name = {" ".join(v.name.strip().upper().split()): v for v in db_vendors}
+    existing_by_bank = {(v.routing_number.strip(), v.account_number.strip()): v for v in db_vendors}
+
+    seen_in_batch = set()
+    seen_in_batch_bank = set()
+
+    # 1. Insert or safely update new vendors
     for nv in payload.new_vendors:
         rt = "".join(filter(str.isdigit, str(nv.get("routing_number", "")).strip()))
         acc = str(nv.get("account_number", "")).strip()
-        name_clean = str(nv.get("name", "")).strip()[:22]
+        name_clean = " ".join(str(nv.get("name", "")).strip().split())[:22]
         if not name_clean or not rt or not acc:
             continue
+
+        norm_key = name_clean.upper()
+        if norm_key in seen_in_batch or (rt, acc) in seen_in_batch_bank:
+            # Intra-batch duplicate in payload: skip to prevent duplicate insert/count
+            skipped_count += 1
+            continue
+        seen_in_batch.add(norm_key)
+        seen_in_batch_bank.add((rt, acc))
+
+        existing = existing_by_name.get(norm_key) or existing_by_bank.get((rt, acc))
+        if existing:
+            # If vendor already exists in DB, update non-bank details if allowed or skip
+            if payload.apply_updates:
+                if nv.get("email") and str(nv["email"]).strip():
+                    existing.email = str(nv["email"]).strip()
+                if nv.get("default_id_number") and str(nv["default_id_number"]).strip():
+                    existing.default_id_number = str(nv["default_id_number"]).strip()
+                updated_count += 1
+            else:
+                skipped_count += 1
+            continue
+
         acct_type = AccountType.SAVINGS if "sav" in str(nv.get("account_type", "")).lower() else AccountType.CHECKING
         def_id = str(nv.get("default_id_number", "")).strip() or (acc[-5:] if len(acc) >= 5 else acc)
         v = Vendor(
@@ -649,6 +680,9 @@ async def bulk_confirm_vendors(
         )
         db.add(v)
         inserted_count += 1
+        # Track in memory so subsequent rows in same batch don't insert a second time!
+        existing_by_name[norm_key] = v
+        existing_by_bank[(rt, acc)] = v
 
     # 2. Update existing vendors if apply_updates is True
     if payload.apply_updates:
@@ -671,7 +705,7 @@ async def bulk_confirm_vendors(
             new_data = uv.get("new_data", {})
 
             if "name" in changes and new_data.get("name"):
-                vendor.name = str(new_data["name"]).strip()[:22]
+                vendor.name = " ".join(str(new_data["name"]).strip().split())[:22]
             if "email" in changes:
                 vendor.email = str(new_data["email"]).strip() if new_data.get("email") else None
             if "default_id_number" in changes:
@@ -710,6 +744,106 @@ async def bulk_confirm_vendors(
         updated_count=updated_count,
         skipped_count=skipped_count,
         message=f"Successfully added {inserted_count} new vendor(s) and updated {updated_count} existing vendor(s).",
+    )
+
+
+class DeduplicateVendorsResponseSchema(BaseModel):
+    message: str
+    merged_count: int
+    primary_vendors_count: int
+    purged_duplicate_ids: list[str]
+
+
+@router.post("/deduplicate", response_model=DeduplicateVendorsResponseSchema)
+async def deduplicate_vendors(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Find duplicate vendors by normalized name (UPPER(TRIM(name))) or identical bank details,
+    re-link all dependent records (payments, change requests, remittances) to the primary record,
+    and safely delete duplicate vendor entries.
+    """
+    res = await db.execute(select(Vendor).order_by(Vendor.created_at.asc()))
+    all_vendors = list(res.scalars().all())
+
+    # Group vendors by normalized name
+    groups: dict[str, list[Vendor]] = {}
+    for v in all_vendors:
+        key = " ".join(v.name.strip().upper().split())
+        groups.setdefault(key, []).append(v)
+
+    merged_count = 0
+    purged_ids: list[str] = []
+    audit_details: list[dict[str, Any]] = []
+
+    for name_key, v_list in groups.items():
+        if len(v_list) <= 1:
+            continue
+
+        # Choose primary vendor: prioritize active, having email, having custom default_id_number, or earliest created
+        primary = v_list[0]
+        for other in v_list[1:]:
+            if not primary.email and other.email:
+                primary.email = other.email
+            if (not primary.default_id_number or primary.default_id_number == primary.account_number[-5:]) and other.default_id_number:
+                primary.default_id_number = other.default_id_number
+
+        duplicates = v_list[1:]
+        for dup in duplicates:
+            # 1. Re-link payments in DB
+            res_p = await db.execute(
+                update(Payment).where(Payment.vendor_id == dup.id).values(vendor_id=primary.id)
+            )
+            payments_count = res_p.rowcount
+
+            # 2. Re-link change requests in DB
+            res_cr = await db.execute(
+                update(VendorChangeRequest).where(VendorChangeRequest.vendor_id == dup.id).values(vendor_id=primary.id)
+            )
+            change_reqs_count = res_cr.rowcount
+
+            # 3. Re-link remittances in DB
+            res_rem = await db.execute(
+                update(VendorRemittance).where(VendorRemittance.vendor_id == dup.id).values(
+                    vendor_id=primary.id, vendor_name=primary.name
+                )
+            )
+            remittances_count = res_rem.rowcount
+
+            # 4. Delete duplicate vendor row from DB
+            await db.execute(delete(Vendor).where(Vendor.id == dup.id))
+
+            purged_ids.append(str(dup.id))
+            audit_details.append({
+                "duplicate_id": str(dup.id),
+                "duplicate_name": dup.name,
+                "primary_id": str(primary.id),
+                "primary_name": primary.name,
+                "payments_relinked": payments_count,
+                "remittances_relinked": remittances_count,
+            })
+            merged_count += 1
+
+    if merged_count > 0:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="DEDUPLICATE_VENDORS",
+            entity_type="Vendor",
+            details={
+                "merged_count": merged_count,
+                "admin_username": current_user.username,
+                "records": audit_details,
+            },
+        )
+        db.add(audit)
+        await db.commit()
+
+    return DeduplicateVendorsResponseSchema(
+        message=f"Successfully identified and merged {merged_count} duplicate vendor record(s). All payment histories and remittances are safely preserved under unified profiles.",
+        merged_count=merged_count,
+        primary_vendors_count=len(groups),
+        purged_duplicate_ids=purged_ids,
     )
 
 
@@ -1142,14 +1276,10 @@ async def delete_single_vendor(
     except (ValueError, AttributeError):
         raise HTTPException(status_code=400, detail="Invalid vendor_id format.")
 
-    res = await db.execute(select(Vendor).where(Vendor.id == v_uuid))
-    vendor = res.scalar_one_or_none()
-    if not vendor:
+    res = await db.execute(delete(Vendor).where(Vendor.id == v_uuid).returning(Vendor.name))
+    v_name = res.scalar_one_or_none()
+    if not v_name:
         raise HTTPException(status_code=404, detail="Vendor not found.")
-
-    v_name = vendor.name
-
-    await db.delete(vendor)
 
     audit = AuditLog(
         user_id=admin_user.id,
@@ -1177,16 +1307,19 @@ async def bulk_delete_vendors(
     if not payload.vendor_ids:
         raise HTTPException(status_code=400, detail="No vendor IDs provided for bulk deletion.")
 
-    deleted_count = 0
     deleted_names = []
-
+    v_uuids = []
     for v_id in payload.vendor_ids:
-        res = await db.execute(select(Vendor).where(Vendor.id == v_id))
-        vendor = res.scalar_one_or_none()
-        if vendor:
-            deleted_names.append(vendor.name)
-            await db.delete(vendor)
-            deleted_count += 1
+        try:
+            v_uuids.append(uuid.UUID(str(v_id).strip()))
+        except (ValueError, AttributeError):
+            continue
+
+    if v_uuids:
+        res = await db.execute(delete(Vendor).where(Vendor.id.in_(v_uuids)).returning(Vendor.name))
+        deleted_names = [r[0] for r in res.all()]
+
+    deleted_count = len(deleted_names)
 
     if deleted_count > 0:
         audit = AuditLog(

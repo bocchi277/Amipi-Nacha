@@ -1037,6 +1037,19 @@ const GenerateScreen = (() => {
     return num === 2 ? el('manualDuplicateBanner') : el(`manualDuplicateBanner_${num}`);
   }
 
+  function getUniqueVendors() {
+    const seen = new Set();
+    const unique = [];
+    for (const v of loadedVendors) {
+      const norm = (v.name || '').trim().toUpperCase();
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        unique.push(v);
+      }
+    }
+    return unique;
+  }
+
   function renderManualInlineRows(batchNum = 2) {
     const b = getManualBatchObj(batchNum);
     const tbody = getBatchTbody(batchNum);
@@ -1058,7 +1071,7 @@ const GenerateScreen = (() => {
 
     tbody.innerHTML = '';
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
-      loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      getUniqueVendors().map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
     for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');
@@ -1163,7 +1176,7 @@ const GenerateScreen = (() => {
 
     tbody.innerHTML = '';
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
-      loadedVendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      getUniqueVendors().map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
     for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');

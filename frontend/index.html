@@ -621,6 +621,11 @@
                 <button type="button" class="btn btn-secondary btn-sm" id="refreshVendorsBtn">
                   <span>Refresh</span>
                 </button>
+
+                <button type="button" class="btn btn-secondary btn-sm" id="deduplicateVendorsBtn" onclick="VendorsScreen.handleDeduplicateVendors()" title="Find and merge duplicate vendor profiles in database" style="font-size: var(--text-xs); font-weight: 600;">
+                  <span class="spinner" id="dedupSpinner" style="display: none;"></span>
+                  <span>Merge Duplicates</span>
+                </button>
               </div>
             </div>
           </div>

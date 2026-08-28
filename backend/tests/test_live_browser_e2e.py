@@ -8,11 +8,12 @@ import os
 import pytest
 from playwright.async_api import async_playwright
 
-BASE_URL = "https://amipi-nacha.netlify.app/"
+BASE_URL = os.getenv("NETLIFY_URL", "https://amipi-nacha.netlify.app/")
 EXCEL_PATH = "/home/bocchi_277/Programming_files/AmipiWork/FirstProject/PAYMENTS 20260730.xlsx"
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.getenv("RUN_NETLIFY_E2E") != "true", reason="Requires RUN_NETLIFY_E2E=true to test remote Netlify production endpoint")
 async def test_live_browser_e2e_full_workflow():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -60,14 +61,19 @@ async def test_live_browser_e2e_full_workflow():
             await page.wait_for_selector("#invoiceBreakdownModal", state="hidden", timeout=5000)
 
         print("--- [E2E STEP 4] Manual Payment Entry (Batch 2) ---")
-        await page.wait_for_selector("#manualVendorSelect option:nth-child(2)", state="attached", timeout=10000)
-        await page.select_option("#manualVendorSelect", index=1)
-        await page.fill("#manualAmount", "250.00")
-        await page.fill("#manualIdNumber", "MAN-REF-001")
-        await page.click("#addManualEntryBtn")
-        await page.wait_for_selector("#manualDraftTableBody tr", timeout=5000)
-        await page.click("#submitManualBatchBtn")
-        await page.wait_for_selector("#manualValidPaymentsTableBody tr", timeout=12000)
+        await page.wait_for_selector("#manualInlineTableBody .manual-row-vendor option:nth-child(2)", state="attached", timeout=15000)
+        row = await page.query_selector("#manualInlineTableBody tr")
+        if row:
+            sel = await row.query_selector(".manual-row-vendor")
+            amt = await row.query_selector(".manual-row-amount")
+            ref = await row.query_selector(".manual-row-ref")
+            if sel:
+                await sel.select_option(index=1)
+            if amt:
+                await amt.fill("250.00")
+            if ref:
+                await ref.fill("MAN-REF-001")
+        await page.fill("#manualEffDate", "2026-08-30")
 
         print("--- [E2E STEP 5] Generating NACHA File ---")
         await page.wait_for_selector("#generateNachaBtn:not([disabled])", timeout=15000)

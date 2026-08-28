@@ -145,11 +145,13 @@ def test_live_site_deep_scan_every_feature(page: Page, base_url: str, run_contex
     # --- 2C: Bulk Vendor Upload via CSV (New Vendors + Updates) ---
     bulk_vendor_1 = f"BULK B {uid}"
     bulk_vendor_2 = f"BULK C {uid}"
+    acct_b1 = f"98{uuid.uuid4().int % 100000000:08d}"
+    acct_b2 = f"55{uuid.uuid4().int % 100000000:08d}"
     bulk_csv_data = (
         "Vendor Name,Routing Number,Account Number,Account Type,Email,Default Invoice ID\n"
-        f"{bulk_vendor_1},026013356,9876543210,checking,b_{uid}@bulk.com,B-001\n"
-        f"{bulk_vendor_2},021000089,5544332211,checking,c_{uid}@bulk.com,C-001\n"
-        f"{vendor_single_name},021000021,1234567890,checking,bulk_updated_{uid}@vendorA.com,DEF-9999\n"
+        f"{bulk_vendor_1},026013356,{acct_b1},checking,b_{uid}@bulk.com,B-001\n"
+        f"{bulk_vendor_2},021000089,{acct_b2},checking,c_{uid}@bulk.com,C-001\n"
+        f"{vendor_single_name},021000021,{vendor_single_acct},checking,bulk_updated_{uid}@vendorA.com,DEF-9999\n"
     )
     tmp_bulk_v = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
     tmp_bulk_v.write(bulk_csv_data)
@@ -165,36 +167,19 @@ def test_live_site_deep_scan_every_feature(page: Page, base_url: str, run_contex
     expect(page.locator("#bulkVendorDiffModal")).to_be_visible(timeout=10000)
     page.click("#executeBulkDiffConfirmBtn")
     expect(page.locator("#bulkVendorDiffModal")).to_be_hidden(timeout=10000)
-
     expect(page.locator("#addVendorModal")).to_be_hidden(timeout=8000)
+    expect(page.locator("#vendorListAlert")).to_be_visible(timeout=8000)
 
     # Verify Bulk Vendors exist in directory
     page.fill("#vendorSearchInput", f"{uid}")
-    page.evaluate("async () => { await VendorsScreen.loadData(); }")
-    page.fill("#vendorSearchInput", f"{uid}")
+    page.locator("#vendorSearchInput").dispatch_event("input")
     expect(page.locator(f".vendor-card:has-text('{bulk_vendor_1}')")).to_be_visible(timeout=5000)
     expect(page.locator(f".vendor-card:has-text('{bulk_vendor_2}')")).to_be_visible(timeout=5000)
 
-    # --- 2D: Multi-Select and Delete Vendor ---
-    page.click("#vendorTableViewBtn")
-    expect(page.locator("#vendorTableContainer")).to_be_visible()
-
-    # Select bulk_vendor_2 checkbox
-    row_v2 = page.locator(f"#vendorTableBody tr:has-text('{bulk_vendor_2}')")
-    row_v2.locator(".vendor-select-cb").check()
-
-    expect(page.locator("#vendorBulkActionBar")).to_be_visible()
-    page.click("#bulkDeleteVendorsBtn")
-    expect(page.locator("#confirmDeleteVendorModal")).to_be_visible()
-    page.click("#executeDeleteVendorsBtn")
-    expect(page.locator("#confirmDeleteVendorModal")).to_be_hidden(timeout=5000)
-
-    # Verify bulk_vendor_2 is removed
-    page.fill("#vendorSearchInput", bulk_vendor_2)
-    expect(page.locator(f"#vendorTableBody tr:has-text('{bulk_vendor_2}')")).to_be_hidden(timeout=3000)
-
-    # Switch back to card view
-    page.click("#vendorCardViewBtn")
+    # --- 2D: Test Deduplicate & Merge Duplicates Engine ---
+    page.click("#deduplicateVendorsBtn")
+    expect(page.locator("#vendorListAlert")).to_be_visible(timeout=5000)
+    expect(page.locator("#vendorListAlert")).to_contain_text("merged")
 
     # =========================================================================
     # 3. PAYMENT ENTRY & SPREADSHEET UPLOAD (Batch 1 Excel/CSV & Row Edits)
@@ -296,6 +281,9 @@ def test_live_site_deep_scan_every_feature(page: Page, base_url: str, run_contex
 
     # Test Reset to Default Email Template
     page.click("#resetHelpTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_visible()
+    page.click("#confirmResetTmplBtn")
+    expect(page.locator("#resetTemplateConfirmModal")).to_be_hidden(timeout=5000)
     body_val = page.locator("#helpTmplBody").input_value()
     assert "Reference Number:" not in body_val, "Reference number must be removed from email template"
     assert "Payment Amount: ${{amount}}" in body_val

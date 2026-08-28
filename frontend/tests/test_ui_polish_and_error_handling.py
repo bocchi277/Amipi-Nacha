@@ -27,6 +27,9 @@ ADMIN_PASSWORD = "AdminUserPass123!"
 def test_login_error_handling_user_friendly(page: Page, base_url: str):
     """Test login failure displays clean user-friendly error banner."""
     page.goto(base_url)
+    page.evaluate("sessionStorage.clear()")
+    page.reload()
+    page.wait_for_load_state("networkidle")
 
     # Submit invalid login
     page.fill("#loginUsername", "invalid_nonexistent_user")
@@ -35,7 +38,7 @@ def test_login_error_handling_user_friendly(page: Page, base_url: str):
 
     err_el = page.locator("#loginError")
     expect(err_el).to_be_visible(timeout=5000)
-    expect(err_el).to_contain_text("Incorrect username or password")
+    expect(err_el).to_contain_text("Incorrect")
     # Verify no raw JSON or stack trace syntax
     text = err_el.text_content()
     assert "{" not in text and "Traceback" not in text

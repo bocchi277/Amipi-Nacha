@@ -118,7 +118,6 @@ const VendorsScreen = (() => {
     if (singleVendorForm) singleVendorForm.addEventListener('submit', handleCreateSingleVendorSubmit);
     if (saveAddVendorBtn) saveAddVendorBtn.addEventListener('click', handleCreateSingleVendorSubmit);
     if (bulkVendorForm) bulkVendorForm.addEventListener('submit', handleUploadBulkVendorsSubmit);
-    if (uploadBulkVendorBtn) uploadBulkVendorBtn.addEventListener('click', handleUploadBulkVendorsSubmit);
     if (downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadVendorTemplate);
     if (downloadTemplateXlsxBtn) downloadTemplateXlsxBtn.addEventListener('click', downloadVendorTemplateXlsx);
 
@@ -733,11 +732,52 @@ const VendorsScreen = (() => {
       hideBulkDiffModal();
       hideAddVendorModal();
       await loadData();
-      alert(result.message || 'Bulk vendor import and update completed successfully.');
+      const alertBox = el('vendorListAlert');
+      if (alertBox) {
+        alertBox.className = 'alert alert-success show';
+        alertBox.textContent = result.message || 'Bulk vendor import and update completed successfully.';
+        alertBox.style.display = 'block';
+        setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
+      }
     } catch (err) {
       alert(err.message || 'Failed to apply bulk vendor import.');
     } finally {
       if (confirmBtn) confirmBtn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  async function handleDeduplicateVendors() {
+    if (!isAdmin()) {
+      alert('Only administrators can perform database vendor deduplication.');
+      return;
+    }
+
+    const btn = el('deduplicateVendorsBtn');
+    const spinner = el('dedupSpinner');
+    const alertBox = el('vendorListAlert');
+
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      const res = await API.post('/vendors/deduplicate', {});
+      await loadData();
+      if (alertBox) {
+        alertBox.className = 'alert alert-success show';
+        alertBox.textContent = res.message || 'Vendor deduplication completed successfully.';
+        alertBox.style.display = 'block';
+        setTimeout(() => { alertBox.style.display = 'none'; }, 6000);
+      }
+    } catch (err) {
+      if (alertBox) {
+        alertBox.className = 'alert alert-error show';
+        alertBox.textContent = err.message || 'Failed to deduplicate vendors.';
+        alertBox.style.display = 'block';
+        setTimeout(() => { alertBox.style.display = 'none'; }, 6000);
+      }
+    } finally {
+      if (btn) btn.disabled = false;
       if (spinner) spinner.style.display = 'none';
     }
   }
@@ -748,7 +788,7 @@ const VendorsScreen = (() => {
     const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
     const statusFilter = el('vendorStatusFilter') ? el('vendorStatusFilter').value : 'all';
 
-    return loadedVendors.filter(v => {
+    const rawFiltered = loadedVendors.filter(v => {
       const matchesSearch = !term ||
         (v.name && v.name.toLowerCase().includes(term)) ||
         (v.routing_number && v.routing_number.includes(term)) ||
@@ -764,6 +804,18 @@ const VendorsScreen = (() => {
 
       return matchesSearch && matchesStatus;
     });
+
+    // Defensive UI deduplication: consolidate records with matching normalized names
+    const seenNames = new Set();
+    const deduplicated = [];
+    for (const v of rawFiltered) {
+      const normName = (v.name || '').trim().toUpperCase();
+      if (!seenNames.has(normName)) {
+        seenNames.add(normName);
+        deduplicated.push(v);
+      }
+    }
+    return deduplicated;
   }
 
   function updateBulkDeleteBar() {
@@ -1048,7 +1100,7 @@ const VendorsScreen = (() => {
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
           <div style="display: flex; align-items: center; gap: var(--space-xs);">
-            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
+            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
             <div>
               <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${v.name}</h4>
               <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
@@ -1147,7 +1199,7 @@ const VendorsScreen = (() => {
 
       tr.innerHTML = `
         <td style="padding: 12px 16px; text-align: center;">
-          ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} style="cursor: pointer;" />` : '—'}
+          ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer;" />` : '—'}
         </td>
         <td style="padding: 12px 16px;">
           <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
@@ -1294,6 +1346,8 @@ const VendorsScreen = (() => {
     hideBulkDiffModal,
     hideDupConfirmModal,
     hideDeleteModal,
+    handleDeduplicateVendors,
+    toggleVendorSelection,
   };
 })();
 
