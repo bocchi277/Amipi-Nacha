@@ -563,12 +563,14 @@ code, pre {
 }
 
 /*
- * A table inside a scroll wrapper must not widen the page.
+ * Tables fit their container rather than scrolling inside it.
  *
- * `width: 100%` alone does not prevent it: cell content with `white-space: nowrap`
- * (routing numbers, amounts, dates) sets a minimum content width that the table honours,
- * so the table pushed past the viewport and took the layout with it. Letting the wrapper
- * establish its own containing width keeps the overflow inside the scroll area.
+ * An earlier revision set `min-width: max-content` here so wide tables would scroll. That
+ * made the Vendor Book table 1383px inside a 1334px wrapper at full desktop width, which
+ * both drew a horizontal scrollbar and CLIPPED the Actions column -- the Delete button was
+ * cut in half. Sizing to the container and letting cells wrap is the correct fix; the
+ * wrapper keeps `overflow-x: auto` purely as a last resort, and with the table fitting it
+ * never renders a bar.
  */
 .payments-table-wrap,
 .table-responsive {
@@ -577,8 +579,35 @@ code, pre {
 .payments-table-wrap > .data-table,
 .table-responsive > .data-table,
 .table-responsive > .table {
-  /* Below this the columns become unreadable, so scroll rather than compress. */
-  min-width: max-content;
+  width: 100%;
+  table-layout: auto;
+}
+
+/*
+ * Long values must wrap instead of setting a wide minimum for the whole column. Headers
+ * were `white-space: nowrap`, so "Payee / Vendor Name" and "Account Number" each demanded
+ * their full single-line width and together pushed the table past its container.
+ */
+.data-table th,
+.table-responsive .table th {
+  white-space: normal;
+}
+.data-table td,
+.table-responsive .table td {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Short status pills must never break. Allowing cells to wrap made a narrow Status
+ * column render "Active" as "Activ / e".
+ */
+.badge {
+  white-space: nowrap;
+}
+/* Values that must never break mid-token. */
+.data-table td .font-mono,
+.data-table td.font-mono {
+  white-space: nowrap;
 }
 
 .data-table th {
@@ -833,17 +862,11 @@ code, pre {
   border-bottom: 1px solid var(--color-border-light);
   margin-bottom: var(--space-xl);
   /*
-   * Six navigation tabs do not fit a 390px viewport and pushed the page 91px wider than
-   * the screen, so the whole layout could be dragged sideways. Scroll the tab strip
-   * itself instead. `flex-shrink: 0` on the tabs keeps their labels readable rather than
-   * squeezing them to nothing.
+   * Six tabs do not fit a narrow viewport. Wrap onto a second line rather than scroll:
+   * an `overflow-x: auto` strip reserves a scrollbar gutter and draws a bar across the
+   * navigation even at full desktop width, where the tabs fit perfectly well.
    */
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-.tabs > .tab {
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .tab {
@@ -982,8 +1005,8 @@ textarea:focus-visible,
   }
 
   .tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    /* Wrap, never scroll: a scrollbar drawn across the navigation looks broken. */
+    flex-wrap: wrap;
   }
 
   .tab {
@@ -1050,5 +1073,85 @@ textarea:focus-visible,
   }
   .card {
     padding: var(--space-base);
+  }
+}
+
+
+/* ================================================================
+   Narrow screens: stack table rows instead of scrolling
+   ================================================================ */
+/*
+ * A nine-column vendor table cannot fit a phone, and a horizontal scrollbar hides the
+ * Actions column behind a gesture nobody discovers. Below 768px each row becomes a block
+ * with its column name beside the value, taken from the `data-label` on each cell.
+ *
+ * This applies to `.stack-on-mobile` only, so tables whose columns are meant to be read
+ * across (the manual payment entry grid) keep their layout.
+ */
+@media (max-width: 768px) {
+  .stack-on-mobile thead {
+    display: none;
+  }
+  .stack-on-mobile,
+  .stack-on-mobile tbody,
+  .stack-on-mobile tr,
+  .stack-on-mobile td {
+    display: block;
+    width: 100%;
+  }
+  .stack-on-mobile tr {
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm);
+    background: var(--color-surface);
+  }
+  .stack-on-mobile td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-md);
+    padding: var(--space-sm) !important;
+    border-bottom: 1px solid var(--color-border-light);
+    text-align: left !important;
+    /* Flex items default to min-width:auto and refuse to shrink below their content, so
+       a long audit-detail string widened the row. */
+    min-width: 0;
+  }
+  .stack-on-mobile td > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .stack-on-mobile td:last-child {
+    border-bottom: none;
+  }
+  .stack-on-mobile td::before {
+    content: attr(data-label);
+    flex: 0 0 42%;
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  /* A cell with no label (a spacer) should not reserve the label column. */
+  .stack-on-mobile td:not([data-label])::before {
+    content: none;
+  }
+
+  /*
+   * A stacked table is already one column wide, so its wrapper has nothing to scroll.
+   * Leaving `overflow-x: auto` on it still produced a bar, because the `::before` labels
+   * contribute to scrollWidth and a pseudo-element cannot be shrunk from the DOM side.
+   */
+  .table-responsive:has(.stack-on-mobile),
+  .payments-table-wrap:has(.stack-on-mobile) {
+    overflow-x: visible;
+  }
+
+  /* Nothing inside a stacked row may set a width the row cannot honour. */
+  .stack-on-mobile td::before {
+    flex: 0 1 40%;
+    overflow-wrap: anywhere;
   }
 }

@@ -1208,9 +1208,14 @@ const VendorsScreen = (() => {
       }
 
       const isChecked = selectedVendorIds.has(v.id);
-      const vendorIdDisplay = (v.account_number && v.account_number.length >= 5)
-        ? v.account_number.slice(-5)
-        : (v.default_id_number || v.account_number || '—');
+      // Only derive from the account when this user received the real one. For a
+      // non-administrator `account_number` arrives masked, so slicing it produced a
+      // meaningless '•7465'. Same defect as the edit modal had.
+      const canSeeBank = v.bank_details_masked !== true;
+      const vendorIdDisplay = v.default_id_number
+        || (canSeeBank && v.account_number && v.account_number.length >= 5
+              ? v.account_number.slice(-5)
+              : '—');
 
       const statusBadge = v.is_active === false
         ? '<span class="badge" style="background: var(--color-surface-alt, #f1f5f9); color: var(--color-text-muted, #64748b); border: 1px solid #cbd5e1;">Inactive</span>'
@@ -1317,19 +1322,19 @@ const VendorsScreen = (() => {
         : (v.default_id_number || v.account_number || '—');
 
       tr.innerHTML = `
-        <td style="padding: 12px 16px; text-align: center;">
+        <td data-label="Select" style="padding: 12px 16px; text-align: center;">
           ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer;" />` : '—'}
         </td>
-        <td style="padding: 12px 16px;">
+        <td data-label="Payee / Vendor Name" style="padding: 12px 16px;">
           <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${escapeHtml(v.name)}</strong>
           <span class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></span>
         </td>
-        <td style="padding: 12px 16px;" class="font-mono text-xs">${displayEmail}</td>
-        <td style="padding: 12px 16px;" class="font-mono">${v.routing_number}</td>
-        <td style="padding: 12px 16px;" class="font-mono">${maskAccount(v.account_number)}</td>
-        <td style="padding: 12px 16px;" class="font-mono">${(v.account_type || 'checking').toUpperCase()}</td>
-        <td style="padding: 12px 16px;">${statusBadge}</td>
-        <td style="padding: 12px 16px; text-align: right;">
+        <td data-label="Vendor Email" style="padding: 12px 16px;" class="font-mono text-xs">${escapeHtml(displayEmail)}</td>
+        <td data-label="Routing Number" style="padding: 12px 16px;" class="font-mono">${escapeHtml(v.routing_number)}</td>
+        <td data-label="Account Number" style="padding: 12px 16px;" class="font-mono">${escapeHtml(maskAccount(v.account_number))}</td>
+        <td data-label="Account Type" style="padding: 12px 16px;" class="font-mono">${escapeHtml((v.account_type || 'checking').toUpperCase())}</td>
+        <td data-label="Status" style="padding: 12px 16px;">${statusBadge}</td>
+        <td data-label="Actions" style="padding: 12px 16px; text-align: right;">
           <div style="display: flex; gap: var(--space-xs); justify-content: flex-end; flex-wrap: wrap;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="VendorsScreen.openEditVendorModal('${v.id}')">
               Edit Profile

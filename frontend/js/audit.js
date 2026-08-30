@@ -119,11 +119,11 @@ const AuditScreen = (() => {
       }
 
       tr.innerHTML = `
-        <td style="padding: 10px 16px;" class="font-mono text-xs text-muted">${escapeHtml(timeFormatted)}</td>
-        <td style="padding: 10px 16px;"><strong>${escapeHtml(l.username)}</strong></td>
-        <td style="padding: 10px 16px;">${actionBadge}</td>
-        <td style="padding: 10px 16px;" class="font-mono text-xs">${escapeHtml(l.entity_type || 'System')} ${l.entity_id ? '(' + escapeHtml(String(l.entity_id).substring(0, 8)) + '...)' : ''}</td>
-        <td style="padding: 10px 16px;">${detailsHtml}</td>
+        <td data-label="Timestamp" style="padding: 10px 16px;" class="font-mono text-xs text-muted">${escapeHtml(timeFormatted)}</td>
+        <td data-label="User" style="padding: 10px 16px;"><strong>${escapeHtml(l.username)}</strong></td>
+        <td data-label="Action" style="padding: 10px 16px;">${actionBadge}</td>
+        <td data-label="Entity" style="padding: 10px 16px;" class="font-mono text-xs">${escapeHtml(l.entity_type || 'System')} ${l.entity_id ? '(' + escapeHtml(String(l.entity_id).substring(0, 8)) + '...)' : ''}</td>
+        <td data-label="Details" style="padding: 10px 16px;">${detailsHtml}</td>
       `;
 
       tbody.appendChild(tr);

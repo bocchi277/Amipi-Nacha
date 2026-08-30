@@ -152,16 +152,16 @@ const AdminScreen = (() => {
       tr.setAttribute('data-request-id', req.id);
 
       tr.innerHTML = `
-        <td class="font-mono">${idx + 1}</td>
-        <td class="font-bold">${escapeHtml(req.vendor_name)}</td>
-        <td class="font-mono text-xs">${req.requested_by_user_id ? req.requested_by_user_id.substring(0, 8) + '...' : 'User'}</td>
+        <td data-label="#" class="font-mono">${idx + 1}</td>
+        <td data-label="Vendor Name" class="font-bold">${escapeHtml(req.vendor_name)}</td>
+        <td data-label="Requested By" class="font-mono text-xs">${req.requested_by_user_id ? req.requested_by_user_id.substring(0, 8) + '...' : 'User'}</td>
         <td class="font-mono text-xs">
           Routing: <strong style="color: var(--color-danger);">${req.requested_routing_number}</strong><br/>
           Account: <strong style="color: var(--color-danger);">${req.requested_account_number}</strong><br/>
           Type: ${req.requested_account_type.toUpperCase()}
         </td>
-        <td class="text-xs" style="max-width: 200px;">${escapeHtml(req.reason || '<span class="text-muted">No notes provided</span>')}</td>
-        <td><span class="badge badge-warning">PENDING</span></td>
+        <td data-label="Reason / Notes" class="text-xs" style="max-width: 200px;">${escapeHtml(req.reason || '<span class="text-muted">No notes provided</span>')}</td>
+        <td data-label="Status"><span class="badge badge-warning">PENDING</span></td>
         <td>
           <div style="display: flex; gap: var(--space-xs);">
             <button type="button" class="btn btn-success btn-sm btn-approve" onclick="AdminScreen.approveRequest('${req.id}')">
@@ -299,11 +299,11 @@ const AdminScreen = (() => {
       }
 
       tr.innerHTML = `
-        <td class="font-mono">${idx + 1}</td>
-        <td class="font-bold">${escapeHtml(u.username)}</td>
-        <td class="font-mono text-xs">${escapeHtml(u.email)}</td>
-        <td>${roleBadge}</td>
-        <td>${statusBadge}</td>
+        <td data-label="#" class="font-mono">${idx + 1}</td>
+        <td data-label="Username" class="font-bold">${escapeHtml(u.username)}</td>
+        <td data-label="Email" class="font-mono text-xs">${escapeHtml(u.email)}</td>
+        <td data-label="Role">${roleBadge}</td>
+        <td data-label="Status">${statusBadge}</td>
         <td class="text-xs text-muted">${createdDateStr}</td>
         <td style="text-align: right;">
           <div style="display: flex; gap: var(--space-xs); justify-content: flex-end; align-items: center;">
