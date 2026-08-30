@@ -6,12 +6,36 @@
  */
 
 const API = (() => {
+  // Allowed backend origins. The API base URL was previously read from
+  // `localStorage.amipi_api_url`, which let anyone with a moment at the keyboard --
+  // or any XSS payload -- permanently repoint every request, including the login
+  // POST, at a server they control and harvest credentials and bank data.
+  // `window.AMIPI_API_URL` is still honoured (it can only be set by a script already
+  // running on the page) but must resolve to a known origin.
+  const ALLOWED_API_ORIGINS = [
+    'https://amipi-nacha-backend.onrender.com',
+    'http://localhost:8099',
+    'http://127.0.0.1:8099',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+  ];
+
   function getApiBaseUrl() {
-    const customUrl = window.AMIPI_API_URL || localStorage.getItem('amipi_api_url');
-    if (customUrl) {
-      const clean = customUrl.replace(/\/+$/, '');
-      return clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
+    const override = window.AMIPI_API_URL;
+    if (override) {
+      const clean = String(override).replace(/\/+$/, '');
+      let origin = null;
+      try {
+        origin = new URL(clean, window.location.href).origin;
+      } catch (e) {
+        origin = null;
+      }
+      if (origin && ALLOWED_API_ORIGINS.indexOf(origin) !== -1) {
+        return clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
+      }
+      console.warn('[AMIPI] Ignoring AMIPI_API_URL override: origin not allow-listed.');
     }
+
     // If running on localhost, 127.0.0.1, or same-origin host (such as cPanel / custom domain)
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isNetlify = window.location.hostname.includes('netlify.app');
@@ -91,7 +115,15 @@ const API = (() => {
     try {
       res = await fetch(url, opts);
     } catch (netErr) {
-      throw new Error('Backend server is waking up or initializing. Please retry in a few seconds.');
+      // Previously every transport failure was reported as "Backend server is waking
+      // up", which hid genuine problems (offline, DNS failure, CORS rejection) behind
+      // a message telling the user to just wait and retry.
+      throw new Error(
+        navigator.onLine === false
+          ? 'You appear to be offline. Check your connection and try again.'
+          : 'Could not reach the API server. It may still be starting up, or the ' +
+            'connection was blocked. Please retry in a few seconds.'
+      );
     }
 
 
@@ -107,9 +139,23 @@ const API = (() => {
     if (!res.ok) {
       if (res.status === 401) {
         clearToken();
-        if (!path.includes('/auth/')) {
+        // Reloading unconditionally could loop: the reloaded page re-requests, gets
+        // another 401, and reloads again. Reload at most once, and never while
+        // already on the login screen.
+        const alreadyHandled = sessionStorage.getItem('amipi_401_handled') === '1';
+        if (!path.includes('/auth/') && !alreadyHandled) {
+          sessionStorage.setItem('amipi_401_handled', '1');
           window.location.reload();
         }
+      } else if (res.status === 429) {
+        // Surface throttling clearly rather than as a generic failure.
+        const err429 = new Error(
+          (data && data.detail) ||
+          'Too many attempts. Please wait a moment before trying again.'
+        );
+        err429.status = 429;
+        err429.data = data;
+        throw err429;
       }
       let errMsg = `An error occurred (HTTP ${res.status}). Please try again.`;
       if (data) {
@@ -166,6 +212,8 @@ const API = (() => {
       username: data.username,
       role: data.role,
     });
+    // Reset the one-shot 401 reload guard now that we hold a fresh token.
+    sessionStorage.removeItem('amipi_401_handled');
 
     return data;
   }
@@ -216,6 +264,44 @@ const API = (() => {
   };
 })();
 
+// ── HTML escaping ────────────────────────────────────────────
+/**
+ * Escape a value for safe interpolation into an HTML template string.
+ *
+ * The dashboard builds markup with template literals and assigns it via innerHTML in
+ * ~60 places, interpolating values that originate from the database (vendor names,
+ * emails, usernames, change-request reasons, filenames). Those values are attacker
+ * controllable -- a vendor named `<img src=x onerror=...>` executed script in every
+ * view that listed it. No escaping helper existed at all before this.
+ *
+ * Use for TEXT interpolated into markup and for values placed inside quoted HTML
+ * attributes. (`textContent` assignments are already safe and need no escaping.)
+ */
+window.escapeHtml = function (value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+/**
+ * Escape a value for use inside a single-quoted inline event handler argument,
+ * e.g. onclick="Foo.bar('${escapeJsAttr(name)}')".
+ */
+window.escapeJsAttr = function (value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, ' ');
+};
+
 // ── Global Toast Notification System ─────────────────────────
 window.showToast = function(message, type = 'info', duration = 3500) {
   const container = document.getElementById('amipiToastContainer');
@@ -238,7 +324,7 @@ window.showToast = function(message, type = 'info', duration = 3500) {
   toast.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       ${iconSvg}
-      <span>${message}</span>
+      <span>${window.escapeHtml(message)}</span>
     </div>
     <button type="button" class="toast-close-btn" aria-label="Close notification">&times;</button>
   `;

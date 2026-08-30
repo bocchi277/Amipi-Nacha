@@ -123,7 +123,7 @@ const LoginScreen = (() => {
         : '<span class="user-role-badge" id="userRoleBadge">User</span>';
       userInfo.innerHTML = `
         ${roleBadgeHtml}
-        <span style="font-size: var(--text-xs); opacity: 0.85">${user.username}</span>
+        <span style="font-size: var(--text-xs); opacity: 0.85">${escapeHtml(user.username)}</span>
       `;
     }
 

@@ -5,7 +5,7 @@ Provides filterable audit history querying for Admin users.
 """
 from typing import Any, Optional
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
@@ -52,7 +52,10 @@ async def list_audit_logs(
     if start_date:
         stmt = stmt.where(AuditLog.created_at >= start_date)
     if end_date:
-        stmt = stmt.where(AuditLog.created_at <= end_date)
+        # created_at is a timestamp; comparing it to a bare date pins the boundary at
+        # 00:00 and silently excluded every entry recorded ON end_date. Advance to the
+        # start of the following day so the range is inclusive as users expect.
+        stmt = stmt.where(AuditLog.created_at < end_date + timedelta(days=1))
 
     stmt = stmt.order_by(AuditLog.created_at.desc()).limit(limit)
 

@@ -141,7 +141,7 @@ const GenerateScreen = (() => {
 
         opt.innerHTML = `
           <div class="custom-select-option-main">
-            <span class="custom-select-option-name">${v.name}</span>
+            <span class="custom-select-option-name">${escapeHtml(v.name)}</span>
             <div class="custom-select-option-tags">
               <span class="custom-select-tag">ID: ${vId}</span>
               <span class="custom-select-tag">Routing: ${routing}</span>
@@ -298,7 +298,7 @@ const GenerateScreen = (() => {
         vendors = newVendors || [];
         if (hiddenInput && hiddenInput.tagName === 'SELECT') {
           hiddenInput.innerHTML = '<option value="">-- Select Vendor --</option>' +
-            vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+            vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
         }
         renderOptions('');
       },
@@ -799,7 +799,7 @@ const GenerateScreen = (() => {
 
       tr.innerHTML = `
         <td class="font-mono">${idx + 1}</td>
-        <td class="font-bold">${p.vendor_name}</td>
+        <td class="font-bold">${escapeHtml(p.vendor_name)}</td>
         <td class="font-mono">${p.routing_number || '—'}</td>
         <td class="font-mono">${p.account_number || '—'}</td>
         <td class="font-mono">${amtFormatted} ${breakdownBadge}</td>
@@ -927,7 +927,7 @@ const GenerateScreen = (() => {
       if (amtInput) amtInput.value = '';
       if (idInput) idInput.value = '';
       if (window.showToast) {
-        window.showToast(`Payment for ${vendorObj.name} ($${parseFloat(amountVal).toFixed(2)}) validated & saved in Batch 1.`, 'success');
+        window.showToast(`Payment for ${escapeHtml(vendorObj.name)} ($${parseFloat(amountVal).toFixed(2)}) validated & saved in Batch 1.`, 'success');
       }
     } else {
       b1ManualDraftEntries.pop();
@@ -953,7 +953,7 @@ const GenerateScreen = (() => {
         if (window.showToast) window.showToast('Removed all entries from Batch 1.', 'info');
       } else {
         await handleSubmitB1ManualBatch(false);
-        if (window.showToast) window.showToast(`Removed entry for ${removed.vendor_name} from Batch 1.`, 'info');
+        if (window.showToast) window.showToast(`Removed entry for ${escapeHtml(removed.vendor_name)} from Batch 1.`, 'info');
       }
     }
   }
@@ -1071,7 +1071,7 @@ const GenerateScreen = (() => {
 
     tbody.innerHTML = '';
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
-      getUniqueVendors().map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      getUniqueVendors().map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
 
     for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');
@@ -1176,7 +1176,7 @@ const GenerateScreen = (() => {
 
     tbody.innerHTML = '';
     const vendorOptions = '<option value="">-- Select Vendor --</option>' +
-      getUniqueVendors().map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      getUniqueVendors().map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
 
     for (let i = 0; i < b.rowCount; i++) {
       const tr = document.createElement('tr');
@@ -1434,9 +1434,9 @@ const GenerateScreen = (() => {
         if (window.showToast) window.showToast('Removed all entries from Batch 2.', 'info');
       } else if (batch2Id) {
         await handleSubmitManualBatch(batch2OverrideActive);
-        if (window.showToast) window.showToast(`Removed entry for ${removed.vendor_name} from Batch 2.`, 'info');
+        if (window.showToast) window.showToast(`Removed entry for ${escapeHtml(removed.vendor_name)} from Batch 2.`, 'info');
       } else {
-        if (window.showToast) window.showToast(`Removed staged entry for ${removed.vendor_name}.`, 'info');
+        if (window.showToast) window.showToast(`Removed staged entry for ${escapeHtml(removed.vendor_name)}.`, 'info');
       }
     }
   }

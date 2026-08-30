@@ -3,10 +3,12 @@ Authentication FastAPI Router.
 
 Provides registration, login (JWT generation), and user profile endpoints.
 """
+from collections import defaultdict
 from typing import Optional
 import re
+import time
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
@@ -21,6 +23,53 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Pragmatic email shape check: local-part@domain.tld with no whitespace.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
+# ---------------------------------------------------------------------------
+# Login throttling
+# ---------------------------------------------------------------------------
+# In-process sliding window keyed on (client IP, username). Deliberately simple and
+# dependency-free; a multi-worker deployment should move this to Redis so the limit
+# is shared, but even per-worker throttling defeats naive password guessing, which
+# was previously completely unrestricted.
+_MAX_FAILED_LOGINS = 8
+_LOGIN_WINDOW_SECONDS = 300
+_LOGIN_LOCKOUT_SECONDS = 300
+_failed_logins: dict[str, list[float]] = defaultdict(list)
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP, honouring the proxy header used by Render/Netlify."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _prune(key: str, now: float) -> list[float]:
+    recent = [t for t in _failed_logins[key] if now - t < _LOGIN_WINDOW_SECONDS]
+    _failed_logins[key] = recent
+    return recent
+
+
+def _login_retry_after(key: str) -> Optional[int]:
+    """Seconds the caller must wait, or None when they may attempt a sign-in."""
+    now = time.monotonic()
+    recent = _prune(key, now)
+    if len(recent) < _MAX_FAILED_LOGINS:
+        return None
+    unlock_at = recent[-1] + _LOGIN_LOCKOUT_SECONDS
+    remaining = int(unlock_at - now)
+    return remaining if remaining > 0 else None
+
+
+def _record_failed_login(key: str) -> None:
+    now = time.monotonic()
+    _prune(key, now)
+    _failed_logins[key].append(now)
+
+
+def _clear_failed_logins(key: str) -> None:
+    _failed_logins.pop(key, None)
 
 
 class RegisterUserSchema(BaseModel):
@@ -124,12 +173,28 @@ async def register_user(
 
 @router.post("/login", response_model=TokenResponseSchema)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_db),
 ):
     """Authenticate credentials and return JWT Bearer token."""
     # Find user by username or email
     username_input = form_data.username.strip()
+
+    # Throttle credential guessing. There was previously no limit at all, so an
+    # attacker could try passwords indefinitely at full speed.
+    throttle_key = f"{_client_ip(request)}|{username_input.lower()}"
+    retry_after = _login_retry_after(throttle_key)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Too many failed sign-in attempts. Try again in "
+                f"{retry_after} second(s)."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
     res = await db.execute(
         select(User).where(
             (User.username == username_input) | (User.email == username_input.lower())
@@ -138,6 +203,7 @@ async def login(
     user = res.scalar_one_or_none()
 
     if not user or not verify_password(form_data.password, user.password_hash):
+        _record_failed_login(throttle_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password.",
@@ -147,6 +213,7 @@ async def login(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user account.")
 
+    _clear_failed_logins(throttle_key)
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role.value})
     return TokenResponseSchema(
         access_token=access_token,

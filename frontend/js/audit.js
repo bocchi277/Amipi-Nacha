@@ -110,7 +110,7 @@ const AuditScreen = (() => {
 
       tr.innerHTML = `
         <td style="padding: 10px 16px;" class="font-mono text-xs text-muted">${timeFormatted}</td>
-        <td style="padding: 10px 16px;"><strong>${l.username}</strong></td>
+        <td style="padding: 10px 16px;"><strong>${escapeHtml(l.username)}</strong></td>
         <td style="padding: 10px 16px;">${actionBadge}</td>
         <td style="padding: 10px 16px;" class="font-mono text-xs">${l.entity_type || 'System'} ${l.entity_id ? '(' + l.entity_id.substring(0, 8) + '...)' : ''}</td>
         <td style="padding: 10px 16px;">${detailsHtml}</td>

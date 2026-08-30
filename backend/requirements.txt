@@ -10,6 +10,9 @@ alembic>=1.13.1
 PyJWT>=2.8.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+# Required directly by app/core/encryption.py (Fernet bank-detail encryption).
+# Previously only present transitively via python-jose[cryptography].
+cryptography>=41.0.7
 python-multipart>=0.0.9
 pandas>=2.2.1
 openpyxl>=3.1.2

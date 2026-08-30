@@ -451,7 +451,7 @@ const VendorsScreen = (() => {
             if (el('dupConfirmModalTitle')) el('dupConfirmModalTitle').textContent = 'Update Existing Vendor?';
             if (el('dupConfirmAlert')) {
               el('dupConfirmAlert').className = 'alert alert-warning show';
-              el('dupConfirmAlert').innerHTML = `An existing record was found in the Vendor Book for <strong>${detailObj.vendor_name || name}</strong> with modified details.`;
+              el('dupConfirmAlert').innerHTML = `An existing record was found in the Vendor Book for <strong>${escapeHtml(detailObj.vendor_name || name)}</strong> with modified details.`;
             }
           }
 
@@ -647,11 +647,11 @@ const VendorsScreen = (() => {
                 : `<span class="badge badge-primary" style="font-size: 10px;">Profile</span>`;
 
               if (uv.same_bank_different_name && field === 'name') {
-                badge = `<span class="badge badge-warning" style="font-size: 10px;" title="This bank account matches existing vendor ${uv.vendor_name}">⚠️ Existing Bank Account</span>`;
+                badge = `<span class="badge badge-warning" style="font-size: 10px;" title="This bank account matches existing vendor ${escapeHtml(uv.vendor_name)}">⚠️ Existing Bank Account</span>`;
               }
 
               tr.innerHTML = `
-                <td style="padding: 6px 10px;"><strong>${uv.vendor_name}</strong></td>
+                <td style="padding: 6px 10px;"><strong>${escapeHtml(uv.vendor_name)}</strong></td>
                 <td style="padding: 6px 10px; font-weight: 500;">${fieldLabels[field] || field}</td>
                 <td style="padding: 6px 10px; font-family: monospace; color: #64748B;">${ch.old}</td>
                 <td style="padding: 6px 10px; font-family: monospace; color: #059669; font-weight: bold;">${ch.new}</td>
@@ -895,7 +895,7 @@ const VendorsScreen = (() => {
     }
 
     if (listEl) {
-      listEl.innerHTML = vendorsToDelete.map(v => `• ${v.name} (Routing: ${v.routing_number}, Acct: ${maskAccount(v.account_number)})`).join('<br/>');
+      listEl.innerHTML = vendorsToDelete.map(v => `• ${escapeHtml(v.name)} (Routing: ${v.routing_number}, Acct: ${maskAccount(v.account_number)})`).join('<br/>');
     }
 
     const cascadeCb = el('vendorDeleteCascadeCb');
@@ -1102,7 +1102,7 @@ const VendorsScreen = (() => {
           <div style="display: flex; align-items: center; gap: var(--space-xs);">
             ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
             <div>
-              <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${v.name}</h4>
+              <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${escapeHtml(v.name)}</h4>
               <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
             </div>
           </div>
@@ -1124,7 +1124,7 @@ const VendorsScreen = (() => {
           </div>
           <div>
             <span class="text-muted">Email Address:</span><br/>
-            <span class="font-mono text-xs" style="color: var(--color-primary);">${v.email || 'ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com'}</span>
+            <span class="font-mono text-xs" style="color: var(--color-primary);">${escapeHtml(v.email || 'ap@' + v.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com')}</span>
           </div>
         </div>
 
@@ -1202,7 +1202,7 @@ const VendorsScreen = (() => {
           ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer;" />` : '—'}
         </td>
         <td style="padding: 12px 16px;">
-          <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${v.name}</strong>
+          <strong style="color: var(--color-primary); font-size: var(--text-sm); display: block;">${escapeHtml(v.name)}</strong>
           <span class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></span>
         </td>
         <td style="padding: 12px 16px;" class="font-mono text-xs">${displayEmail}</td>
