@@ -29,9 +29,9 @@ An enterprise-grade B2B payment generation, validation, and security management 
 - **Security**:
   - Authentication required on every endpoint that moves money or exposes bank details.
   - Roles are server-assigned; self-registration cannot grant administrator access.
-  - Login throttling, CORS allowlist, CSP and related response headers, and HTML escaping on all rendered database values.
+  - Login throttling, CORS allowlist, CSP and related response headers, and HTML escaping on all rendered database values — including audit log detail values, which are user-influenced and are read by administrators.
 - **Automated Testing Suite**:
-  - **185 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
+  - **191 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
   - **41 Playwright E2E test cases** in `frontend/tests/` validating user journeys, admin approvals, and file downloads.
   - **5 live browser verification tests** in `backend/tests_live/` (opt-in; excluded from the default run).
 
@@ -49,7 +49,7 @@ FirstProject/
 │   │   ├── db/               # Async Engine & Session management
 │   │   ├── models/           # SQLAlchemy ORM models (User, Vendor, Payment, NachaFile, AuditLog)
 │   │   └── services/         # NACHA generation, spreadsheet parsing, email remittance
-│   ├── tests/                # 185 hermetic Pytest cases (run by default)
+│   ├── tests/                # 191 hermetic Pytest cases (run by default)
 │   ├── tests_live/           # Opt-in browser tests against a running server
 │   ├── alembic.ini
 │   ├── pytest.ini
@@ -139,7 +139,7 @@ When served separately, add its origin to `ALLOWED_ORIGINS`.
 
 ## 🧪 Running Automated Tests
 
-### Backend (185 tests)
+### Backend (191 tests)
 ```bash
 cd backend
 export DATABASE_URL="postgresql+asyncpg://amipi:amipipass@localhost:5432/amipi_ach_test"
@@ -171,7 +171,9 @@ pytest tests_live/test_live_ui_verification.py -v
 
 - **OAuth2 + JWT authentication** with role-based access control (`user` vs `admin`). Roles are assigned server-side only.
 - **Encrypted bank data at rest** via Fernet (`MultiFernet`, so keys can be rotated). Because Fernet is non-deterministic, bank-detail lookups compare decrypted values in memory rather than in SQL.
-- **Bank details are masked for non-administrators.** `GET /vendors` returns only the last 4 digits to standard users and sets `bank_details_masked`. Endpoints that return a whole ACH file (`/nacha/latest`, `/nacha/{id}/download`) are admin-only.
+- **Bank details are masked for non-administrators.** Every vendor response is built by one function (`_vendor_response`), so masking cannot drift between endpoints. Standard users receive the last 4 digits and `bank_details_masked: true`; no adjacent field may reveal more, including `default_id_number` when it holds the account tail. Endpoints returning a whole ACH file (`/nacha/latest`, `/nacha/{id}/download`) are admin-only.
+- **Authorization is verified by enumeration, not by example.** `tests/test_authorization_coverage.py` walks every registered route and fails if any lacks an authentication dependency or if a state-changing route is not administrator-only. Exceptions are an explicit allowlist. This exists because `GET /vendors` was masked while `GET /vendors/{id}` was left entirely unauthenticated, returning full decrypted bank details — a gap that survived a security pass precisely because that pass checked endpoints one at a time.
+- **Vendor mutation is administrator-only.** Vendor names are what spreadsheet rows match against, so renaming a vendor redirects future payments; standard users go through the change-request workflow instead. Change requests are visible only to their author and to administrators, because an approved request holds the vendor's real current bank details.
 - **Banking calendar**: effective entry dates are validated against the Federal Reserve holiday schedule and default to the next banking day. Past dates, weekends and holidays are rejected.
 - **Trace numbers** come from a PostgreSQL sequence, allocated atomically, so concurrent generation cannot produce duplicates.
 - **Login throttling**: 8 failed attempts per (IP, username) per 5 minutes, then HTTP 429. In-process — move to a shared store if running multiple workers.

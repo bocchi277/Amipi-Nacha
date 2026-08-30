@@ -102,17 +102,27 @@ const AuditScreen = (() => {
 
       let detailsHtml = '—';
       if (l.details && Object.keys(l.details).length > 0) {
+        // Audit details carry values that originated with a user: vendor names, file
+        // names, spreadsheet-derived payees. Rendering them unescaped made this table a
+        // stored-XSS sink, and it is a table ADMINISTRATORS read, so a payload planted
+        // by a standard user (a crafted vendor name in an uploaded spreadsheet) would
+        // execute with administrator privileges.
         const detailsStr = Object.entries(l.details)
-          .map(([k, v]) => `<strong>${k}:</strong> ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+          .map(([k, v]) => {
+            const raw = (v === null || v === undefined)
+              ? ''
+              : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+            return `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(raw)}`;
+          })
           .join(' | ');
         detailsHtml = `<span style="font-family: monospace; font-size: 11px; color: var(--color-text-muted);">${detailsStr}</span>`;
       }
 
       tr.innerHTML = `
-        <td style="padding: 10px 16px;" class="font-mono text-xs text-muted">${timeFormatted}</td>
+        <td style="padding: 10px 16px;" class="font-mono text-xs text-muted">${escapeHtml(timeFormatted)}</td>
         <td style="padding: 10px 16px;"><strong>${escapeHtml(l.username)}</strong></td>
         <td style="padding: 10px 16px;">${actionBadge}</td>
-        <td style="padding: 10px 16px;" class="font-mono text-xs">${l.entity_type || 'System'} ${l.entity_id ? '(' + l.entity_id.substring(0, 8) + '...)' : ''}</td>
+        <td style="padding: 10px 16px;" class="font-mono text-xs">${escapeHtml(l.entity_type || 'System')} ${l.entity_id ? '(' + escapeHtml(String(l.entity_id).substring(0, 8)) + '...)' : ''}</td>
         <td style="padding: 10px 16px;">${detailsHtml}</td>
       `;
 
@@ -135,17 +145,20 @@ const AuditScreen = (() => {
   function getActionBadge(action) {
     if (!action) return '<span class="badge badge-secondary">EVENT</span>';
 
+    // Action names are server-generated constants, but escape anyway: this is an HTML
+    // sink and the guarantee that only constants reach it is not enforced anywhere.
+    const safe = escapeHtml(String(action));
     const actUpper = action.toUpperCase();
     if (actUpper.includes('APPROVED') || actUpper.includes('GENERATED')) {
-      return `<span class="badge badge-success">${action}</span>`;
+      return `<span class="badge badge-success">${safe}</span>`;
     }
     if (actUpper.includes('REJECTED') || actUpper.includes('FAILED')) {
-      return `<span class="badge badge-danger">${action}</span>`;
+      return `<span class="badge badge-danger">${safe}</span>`;
     }
     if (actUpper.includes('REQUESTED') || actUpper.includes('PENDING')) {
-      return `<span class="badge badge-warning">${action}</span>`;
+      return `<span class="badge badge-warning">${safe}</span>`;
     }
-    return `<span class="badge badge-primary">${action}</span>`;
+    return `<span class="badge badge-primary">${safe}</span>`;
   }
 
   return {

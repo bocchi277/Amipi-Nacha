@@ -205,9 +205,15 @@ const VendorsScreen = (() => {
     const vendor = loadedVendors.find(v => v.id === vendorId);
     if (!vendor) return;
 
-    const defaultIdVal = (vendor.account_number && vendor.account_number.length >= 5)
+    // Only derive a reference from the account number when this user actually received
+    // the real one. For a non-administrator `account_number` arrives masked, e.g.
+    // '•••••7465', and slicing that produced '•7465' -- which would then be saved as
+    // the vendor's default reference and end up in the NACHA ID field.
+    const canSeeBankDetails = vendor.bank_details_masked !== true;
+    const derivedTail = (canSeeBankDetails && vendor.account_number && vendor.account_number.length >= 5)
       ? vendor.account_number.slice(-5)
-      : (vendor.default_id_number || vendor.account_number || '');
+      : '';
+    const defaultIdVal = vendor.default_id_number || derivedTail;
 
     el('editVendorId').value = vendor.id;
     el('editVendorModalTitle').textContent = `Edit Vendor Profile — ${vendor.name}`;
@@ -445,7 +451,7 @@ const VendorsScreen = (() => {
             if (el('dupConfirmModalTitle')) el('dupConfirmModalTitle').textContent = 'Bank Account Already Exists';
             if (el('dupConfirmAlert')) {
               el('dupConfirmAlert').className = 'alert alert-warning show';
-              el('dupConfirmAlert').innerHTML = `<strong>⚠️ Existing Bank Account Detected:</strong> An existing vendor (<strong>${detailObj.existing_vendor_name || detailObj.vendor_name}</strong>) is already registered with this exact bank account. Do you want to update this existing vendor's name and details to <strong>${detailObj.new_vendor_name || name}</strong>?`;
+              el('dupConfirmAlert').innerHTML = `<strong>⚠️ Existing Bank Account Detected:</strong> An existing vendor (<strong>${escapeHtml(detailObj.existing_vendor_name || detailObj.vendor_name || '')}</strong>) is already registered with this exact bank account. Do you want to update this existing vendor's name and details to <strong>${escapeHtml(detailObj.new_vendor_name || name || '')}</strong>?`;
             }
           } else {
             if (el('dupConfirmModalTitle')) el('dupConfirmModalTitle').textContent = 'Update Existing Vendor?';

@@ -155,6 +155,22 @@ def test_stored_xss_in_vendor_name_is_not_executed(page_ctx):
     page.locator('#mainTabs .tab[data-view="vendors"]').first.click()
     page.wait_for_timeout(2000)
 
+    # Then the AUDIT LOG view. Creating the vendor above wrote its name into an audit
+    # entry's details, and that table rendered detail values unescaped -- it was the
+    # actual sink, while the vendor directory was already escaping correctly. It is also
+    # the more serious one: administrators read audit logs, and payment upload is open to
+    # standard users, so a crafted payee name in a spreadsheet could execute script in an
+    # administrator's session. Checking only the vendor list missed this entirely.
+    audit_tab = page.locator('#mainTabs .tab[data-view="audit-logs"]').first
+    page.evaluate(
+        "() => document.querySelectorAll('#mainTabs .tab').forEach(t => { t.style.display = ''; })"
+    )
+    audit_tab.click()
+    page.wait_for_timeout(2500)
+    assert page.locator("#auditTableBody tr").count() > 0, (
+        "audit table rendered no rows, so this assertion would be vacuous"
+    )
+
     assert page.evaluate("() => window.__xss === undefined"), (
         "XSS payload EXECUTED: vendor name was not escaped"
     )

@@ -11,7 +11,7 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,6 +95,30 @@ class UpdateVendorSchema(BaseModel):
     email: Optional[str] = None
     default_id_number: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator("default_id_number")
+    @classmethod
+    def _reference_must_be_bank_safe(cls, v: Optional[str]) -> Optional[str]:
+        """
+        This value ends up in the 15-character NACHA Individual Identification Number
+        field, where every ID in AMIPI's real transmit files is purely alphanumeric.
+
+        Rejecting anything else here also stops a client writing a masked value back:
+        the UI prefilled this field from `account_number`, which is masked to
+        '•••••7465' for non-administrators, and saved '•7465' as the reference.
+        """
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        cleaned = v.replace(" ", "").replace("-", "").replace("/", "")
+        if not cleaned.isalnum() or not cleaned.isascii():
+            raise ValueError(
+                "default_id_number must be alphanumeric; it is written into the NACHA "
+                "identification field. Received: " + repr(v[:24])
+            )
+        return v
 
 
 class VendorResponseSchema(BaseModel):
@@ -283,6 +307,55 @@ def _mask_routing(value: Optional[str]) -> str:
     return "•" * max(0, len(value) - len(tail)) + tail
 
 
+def _vendor_response(vendor: Vendor, *, is_admin: bool) -> "VendorResponseSchema":
+    """
+    Single place a vendor is serialised.
+
+    Masking used to be applied at each endpoint separately, which is exactly how
+    `GET /vendors` came to mask bank details while `GET /vendors/{id}` and
+    `PUT /vendors/{id}` returned them in full. Build every response here so a new
+    endpoint cannot reintroduce that gap.
+    """
+    masked = not is_admin
+
+    # `default_id_number` falls back to the tail of the account number, so for a
+    # non-administrator it must not expose more digits than the mask itself. The mask
+    # shows 4; the fallback showed 5, which quietly leaked one extra digit.
+    default_id = vendor.default_id_number
+    if not default_id and vendor.account_number and not masked:
+        default_id = (
+            vendor.account_number[-5:]
+            if len(vendor.account_number) >= 5
+            else vendor.account_number
+        )
+
+    # A STORED reference is often the account tail too, because that is the house
+    # convention when an invoice number is unavailable. Mask those the same way, or the
+    # promise made by masking `account_number` is broken by the field beside it. A real
+    # invoice reference ('EPAY', 'INV-7788') carries no account digits and is preserved,
+    # since standard users need it to reconcile a payment.
+    if (
+        masked
+        and default_id
+        and default_id.isdigit()
+        and vendor.account_number
+        and vendor.account_number.endswith(default_id)
+    ):
+        default_id = _mask_account(default_id)
+
+    return VendorResponseSchema(
+        id=str(vendor.id),
+        name=vendor.name,
+        routing_number=vendor.routing_number if is_admin else _mask_routing(vendor.routing_number),
+        account_number=vendor.account_number if is_admin else _mask_account(vendor.account_number),
+        account_type=_val(vendor.account_type),
+        default_id_number=default_id,
+        email=vendor.email,
+        is_active=vendor.is_active,
+        bank_details_masked=masked,
+    )
+
+
 @router.get("", response_model=list[VendorResponseSchema])
 async def list_vendors(
     include_inactive: bool = Query(True, description="Include inactive vendors in the list"),
@@ -304,27 +377,14 @@ async def list_vendors(
     query = query.order_by(Vendor.name)
     res = await db.execute(query)
     vendors = res.scalars().all()
-    return [
-        VendorResponseSchema(
-            id=str(v.id),
-            name=v.name,
-            routing_number=v.routing_number if is_admin else _mask_routing(v.routing_number),
-            account_number=v.account_number if is_admin else _mask_account(v.account_number),
-            account_type=_val(v.account_type),
-            default_id_number=v.default_id_number or (v.account_number[-5:] if v.account_number and len(v.account_number) >= 5 else v.account_number),
-            email=v.email,
-            is_active=v.is_active,
-            bank_details_masked=not is_admin,
-        )
-        for v in vendors
-    ]
+    return [_vendor_response(v, is_admin=is_admin) for v in vendors]
 
 
 @router.post("", response_model=VendorResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_vendor(
     payload: CreateVendorSchema,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Create a new Vendor or update existing vendor upon confirmation.
@@ -468,16 +528,7 @@ async def create_vendor(
         await db.commit()
         await db.refresh(existing)
 
-        return VendorResponseSchema(
-            id=str(existing.id),
-            name=existing.name,
-            routing_number=existing.routing_number,
-            account_number=existing.account_number,
-            account_type=_val(existing.account_type),
-            default_id_number=existing.default_id_number,
-            email=existing.email,
-            is_active=existing.is_active,
-        )
+        return _vendor_response(existing, is_admin=True)
 
     # New Vendor
     def_id = payload.default_id_number.strip() if payload.default_id_number and payload.default_id_number.strip() else (acc[-5:] if len(acc) >= 5 else acc)
@@ -517,16 +568,7 @@ async def create_vendor(
     await db.commit()
     await db.refresh(vendor)
 
-    return VendorResponseSchema(
-        id=str(vendor.id),
-        name=vendor.name,
-        routing_number=vendor.routing_number,
-        account_number=vendor.account_number,
-        account_type=_val(vendor.account_type),
-        default_id_number=vendor.default_id_number,
-        email=vendor.email,
-        is_active=vendor.is_active,
-    )
+    return _vendor_response(vendor, is_admin=True)
 
 
 @router.get("/sample-template")
@@ -587,7 +629,7 @@ def _parse_vendor_file_bytes(filename: str, content_bytes: bytes) -> tuple[list[
 async def bulk_preview_vendors(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Dry-run analysis of a bulk vendor file (.csv, .xlsx).
@@ -742,7 +784,7 @@ async def bulk_preview_vendors(
 async def bulk_confirm_vendors(
     payload: BulkVendorConfirmRequestSchema,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Execute batch vendor insertions and updates after user review in the diff modal.
@@ -1083,7 +1125,7 @@ async def deduplicate_vendors(
 async def bulk_upload_vendors(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Bulk import vendors from a CSV or Excel (.xlsx) file (legacy direct upload endpoint).
@@ -1173,8 +1215,19 @@ async def bulk_upload_vendors(
 
 
 @router.get("/{vendor_id}", response_model=VendorResponseSchema)
-async def get_vendor(vendor_id: str, db: AsyncSession = Depends(get_async_db)):
-    """Fetch vendor by ID."""
+async def get_vendor(
+    vendor_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch vendor by ID.
+
+    Requires authentication and masks bank details for non-administrators. This
+    endpoint previously had NO authentication dependency at all and returned full
+    decrypted routing and account numbers, so masking the list endpoint achieved
+    nothing: a caller could list the IDs and then read every vendor in full here.
+    """
     try:
         v_uuid = uuid.UUID(vendor_id.strip())
     except (ValueError, AttributeError):
@@ -1185,16 +1238,7 @@ async def get_vendor(vendor_id: str, db: AsyncSession = Depends(get_async_db)):
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found.")
 
-    return VendorResponseSchema(
-        id=str(vendor.id),
-        name=vendor.name,
-        routing_number=vendor.routing_number,
-        account_number=vendor.account_number,
-        account_type=_val(vendor.account_type),
-        default_id_number=vendor.default_id_number,
-        email=vendor.email,
-        is_active=vendor.is_active,
-    )
+    return _vendor_response(vendor, is_admin=(current_user.role == UserRole.ADMIN))
 
 
 @router.put("/{vendor_id}", response_model=VendorResponseSchema)
@@ -1202,10 +1246,21 @@ async def update_vendor(
     vendor_id: str,
     payload: UpdateVendorSchema,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Update vendor details (email address, vendor name, default reference ID).
+
+    Administrator-only. Two reasons this is not open to standard users:
+
+    * The vendor NAME is what spreadsheet rows are matched against, so renaming a
+      vendor changes which bank account a future payment is sent to. Standard users
+      request bank changes through the change-request workflow, which an
+      administrator reviews; letting them rename vendors directly would sidestep
+      that control.
+    * The response previously returned full decrypted bank details, so any standard
+      user could read a vendor's real routing and account number by submitting a
+      no-op edit.
     """
     try:
         v_uuid = uuid.UUID(vendor_id.strip())
@@ -1244,16 +1299,7 @@ async def update_vendor(
     await db.commit()
     await db.refresh(vendor)
 
-    return VendorResponseSchema(
-        id=str(vendor.id),
-        name=vendor.name,
-        routing_number=vendor.routing_number,
-        account_number=vendor.account_number,
-        account_type=_val(vendor.account_type),
-        default_id_number=vendor.default_id_number,
-        email=vendor.email,
-        is_active=vendor.is_active,
-    )
+    return _vendor_response(vendor, is_admin=True)
 
 
 
@@ -1337,8 +1383,23 @@ async def list_vendor_change_requests(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all vendor bank change requests."""
-    res = await db.execute(select(VendorChangeRequest))
+    """
+    List vendor bank change requests.
+
+    Administrators see every request, because reviewing one means checking the actual
+    routing and account number being asked for. Standard users see only the requests
+    they raised themselves.
+
+    Without that scoping this endpoint was a way around the vendor masking: the
+    requested values on an APPROVED request are the vendor's current real bank
+    details, so any standard user could read account numbers here that
+    `GET /vendors` deliberately withholds.
+    """
+    is_admin = (current_user.role == UserRole.ADMIN)
+    query = select(VendorChangeRequest)
+    if not is_admin:
+        query = query.where(VendorChangeRequest.requested_by_user_id == current_user.id)
+    res = await db.execute(query)
     reqs = res.scalars().all()
     return [
         ChangeRequestResponseSchema(
