@@ -12,10 +12,19 @@ Makes no writes. Prints only the last 4 digits of any account number.
 
 Four categories are reported, in descending order of risk:
 
-1. SAME BANK ACCOUNT, DIFFERENT NAMES -- the highest risk. These are one real
-   counterparty entered more than once, and because vendor names are what spreadsheet
-   rows match against, an ambiguous name can send a payment to whichever row the
-   database returns first.
+1. SAME BANK ACCOUNT, DIFFERENT NAMES -- review, but usually NOT an error and usually
+   NOT to be merged. Because both rows carry the same account, whichever one a
+   spreadsheet matches sends money to the same place, so there is no misrouting risk
+   today. In practice these are a legal entity beside its trading name, or a person
+   beside their company.
+
+   Merging them DELETES one of the names, so a spreadsheet still using that name would
+   stop matching and the payment would drop out of the batch. Leave them unless you
+   know the two names are genuinely the same counterparty and only one is ever used.
+
+   The real exposure is future maintenance: if that counterparty changes bank account
+   and only one row is updated, the rows diverge and a spreadsheet naming the stale one
+   pays the old account. Update both, or consolidate deliberately.
 2. SAME NORMALISED NAME -- 'KIRAN GEMS USA INC.' against 'KIRAN GEMS USA INC'. If the
    bank details differ these are NOT safely mergeable; one of them is wrong.
 3. TRUNCATED AT EXACTLY 22 CHARACTERS -- probable victims of the old
@@ -85,8 +94,11 @@ def main() -> int:
 
     print(f"\n1. SAME BANK ACCOUNT, DIFFERENT NAMES : {len(bank_dupes)} group(s)")
     if bank_dupes:
-        print("   One counterparty entered more than once. Highest risk: a spreadsheet")
-        print("   name that is ambiguous between these can pick either row.")
+        print("   Both rows hold the SAME account, so either match pays the same place:")
+        print("   no misrouting risk today. Typically a legal entity beside its trading")
+        print("   name. Merging deletes one NAME, so a spreadsheet still using it would")
+        print("   stop matching -- usually leave these alone. Do keep them in step if the")
+        print("   account ever changes, or the stale row will pay the old account.")
     for (rt, acc), group in sorted(bank_dupes.items(), key=lambda kv: -len(kv[1])):
         print(f"\n   routing {rt}  account {tail(acc)}")
         for v in group:
@@ -147,7 +159,9 @@ def main() -> int:
         print(" No normalised-name duplicates. The unique-name index can be applied.")
     if bank_dupes:
         print(f" NOTE: {len(bank_dupes)} account(s) are shared by differently-named vendors.")
-        print(" The index will NOT catch those; review them by hand.")
+        print(" The unique-name index does not apply to those, by design: they are")
+        print(" different names. Review them once, then leave them unless one is genuinely")
+        print(" a duplicate entry of the other.")
     print("=" * 74)
     return 1 if blocking else 0
 
