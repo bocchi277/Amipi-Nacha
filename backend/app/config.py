@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "DEVELOPMENT_SECRET_KEY_CHANGE_IN_PROD_123456789")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    # See app/core/security.py for why this is 8 hours rather than a day.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # one working day
 
     model_config = SettingsConfigDict(case_sensitive=True)
 

@@ -292,8 +292,8 @@ const AdminScreen = (() => {
       let toggleBtn = '';
       if (!isSelf) {
         toggleBtn = u.is_active
-          ? `<button type="button" class="btn btn-danger btn-sm" onclick="AdminScreen.toggleUserStatus('${u.id}', '${escapeJsAttr(u.username)}', true)" style="font-size: var(--text-xs); padding: 2px 8px;">Deactivate</button>`
-          : `<button type="button" class="btn btn-success btn-sm" onclick="AdminScreen.toggleUserStatus('${u.id}', '${escapeJsAttr(u.username)}', false)" style="font-size: var(--text-xs); padding: 2px 8px;">Activate</button>`;
+          ? `<button type="button" class="btn btn-danger btn-sm" onclick="AdminScreen.toggleUserStatus('${u.id}', '${escapeJsAttr(u.username)}', true)">Deactivate</button>`
+          : `<button type="button" class="btn btn-success btn-sm" onclick="AdminScreen.toggleUserStatus('${u.id}', '${escapeJsAttr(u.username)}', false)">Activate</button>`;
       } else {
         toggleBtn = `<span class="text-xs text-muted" style="padding: 2px 4px;">(Current User)</span>`;
       }
@@ -307,7 +307,7 @@ const AdminScreen = (() => {
         <td class="text-xs text-muted">${createdDateStr}</td>
         <td style="text-align: right;">
           <div style="display: flex; gap: var(--space-xs); justify-content: flex-end; align-items: center;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="AdminScreen.openResetPasswordModal('${u.id}', '${escapeJsAttr(u.username)}')" style="font-size: var(--text-xs); padding: 2px 8px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="AdminScreen.openResetPasswordModal('${u.id}', '${escapeJsAttr(u.username)}')">
               Reset Password
             </button>
             ${toggleBtn}

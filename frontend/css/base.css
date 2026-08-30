@@ -294,6 +294,58 @@ code, pre {
 }
 
 /*
+ * Floor on button height.
+ *
+ * Around a hundred buttons carry inline `padding` and `font-size` overrides, which beat
+ * any padding set in a stylesheet. The Admin user rows rendered at 17px tall and the
+ * Cards/Table toggle at 22px — below a usable target, and these include destructive
+ * actions like Deactivate. `min-height` is not among the properties those inline styles
+ * set, so declaring it here takes effect without having to unpick every one of them.
+ */
+.btn,
+.btn-sm {
+  min-height: 2rem; /* 32px */
+}
+.btn-lg {
+  min-height: 2.75rem;
+}
+
+/*
+ * Horizontal scrolling for wide tables.
+ *
+ * `.table-responsive` was used in the markup in several places but NEVER DEFINED, so it
+ * did nothing: the Audit Trail table pushed the page 683px wider than the viewport at
+ * 390px, and 315px wider at tablet width. Fixed-width financial columns cannot usefully
+ * reflow, so the table scrolls within its own container instead of dragging the page.
+ */
+.table-responsive {
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Segmented view toggle (Cards / Table). Was five inline declarations per button.
+ */
+.btn-toggle {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  box-shadow: none;
+  gap: var(--space-xs);
+}
+.btn-toggle:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+.btn-toggle.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/*
  * Outlined button.
  *
  * The "Validate Batch" buttons each carried the same five hardcoded inline
@@ -325,6 +377,21 @@ code, pre {
   flex-wrap: wrap;
   gap: var(--space-md);
   margin-top: var(--space-lg);
+}
+
+/*
+ * A row of controls that must wrap rather than widen the page.
+ *
+ * Several toolbars were inline `display: flex` with no `flex-wrap`, so at 390px they
+ * stayed on one line and pushed the document 91px wider than the viewport, letting the
+ * whole layout be dragged sideways.
+ */
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
 /* Separates a trailing "add another" control from the block it appends to. */
@@ -493,6 +560,25 @@ code, pre {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
+}
+
+/*
+ * A table inside a scroll wrapper must not widen the page.
+ *
+ * `width: 100%` alone does not prevent it: cell content with `white-space: nowrap`
+ * (routing numbers, amounts, dates) sets a minimum content width that the table honours,
+ * so the table pushed past the viewport and took the layout with it. Letting the wrapper
+ * establish its own containing width keeps the overflow inside the scroll area.
+ */
+.payments-table-wrap,
+.table-responsive {
+  min-width: 0;
+}
+.payments-table-wrap > .data-table,
+.table-responsive > .data-table,
+.table-responsive > .table {
+  /* Below this the columns become unreadable, so scroll rather than compress. */
+  min-width: max-content;
 }
 
 .data-table th {
@@ -746,6 +832,18 @@ code, pre {
   gap: 0;
   border-bottom: 1px solid var(--color-border-light);
   margin-bottom: var(--space-xl);
+  /*
+   * Six navigation tabs do not fit a 390px viewport and pushed the page 91px wider than
+   * the screen, so the whole layout could be dragged sideways. Scroll the tab strip
+   * itself instead. `flex-shrink: 0` on the tabs keeps their labels readable rather than
+   * squeezing them to nothing.
+   */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.tabs > .tab {
+  flex-shrink: 0;
 }
 
 .tab {
@@ -795,13 +893,19 @@ code, pre {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /*
+   * minmax(0, 1fr) rather than 1fr. `1fr` expands to minmax(auto, 1fr), and that `auto`
+   * minimum is the item's min-content width, so a card whose contents measured 330px
+   * forced a 330px track inside a 272px container and the page could be scrolled
+   * sideways. minmax(0, ...) lets the track shrink and the content wrap.
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-base);
 }
 
 .grid-3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-base);
 }
 
@@ -854,7 +958,7 @@ textarea:focus-visible,
 
 @media (max-width: 1024px) {
   .grid-4 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -862,7 +966,8 @@ textarea:focus-visible,
   .grid-2,
   .grid-3,
   .grid-4 {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: see the note on .grid-2. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-header {
@@ -885,5 +990,65 @@ textarea:focus-visible,
     padding: var(--space-sm) var(--space-base);
     font-size: var(--text-xs);
     white-space: nowrap;
+  }
+}
+
+
+/* ================================================================
+   Small-screen safety net
+   ================================================================ */
+/*
+ * ~80 rows in the dashboard are inline `display: flex` with no `flex-wrap`. Individually
+ * converting each risks changing layouts that are fine; but on a narrow screen wrapping
+ * is essentially always what is wanted, and not wrapping lets a row push the whole
+ * document wider than the viewport so the page can be dragged sideways.
+ *
+ * Scoped to the app content: the header and modal internals keep their own layout.
+ * Tables are excluded because they scroll inside their wrapper instead of reflowing.
+ */
+@media (max-width: 820px) {
+  .main-container div[style*="display: flex"],
+  .main-container div[style*="display:flex"] {
+    flex-wrap: wrap;
+  }
+
+  /* Long primary actions should use the full width rather than overflow it. */
+  .main-container .btn-lg {
+    width: 100%;
+  }
+}
+
+/*
+ * Long unbroken strings — vendor emails, references — otherwise establish a wide
+ * min-content width that a grid track has to honour, overflowing narrow screens.
+ */
+.card,
+.vendor-card,
+.data-table td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/*
+ * Very narrow screens (<=400px).
+ *
+ * `.btn` sets `white-space: nowrap` so labels never break mid-phrase, which is right at
+ * normal widths. At 320px a label like "Upload & Parse Spreadsheet" is wider than the
+ * available column and pushed the page sideways. Allow wrapping here only.
+ */
+@media (max-width: 400px) {
+  .main-container .btn {
+    white-space: normal;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  /* Reclaim horizontal space that padding consumes at this width. */
+  .main-container {
+    width: 100%;
+    padding: 0 var(--space-sm);
+  }
+  .card {
+    padding: var(--space-base);
   }
 }

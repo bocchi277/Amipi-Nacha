@@ -253,3 +253,75 @@ def test_is_banking_day_excludes_weekends_and_holidays():
     assert is_banking_day(date(2026, 8, 2)) is False     # Sunday
     assert is_banking_day(date(2026, 11, 26)) is False   # Thanksgiving
     assert next_banking_day(date(2026, 8, 1), 0) == date(2026, 8, 3)
+
+
+# ---------------------------------------------------------------------------
+# The UI must be able to obtain the same date rules the server enforces
+# ---------------------------------------------------------------------------
+
+# real_auth suppresses the autouse injected admin identity, so the unauthenticated
+# assertion below is genuinely unauthenticated.
+@pytest.mark.real_auth
+@pytest.mark.asyncio
+async def test_banking_calendar_endpoint_agrees_with_validation(db_session):
+    """
+    Regression: the dashboard computed effective-date defaults itself. Batch 1 and 2 took
+    tomorrow and stepped over the weekend; every additional batch took `new Date()` in
+    UTC. Neither knew about Federal Reserve holidays, so on a Saturday, Sunday or holiday
+    the form pre-filled a date that generation then rejected, and near midnight Eastern
+    the UTC date was already tomorrow.
+
+    The endpoint must therefore be internally consistent: whatever it offers as the
+    default has to pass the validator that generation uses.
+    """
+    from datetime import date as date_cls
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app
+    from tests._helpers import create_admin_user
+
+    await create_admin_user(db_session, "cal_admin", "cal_admin@example.com", "CalAdmin123!")
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        login = await client.post("/api/v1/auth/login",
+                                 data={"username": "cal_admin", "password": "CalAdmin123!"})
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        anon = await client.get("/api/v1/nacha/banking-calendar")
+        assert anon.status_code == 401, "the calendar reveals operational detail; require auth"
+
+        res = await client.get("/api/v1/nacha/banking-calendar", headers=headers)
+        assert res.status_code == 200, res.text
+        body = res.json()
+
+        default = date_cls.fromisoformat(body["default_effective_date"])
+        minimum = date_cls.fromisoformat(body["min_effective_date"])
+        maximum = date_cls.fromisoformat(body["max_effective_date"])
+        non_banking = set(body["non_banking_days"])
+
+        # The offered default must be accepted by the validator that generation applies.
+        validate_effective_date(default)
+
+        assert body["default_effective_date"] not in non_banking
+        assert minimum <= default <= maximum
+        assert body["timezone"] == "America/New_York"
+        assert is_banking_day(default)
+
+        # Every listed non-banking day must genuinely be one, and be rejected.
+        for iso in list(non_banking)[:12]:
+            day = date_cls.fromisoformat(iso)
+            assert not is_banking_day(day), f"{iso} was listed but is a banking day"
+            if day >= minimum:
+                with pytest.raises(EffectiveDateError):
+                    validate_effective_date(day)
+
+        # And no banking day inside the window may be wrongly excluded.
+        from datetime import timedelta
+        probe, checked = minimum, 0
+        while probe <= maximum and checked < 40:
+            if is_banking_day(probe):
+                assert probe.isoformat() not in non_banking, f"{probe} wrongly excluded"
+            probe += timedelta(days=1)
+            checked += 1

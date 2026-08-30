@@ -187,6 +187,11 @@ const VendorsScreen = (() => {
     if (selectAllCb) selectAllCb.addEventListener('change', handleSelectAllVendors);
     if (clearSelectionBtn) clearSelectionBtn.addEventListener('click', clearVendorSelection);
     if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click', openConfirmDeleteSelection);
+
+    const closeMerge = el('closeMergeModalBtn');
+    const cancelMerge = el('cancelMergeModalBtn');
+    if (closeMerge) closeMerge.addEventListener('click', hideMergeModal);
+    if (cancelMerge) cancelMerge.addEventListener('click', hideMergeModal);
     if (closeDeleteBtn) closeDeleteBtn.addEventListener('click', hideDeleteModal);
     if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', hideDeleteModal);
     if (executeDeleteBtn) executeDeleteBtn.addEventListener('click', executeVendorDeletion);
@@ -753,9 +758,19 @@ const VendorsScreen = (() => {
     }
   }
 
+  /*
+   * Merge Duplicates, in two steps.
+   *
+   * This used to POST straight to /vendors/deduplicate, which permanently deletes vendor
+   * rows and keeps only ONE bank account per group. There was no confirmation and no way
+   * to see what would happen — even though Bulk Delete, right beside it, does confirm.
+   *
+   * Step 1 asks the server for a dry run and shows exactly what would change. Step 2
+   * applies it, and is reachable only from inside the modal.
+   */
   async function handleDeduplicateVendors() {
     if (!isAdmin()) {
-      alert('Only administrators can perform database vendor deduplication.');
+      alert('Only administrators can merge duplicate vendor records.');
       return;
     }
 
@@ -767,23 +782,121 @@ const VendorsScreen = (() => {
     if (spinner) spinner.style.display = 'inline-block';
 
     try {
-      const res = await API.post('/vendors/deduplicate', {});
-      await loadData();
-      if (alertBox) {
-        alertBox.className = 'alert alert-success show';
-        alertBox.textContent = res.message || 'Vendor deduplication completed successfully.';
-        alertBox.style.display = 'block';
-        setTimeout(() => { alertBox.style.display = 'none'; }, 6000);
-      }
+      const preview = await API.post('/vendors/deduplicate', { dry_run: true });
+      renderMergePreview(preview);
     } catch (err) {
       if (alertBox) {
         alertBox.className = 'alert alert-error show';
-        alertBox.textContent = err.message || 'Failed to deduplicate vendors.';
+        alertBox.textContent = err.message || 'Could not check for duplicate vendors.';
         alertBox.style.display = 'block';
         setTimeout(() => { alertBox.style.display = 'none'; }, 6000);
       }
     } finally {
       if (btn) btn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  function renderMergePreview(preview) {
+    const groups = preview.groups || [];
+    const removeCount = groups.reduce((n, g) => n + (g.removes || []).length, 0);
+    const conflicts = groups.filter(g => g.bank_details_conflict);
+
+    const summary = el('mergePreviewSummary');
+    if (summary) {
+      summary.textContent = groups.length === 0
+        ? 'No duplicate vendors were found. There is nothing to merge.'
+        : `${removeCount} duplicate record(s) across ${groups.length} group(s) would be merged.`;
+    }
+
+    const warning = el('mergeConflictWarning');
+    if (warning) {
+      if (conflicts.length) {
+        warning.style.display = 'block';
+        warning.textContent =
+          `${conflicts.length} group(s) below hold DIFFERENT bank details. Merging keeps the `
+          + `account number of the record marked "keeps" and discards the other, so one of `
+          + `those records is wrong. Confirm against bank records before continuing.`;
+      } else {
+        warning.style.display = 'none';
+        warning.textContent = '';
+      }
+    }
+
+    const list = el('mergePreviewList');
+    if (list) {
+      list.innerHTML = groups.length === 0
+        ? '<p class="text-sm text-muted">Nothing to display.</p>'
+        : groups.map(g => {
+            const rows = [g.keeps].concat(g.removes || []).map((v, i) => `
+              <tr>
+                <td style="padding: 6px 10px;"><span class="badge ${i === 0 ? 'badge-success' : 'badge-danger'}">${i === 0 ? 'keeps' : 'removes'}</span></td>
+                <td style="padding: 6px 10px;"><strong>${escapeHtml(v.name)}</strong></td>
+                <td style="padding: 6px 10px;" class="font-mono text-xs">R •••• ${escapeHtml(v.routing_number_last4)}</td>
+                <td style="padding: 6px 10px;" class="font-mono text-xs">A •••• ${escapeHtml(v.account_number_last4)}</td>
+                <td style="padding: 6px 10px;" class="text-xs">${Number(v.payment_count)} payment(s)</td>
+              </tr>`).join('');
+            const edge = g.bank_details_conflict ? 'var(--color-danger)' : 'var(--color-success)';
+            return `
+              <div class="card" style="padding: var(--space-md); margin-bottom: var(--space-md); border-left: 3px solid ${edge};">
+                <div class="text-xs text-muted" style="margin-bottom: var(--space-sm);">${escapeHtml(g.reason)}</div>
+                <div class="table-responsive"><table class="data-table"><tbody>${rows}</tbody></table></div>
+              </div>`;
+          }).join('');
+    }
+
+    const execBtn = el('executeMergeVendorsBtn');
+    if (execBtn) execBtn.disabled = groups.length === 0;
+    const execLabel = el('executeMergeLabel');
+    if (execLabel) {
+      execLabel.textContent = removeCount === 0
+        ? 'Nothing to merge'
+        : `Merge ${removeCount} duplicate record(s)`;
+    }
+
+    const modal = el('confirmMergeVendorsModal');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function hideMergeModal() {
+    const modal = el('confirmMergeVendorsModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  /** Step 2: apply the merge. Only reachable from the confirmation modal. */
+  async function executeVendorMerge() {
+    const execBtn = el('executeMergeVendorsBtn');
+    const spinner = el('executeMergeSpinner');
+    const alertBox = el('vendorListAlert');
+
+    if (execBtn) execBtn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+      const res = await API.post('/vendors/deduplicate', { dry_run: false });
+      hideMergeModal();
+      await loadData();
+      if (alertBox) {
+        alertBox.className = 'alert alert-success show';
+        alertBox.textContent = res.message || 'Duplicate vendors merged.';
+        alertBox.style.display = 'block';
+        setTimeout(() => { alertBox.style.display = 'none'; }, 8000);
+      }
+    } catch (err) {
+      hideMergeModal();
+      if (alertBox) {
+        alertBox.className = 'alert alert-error show';
+        alertBox.textContent = err.message || 'Failed to merge duplicate vendors.';
+        alertBox.style.display = 'block';
+      }
+    } finally {
+      if (execBtn) execBtn.disabled = false;
       if (spinner) spinner.style.display = 'none';
     }
   }
@@ -1106,7 +1219,7 @@ const VendorsScreen = (() => {
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
           <div style="display: flex; align-items: center; gap: var(--space-md);">
-            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;" />` : ''}
+            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} aria-label="Select vendor ${escapeHtml(v.name)}" title="Select ${escapeHtml(v.name)}" onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;" />` : ''}
             <div>
               <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${escapeHtml(v.name)}</h4>
               <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
@@ -1346,6 +1459,8 @@ const VendorsScreen = (() => {
     hideAddVendorModal,
     openConfirmDeleteSingle,
     openConfirmDeleteSelection,
+    executeVendorMerge,
+    hideMergeModal,
     executeBulkDiffConfirm,
     executeSingleVendorDuplicateUpdate,
     executeVendorDeletion,

@@ -27,36 +27,110 @@ const GenerateScreen = (() => {
   function init() {
     initVendorComboboxes();
     bindEvents();
-    setDefaultEffectiveDate();
-    loadVendors();
+    // Deferred until a session exists. Both of these are authenticated requests, and
+    // init() runs at DOMContentLoaded while the login screen is still up.
+    API.onAuthenticated(() => {
+      loadBankingCalendar().then(() => setDefaultEffectiveDate());
+      loadVendors();
+    });
+  }
+
+  /*
+   * The effective-date rules come from the server, not from the browser.
+   *
+   * This used to be computed locally: tomorrow, stepped over Saturday and Sunday. That
+   * knows nothing about Federal Reserve holidays, so the form would pre-fill a date that
+   * generation then rejected. Additional batches were worse — they defaulted to
+   * `new Date()`, i.e. today, which is refused outright at a weekend, and derived from
+   * UTC so late evening Eastern produced tomorrow's date.
+   *
+   * GET /nacha/banking-calendar is served by the same module that validates the date, so
+   * the form and the rule cannot disagree.
+   */
+  let bankingCalendar = null;
+
+  async function loadBankingCalendar() {
+    try {
+      bankingCalendar = await API.get('/nacha/banking-calendar');
+    } catch (err) {
+      // Leave bankingCalendar null: inputs stay empty and the server still validates,
+      // which is preferable to pre-filling a date invented by the browser.
+      bankingCalendar = null;
+      console.warn('Banking calendar unavailable; effective dates must be entered manually.');
+    }
+    return bankingCalendar;
+  }
+
+  /** The date every effective-date input should start on: the next banking day. */
+  function defaultEffectiveDate() {
+    return bankingCalendar ? bankingCalendar.default_effective_date : '';
+  }
+
+  /** Apply value, min and max to a date input, skipping one the user has already set. */
+  function applyEffectiveDateBounds(input, { force = false } = {}) {
+    if (!input || !bankingCalendar) return;
+    input.min = bankingCalendar.min_effective_date;
+    input.max = bankingCalendar.max_effective_date;
+    if (force || !input.value) {
+      input.value = bankingCalendar.default_effective_date;
+    }
+  }
+
+  /**
+   * Why a chosen date is unusable, or null when it is fine.
+   * Mirrors the server so the operator is told before a request is sent.
+   */
+  function effectiveDateProblem(value) {
+    if (!value) return 'Effective Date is mandatory.';
+    if (!bankingCalendar) return null;
+    if (value < bankingCalendar.min_effective_date) {
+      return `Effective date ${value} is in the past. The earliest allowed is `
+           + `${bankingCalendar.min_effective_date} (Eastern time).`;
+    }
+    if (value > bankingCalendar.max_effective_date) {
+      return `Effective date ${value} is too far ahead. The latest allowed is `
+           + `${bankingCalendar.max_effective_date}.`;
+    }
+    if (bankingCalendar.non_banking_days.includes(value)) {
+      const d = new Date(`${value}T12:00:00`);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      return `Effective date ${value} is a ${dayName} and not a banking day`
+           + `${isWeekend ? '' : ' (Federal Reserve holiday)'}. ACH settles only on `
+           + `banking days. The next available date is ${nextBankingDayFrom(value)}.`;
+    }
+    return null;
+  }
+
+  function nextBankingDayFrom(value) {
+    if (!bankingCalendar) return '';
+    let probe = value;
+    for (let i = 0; i < 40; i += 1) {
+      const d = new Date(`${probe}T12:00:00`);
+      d.setDate(d.getDate() + 1);
+      probe = d.toISOString().split('T')[0];
+      if (!bankingCalendar.non_banking_days.includes(probe)
+          && probe <= bankingCalendar.max_effective_date) {
+        return probe;
+      }
+    }
+    return bankingCalendar.default_effective_date;
   }
 
   function setDefaultEffectiveDate() {
+    const iso = defaultEffectiveDate();
+    if (!iso) return;
+
+    // Batch 1's header field is the 6-digit YYMMDD form used by the file itself.
     const effInput = el('effDate');
-    const b1ManualEffDate = el('b1ManualEffDate');
-    const manualEffDate = el('manualEffDate');
-
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() === 6) d.setDate(d.getDate() + 2); // Sat -> Mon
-    if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Sun -> Mon
-
-    const yyyy = d.getFullYear();
-    const mmStr = String(d.getMonth() + 1).padStart(2, '0');
-    const ddStr = String(d.getDate()).padStart(2, '0');
-
     if (effInput && !effInput.value) {
-      const yy = String(yyyy).slice(2);
-      effInput.value = `${yy}${mmStr}${ddStr}`;
+      effInput.value = iso.slice(2).replace(/-/g, '');
     }
 
-    if (b1ManualEffDate && !b1ManualEffDate.value) {
-      b1ManualEffDate.value = `${yyyy}-${mmStr}-${ddStr}`;
-    }
-
-    if (manualEffDate && !manualEffDate.value) {
-      manualEffDate.value = `${yyyy}-${mmStr}-${ddStr}`;
-    }
+    // Every date input, static or added later, goes through one code path so Batch 2
+    // and Batch 3 cannot end up with different defaults.
+    document.querySelectorAll('#b1ManualEffDate, #manualEffDate, .batch-eff-date')
+      .forEach(input => applyEffectiveDateBounds(input));
   }
 
   function updateDiscretionaryPreview() {
@@ -906,7 +980,10 @@ const GenerateScreen = (() => {
     if (!vendorId) return showB1ManualError('Please select a vendor.');
     if (!amountVal || isNaN(amountVal) || parseFloat(amountVal) <= 0) return showB1ManualError('Payment Amount ($) is mandatory and must be greater than 0.');
     if (!idNum) return showB1ManualError('Invoice / Ref # is mandatory.');
-    if (!effDate) return showB1ManualError('Effective Date is mandatory.');
+    // Checked here as well as on the server, so a weekend or Federal Reserve
+    // holiday is reported while the operator is still on the form.
+    const effProblem = effectiveDateProblem(effDate);
+    if (effProblem) return showB1ManualError(effProblem);
 
     const vendorObj = loadedVendors.find(v => String(v.id) === String(vendorId));
     if (!vendorObj) return showB1ManualError('Selected vendor is invalid.');
@@ -1082,7 +1159,7 @@ const GenerateScreen = (() => {
       tr.innerHTML = `
         <td class="font-mono" style="vertical-align: middle; text-align: center; color: var(--color-text-muted); font-size: 11px;">${i + 1}</td>
         <td style="padding: 4px 6px;">
-          <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
+          <select class="form-select manual-row-vendor" data-idx="${i}" aria-label="Vendor for row ${i + 1}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
             ${vendorOptions}
           </select>
         </td>
@@ -1187,7 +1264,7 @@ const GenerateScreen = (() => {
       tr.innerHTML = `
         <td class="font-mono" style="vertical-align: middle; text-align: center; color: var(--color-text-muted); font-size: 11px;">${i + 1}</td>
         <td style="padding: 4px 6px;">
-          <select class="form-select manual-row-vendor" data-idx="${i}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
+          <select class="form-select manual-row-vendor" data-idx="${i}" aria-label="Vendor for row ${i + 1}" style="width: 100%; padding: 4px 8px; font-size: 12px; height: 32px;">
             ${vendorOptions}
           </select>
         </td>
@@ -1244,7 +1321,6 @@ const GenerateScreen = (() => {
     const container = el('additionalBatchesContainer');
     if (!container) return;
 
-    const todayStr = new Date().toISOString().split('T')[0];
     const card = document.createElement('div');
     card.className = 'card';
     card.id = `card_batch_${nextNum}`;
@@ -1264,7 +1340,7 @@ const GenerateScreen = (() => {
       <!-- Shared Effective Date -->
       <div class="form-group" style="max-width: 220px; margin-bottom: var(--space-md);">
         <label class="form-label" for="manualEffDate_${nextNum}">Effective Date <span style="color: #dc2626;">*</span></label>
-        <input class="form-input batch-eff-date" type="date" id="manualEffDate_${nextNum}" value="${todayStr}" />
+        <input class="form-input batch-eff-date" type="date" id="manualEffDate_${nextNum}" value="${defaultEffectiveDate()}" />
       </div>
 
       <!-- Inline Multi-Row Entry Table -->
@@ -1335,6 +1411,8 @@ const GenerateScreen = (() => {
     `;
 
     container.appendChild(card);
+    // Same bounds as every other batch; keeps Batch 3+ consistent with Batch 2.
+    applyEffectiveDateBounds(el(`manualEffDate_${nextNum}`));
     renderManualInlineRows(nextNum);
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     checkNachaGenerateButtonState();
@@ -1509,6 +1587,22 @@ const GenerateScreen = (() => {
   // ── Validate Batch (client-side only, non-blocking) ─────────
   function validateBatch(batchNum) {
     const num = (typeof batchNum === 'number' && !isNaN(batchNum)) ? batchNum : (parseInt(batchNum, 10) || 2);
+
+    // Check the effective date first. The server refuses a weekend or Federal Reserve
+    // holiday, and reporting it here means the operator finds out while looking at the
+    // batch rather than when the combined file fails to generate.
+    const dateInput = getBatchEffDateInput(num);
+    const dateProblem = effectiveDateProblem(dateInput ? dateInput.value.trim() : '');
+    if (dateProblem) {
+      const box = getBatchErrorBox(num);
+      if (box) {
+        box.textContent = dateProblem;
+        box.style.display = 'block';
+      }
+      if (dateInput) dateInput.focus();
+      return;
+    }
+
     const batchData = collectManualBatchData(num);
 
     // Count total rows in the tbody (including invalid/empty rows)

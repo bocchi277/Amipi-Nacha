@@ -181,7 +181,7 @@
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm);">
               <div class="card-title" style="margin-bottom: 0;">Payment Entry (Batch 1)</div>
               <!-- Batch 1 Input Mode Switch -->
-              <div style="display: flex; gap: 6px;">
+              <div class="toolbar-row" style="gap: 6px;">
                 <button type="button" class="btn btn-sm active" id="batch1TabUploadBtn" style="font-weight: 600; padding: 4px 12px; font-size: 12px;">
                   Upload Spreadsheet
                 </button>
@@ -195,7 +195,7 @@
             <div id="batch1UploadPanel">
               <!-- Upload Zone -->
               <div class="upload-zone" id="dropZone">
-                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none" />
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" aria-label="Choose a payment spreadsheet to upload" style="display: none" />
 
                 <div id="uploadZoneContent">
                   <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -483,7 +483,7 @@
 
             <div class="alert alert-error" id="nachaGlobalError" style="display: none; margin-bottom: var(--space-md);"></div>
 
-            <div style="display: flex; gap: var(--space-md); align-items: center;">
+            <div class="toolbar-row" style="gap: var(--space-md);">
               <button type="button" class="btn btn-primary btn-lg" id="generateNachaBtn">
                 <span class="spinner" id="nachaSpinner" style="display: none"></span>
                 <span>Generate Combined NACHA File</span>
@@ -601,7 +601,7 @@
               <div style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
                 <input type="text" class="form-input" id="vendorSearchInput" placeholder="Search vendor name or routing..." style="width: 220px; font-size: var(--text-xs);" />
                 
-                <select class="form-select" id="vendorStatusFilter" style="width: 125px; font-size: var(--text-xs); height: 32px; padding: 0 8px; border: 1px solid var(--border-color, #e2e8f0); border-radius: var(--radius-sm, 6px); background: var(--color-surface, #ffffff); cursor: pointer;">
+                <select class="form-select" id="vendorStatusFilter" aria-label="Filter vendors by status" style="width: 125px; font-size: var(--text-xs); height: 32px; padding: 0 8px; border: 1px solid var(--border-color, #e2e8f0); border-radius: var(--radius-sm, 6px); background: var(--color-surface, #ffffff); cursor: pointer;">
                   <option value="all">All Statuses</option>
                   <option value="active">Active Only</option>
                   <option value="inactive">Inactive Only</option>
@@ -613,7 +613,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                     <span>Cards</span>
                   </button>
-                  <button type="button" id="vendorTableViewBtn" class="btn btn-sm" title="Table View" style="padding: 4px 10px; font-size: var(--text-xs); border: none; border-radius: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--color-text-muted, #64748b);">
+                  <button type="button" id="vendorTableViewBtn" class="btn btn-sm btn-toggle" title="Table View" >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                     <span>Table</span>
                   </button>
@@ -869,7 +869,7 @@
                   <div class="card-title" style="margin-bottom: 4px;">User Accounts & Access Control</div>
                   <div class="text-xs text-muted">Provision new user accounts, manage roles, toggle activation status, and reset user passwords.</div>
                 </div>
-                <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                <div class="toolbar-row">
                   <span class="badge badge-info" id="adminUserCountBadge">0 Users</span>
                   <button type="button" class="btn btn-secondary btn-sm" id="refreshAdminUsersBtn">
                     <span class="spinner" id="adminUsersSpinner" style="display: none;"></span>
@@ -1120,7 +1120,7 @@
                       <input type="text" class="form-input history-col-filter" id="colFilterGeneratedBy" placeholder="User..." />
                     </th>
                     <th>
-                      <select class="form-select history-col-filter" id="colFilterStatus">
+                      <select class="form-select history-col-filter" id="colFilterStatus" aria-label="Filter by remittance status">
                         <option value="">All</option>
                         <option value="pending">Pending</option>
                         <option value="sent">Sent</option>
@@ -1679,6 +1679,43 @@
           <button type="button" class="btn btn-danger btn-sm" id="executeDeleteVendorsBtn" onclick="VendorsScreen.executeVendorDeletion()" style="background: #dc2626; color: white; border: none;">
             <span class="spinner" id="executeDeleteSpinner" style="display: none;"></span>
             <span>Permanently Delete</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      Merge Duplicates confirmation.
+
+      This action permanently deletes vendor rows and keeps ONE bank account per group,
+      so where a group's bank details disagree it discards an account number. It
+      previously ran straight from the toolbar button with no confirmation and no way to
+      see what it would do. The modal is populated from a dry-run preview.
+    -->
+    <div class="modal-backdrop" id="confirmMergeVendorsModal">
+      <div class="modal-card" style="max-width: 760px; border-top: 4px solid var(--color-warning, #f59e0b);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <h3 class="card-title" style="margin-bottom: 0;">Review Duplicate Vendors Before Merging</h3>
+          <button type="button" class="btn btn-secondary btn-sm" id="closeMergeModalBtn" aria-label="Close">✕</button>
+        </div>
+
+        <p class="text-sm" id="mergePreviewSummary" style="margin-bottom: var(--space-md);"></p>
+
+        <div class="alert alert-error" id="mergeConflictWarning" style="display: none; margin-bottom: var(--space-md);"></div>
+
+        <div id="mergePreviewList" style="max-height: 340px; overflow-y: auto; margin-bottom: var(--space-md);"></div>
+
+        <div style="background: #eff6ff; border: 1px solid #dbeafe; padding: 10px 12px; border-radius: 6px; margin-bottom: var(--space-md); font-size: var(--text-xs); color: #1e40af;">
+          <strong>History is preserved:</strong> payments, remittances and change requests
+          belonging to a removed record are re-linked to the record that is kept. Only the
+          duplicate vendor row itself is deleted.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelMergeModalBtn">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="executeMergeVendorsBtn" onclick="VendorsScreen.executeVendorMerge()">
+            <span class="spinner" id="executeMergeSpinner" style="display: none;"></span>
+            <span id="executeMergeLabel">Merge Duplicates</span>
           </button>
         </div>
       </div>

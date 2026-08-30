@@ -115,6 +115,11 @@ const LoginScreen = (() => {
     const user = API.getUser();
     if (!user) return;
 
+    // Tell the screen modules a session now exists. They bind DOM handlers at
+    // DOMContentLoaded, while this login screen is still showing, so any data loading
+    // they did then fired authenticated requests without a token.
+    API.notifyAuthenticated();
+
     // Update header with user info
     const userInfo = el('headerUserInfo');
     if (userInfo) {

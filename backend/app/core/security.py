@@ -12,7 +12,16 @@ from app.config import settings
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+# Bearer tokens are held in the browser's sessionStorage, so any script running on the
+# page can read them. That is mitigated by escaping every rendered database value and by
+# the response CSP, but a stolen token is usable until it expires and there is no
+# server-side revocation for a stateless JWT.
+#
+# 24 hours was a long window for a system that moves money. 8 hours covers a working day,
+# so an operator signs in once per shift, while cutting the useful life of a leaked token
+# by two thirds. `get_current_user` re-reads the user on every request, so deactivating an
+# account still takes effect immediately regardless of token lifetime.
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours
 
 
 def hash_password(password: str) -> str:

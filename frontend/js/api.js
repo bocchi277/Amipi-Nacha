@@ -228,6 +228,40 @@ const API = (() => {
     window.location.reload();
   }
 
+  // ── Inactivity timeout ───────────────────────────────────────
+  /*
+   * Clear the session after a period of no interaction.
+   *
+   * The bearer token lives in sessionStorage, which any script on the page can read, and
+   * a stateless JWT cannot be revoked server-side. Storage does survive until the tab is
+   * closed, so a dashboard left open on an unattended machine keeps a usable token for
+   * the life of the token.
+   *
+   * This bounds that exposure by the time the tab is actually idle rather than by how
+   * long it stays open. It is a client-side control and no substitute for the token's own
+   * expiry, which the server enforces; the two are complementary.
+   */
+  const IDLE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+  let idleTimer = null;
+
+  function startIdleTimeout() {
+    const reset = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (!isAuthenticated()) return;
+      idleTimer = setTimeout(() => {
+        if (!isAuthenticated()) return;
+        clearToken();
+        // Reload rather than only hiding the UI, so nothing rendered from the previous
+        // session is left in the DOM.
+        window.location.reload();
+      }, IDLE_LIMIT_MS);
+    };
+
+    ['click', 'keydown', 'mousemove', 'scroll', 'touchstart', 'focus']
+      .forEach(evt => document.addEventListener(evt, reset, { passive: true }));
+    reset();
+  }
+
   async function getProfile() {
     return get('/auth/me');
   }
@@ -251,10 +285,40 @@ const API = (() => {
 
   // ── Public API ─────────────────────────────────────────────
 
+  // ── Authentication lifecycle ─────────────────────────────────
+  /*
+   * Screen modules bind their DOM handlers at DOMContentLoaded, which happens while the
+   * login screen is still up. Any data loading they did at the same moment fired
+   * authenticated requests with no token, producing 401s in the console before the user
+   * had done anything, and leaving the screen with no data if the response was ignored.
+   *
+   * The Generate screen also needed the banking calendar from the server to pre-fill
+   * effective dates; fetching it pre-login meant it silently came back empty and the
+   * date fields were left blank.
+   */
+  const AUTH_READY_EVENT = 'amipi:authenticated';
+
+  /** Run `fn` once a session exists: immediately if one already does. */
+  function onAuthenticated(fn) {
+    if (isAuthenticated()) {
+      fn();
+      return;
+    }
+    document.addEventListener(AUTH_READY_EVENT, fn, { once: true });
+  }
+
+  /** Called by the login controller once a token is stored. */
+  function notifyAuthenticated() {
+    startIdleTimeout();
+    document.dispatchEvent(new CustomEvent(AUTH_READY_EVENT));
+  }
+
   return {
     // Token
     getToken, setToken, clearToken, getUser, setUser,
     isAuthenticated,
+    // Lifecycle
+    onAuthenticated, notifyAuthenticated, startIdleTimeout,
     // HTTP
     get, post, put, patch, del, postForm,
     // Auth

@@ -107,7 +107,7 @@ async def test_vendor_deduplicate_merges_records_and_relinks_history(db_session)
 
     # Call /vendors/deduplicate endpoint
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        resp = await client.post("/api/v1/vendors/deduplicate", headers=headers)
+        resp = await client.post("/api/v1/vendors/deduplicate", headers=headers, json={"dry_run": False})
     assert resp.status_code == 200
     data = resp.json()
     assert data["merged_count"] >= 1

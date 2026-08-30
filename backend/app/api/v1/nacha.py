@@ -6,7 +6,7 @@ Combines multiple upload/manual batches into a Chase-compliant NACHA flat file.
 import logging
 import re
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -45,6 +45,55 @@ class NachaFileResponse(BaseModel):
     total_credit_amount: str
     entry_hash: str
     raw_content: str
+
+
+@router.get("/banking-calendar", status_code=status.HTTP_200_OK)
+async def get_banking_calendar(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    The effective-date rules the server enforces, so the UI can offer the same ones.
+
+    The dashboard used to pre-fill effective dates itself: Batch 1 and 2 took tomorrow
+    and stepped over Saturday and Sunday, and each additional batch simply took
+    ``new Date()`` — today, in UTC. Neither knew about Federal Reserve holidays, and
+    'today' is rejected outright at a weekend. So on a Sunday the form pre-filled a date
+    that generation then refused, and near midnight Eastern the UTC date was tomorrow's.
+
+    Serving the calendar from the one module that validates it
+    (``app.core.business_dates``) means the form cannot drift from the rule again.
+    """
+    from app.core.business_dates import (
+        MAX_EFFECTIVE_DATE_DAYS_AHEAD,
+        default_effective_date,
+        is_banking_day,
+        today_bank_time,
+    )
+
+    today = today_bank_time()
+    default = default_effective_date()
+    latest = today + timedelta(days=MAX_EFFECTIVE_DATE_DAYS_AHEAD)
+
+    # Every non-banking day in the selectable window, so the date input can mark them
+    # and the form can refuse before a request is made.
+    non_banking: list[str] = []
+    probe = today
+    while probe <= latest:
+        if not is_banking_day(probe):
+            non_banking.append(probe.isoformat())
+        probe += timedelta(days=1)
+
+    return {
+        # Pre-fill this.
+        "default_effective_date": default.isoformat(),
+        # Earliest and latest the server will accept.
+        "min_effective_date": today.isoformat(),
+        "max_effective_date": latest.isoformat(),
+        # Today in Eastern time, which is NOT necessarily the browser's today.
+        "today_bank_time": today.isoformat(),
+        "non_banking_days": non_banking,
+        "timezone": "America/New_York",
+    }
 
 
 @router.get("/next-trace-sequence", status_code=status.HTTP_200_OK)

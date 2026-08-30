@@ -330,7 +330,7 @@ async def test_deduplicate_merges_by_bank_details_not_only_name(db_session):
                                   account_type=AccountType.CHECKING))
         await db_session.commit()
 
-        res = await client.post("/api/v1/vendors/deduplicate", headers=headers)
+        res = await client.post("/api/v1/vendors/deduplicate", headers=headers, json={"dry_run": False})
         assert res.status_code == 200, res.text
         assert res.json()["merged_count"] == 1, res.json()
 

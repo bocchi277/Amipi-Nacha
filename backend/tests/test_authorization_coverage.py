@@ -266,3 +266,49 @@ async def test_masking_never_reveals_more_digits_than_it_promises(db_session):
             assert len(digits) <= 4, (
                 f"{field}={row.get(field)!r} reveals {len(digits)} digits; masking promises 4"
             )
+
+
+@pytest.mark.asyncio
+async def test_merge_duplicates_defaults_to_a_preview(db_session):
+    """
+    Regression: the dashboard's "Merge Duplicates" button POSTed to this endpoint with no
+    confirmation step, and the endpoint took no parameters, so there was no way to see
+    what it would do. Merging deletes vendor rows and keeps ONE bank account per group,
+    discarding the others, which for a group whose details disagree destroys an account
+    number. The default is therefore a preview; applying must be explicit.
+    """
+    from app.models import AccountType, Vendor
+
+    for name in ("PREVIEW PROBE INC", "PREVIEW PROBE INC."):
+        db_session.add(Vendor(
+            name=name, routing_number="021000021",
+            account_number="424242424", account_type=AccountType.CHECKING,
+        ))
+    await create_admin_user(db_session, "prev_admin", "prev_admin@example.com", "PrevAdmin123!")
+    await db_session.commit()
+
+    async with _client() as client:
+        headers = await _token(client, "prev_admin", "PrevAdmin123!")
+
+        before = len((await client.get("/api/v1/vendors", headers=headers)).json())
+
+        # No body at all: must preview, not merge.
+        res = await client.post("/api/v1/vendors/deduplicate", headers=headers)
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["dry_run"] is True
+        assert body["merged_count"] == 0, "a call with no body must not merge anything"
+        assert body["groups"], "the preview must describe what it would do"
+        after_preview = len((await client.get("/api/v1/vendors", headers=headers)).json())
+        assert after_preview == before, "preview changed the data"
+
+        # Explicitly requesting a dry run behaves the same.
+        res2 = await client.post("/api/v1/vendors/deduplicate", headers=headers, json={"dry_run": True})
+        assert res2.json()["merged_count"] == 0
+        assert len((await client.get("/api/v1/vendors", headers=headers)).json()) == before
+
+        # Only an explicit dry_run=false applies it.
+        res3 = await client.post("/api/v1/vendors/deduplicate", headers=headers, json={"dry_run": False})
+        assert res3.status_code == 200, res3.text
+        assert res3.json()["merged_count"] == 1
+        assert len((await client.get("/api/v1/vendors", headers=headers)).json()) == before - 1

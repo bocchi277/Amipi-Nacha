@@ -32,7 +32,7 @@ An enterprise-grade B2B payment generation, validation, and security management 
   - Roles are server-assigned; self-registration cannot grant administrator access.
   - Login throttling, CORS allowlist, CSP and related response headers, and HTML escaping on all rendered database values — including audit log detail values, which are user-influenced and are read by administrators.
 - **Automated Testing Suite**:
-  - **207 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
+  - **209 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
   - **41 Playwright E2E test cases** in `frontend/tests/` validating user journeys, admin approvals, and file downloads.
   - **5 live browser verification tests** in `backend/tests_live/` (opt-in; excluded from the default run).
 
@@ -50,7 +50,7 @@ FirstProject/
 │   │   ├── db/               # Async Engine & Session management
 │   │   ├── models/           # SQLAlchemy ORM models (User, Vendor, Payment, NachaFile, AuditLog)
 │   │   └── services/         # NACHA generation, spreadsheet parsing, email remittance
-│   ├── tests/                # 207 hermetic Pytest cases (run by default)
+│   ├── tests/                # 209 hermetic Pytest cases (run by default)
 │   ├── tests_live/           # Opt-in browser tests against a running server
 │   ├── alembic.ini
 │   ├── pytest.ini
@@ -140,7 +140,7 @@ When served separately, add its origin to `ALLOWED_ORIGINS`.
 
 ## 🧪 Running Automated Tests
 
-### Backend (207 tests)
+### Backend (209 tests)
 ```bash
 cd backend
 export DATABASE_URL="postgresql+asyncpg://amipi:amipipass@localhost:5432/amipi_ach_test"
@@ -175,7 +175,9 @@ pytest tests_live/test_live_ui_verification.py -v
 - **Bank details are masked for non-administrators.** Every vendor response is built by one function (`_vendor_response`), so masking cannot drift between endpoints. Standard users receive the last 4 digits and `bank_details_masked: true`; no adjacent field may reveal more, including `default_id_number` when it holds the account tail. Endpoints returning a whole ACH file (`/nacha/latest`, `/nacha/{id}/download`) are admin-only.
 - **Authorization is verified by enumeration, not by example.** `tests/test_authorization_coverage.py` walks every registered route and fails if any lacks an authentication dependency or if a state-changing route is not administrator-only. Exceptions are an explicit allowlist. This exists because `GET /vendors` was masked while `GET /vendors/{id}` was left entirely unauthenticated, returning full decrypted bank details — a gap that survived a security pass precisely because that pass checked endpoints one at a time.
 - **Vendor mutation is administrator-only.** Vendor names are what spreadsheet rows match against, so renaming a vendor redirects future payments; standard users go through the change-request workflow instead. Change requests are visible only to their author and to administrators, because an approved request holds the vendor's real current bank details.
-- **Banking calendar**: effective entry dates are validated against the Federal Reserve holiday schedule and default to the next banking day. Past dates, weekends and holidays are rejected.
+- **Banking calendar**: effective entry dates are validated against the Federal Reserve holiday schedule and default to the next banking day. Past dates, weekends and holidays are rejected. `GET /nacha/banking-calendar` serves those same rules to the dashboard, so the form cannot pre-fill a date the server will refuse.
+- **Destructive vendor actions preview first.** `POST /vendors/deduplicate` defaults to `dry_run: true` and returns the groups it would merge, flagging any whose bank details disagree — merging keeps one account number and discards the others.
+- **Sessions**: tokens last 8 hours (one working shift) and the dashboard clears the session after 30 minutes idle. Tokens are held in `sessionStorage`, so they are readable by page scripts; that is mitigated by escaping every rendered database value and by the response CSP, not eliminated. Moving to `httpOnly` cookies would require `SameSite=None` because the dashboard is also served from Netlify, and third-party cookies are being phased out — so it is not a drop-in change.
 - **Trace numbers** come from a PostgreSQL sequence, allocated atomically, so concurrent generation cannot produce duplicates.
 - **Login throttling**: 8 failed attempts per (IP, username) per 5 minutes, then HTTP 429. In-process — move to a shared store if running multiple workers.
 - **Injection defenses**: parameterised queries via SQLAlchemy, HTML escaping on all rendered database values, CSV formula escaping.

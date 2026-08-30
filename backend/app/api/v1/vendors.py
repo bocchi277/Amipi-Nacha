@@ -998,10 +998,41 @@ class DeduplicateVendorsResponseSchema(BaseModel):
     merged_count: int
     primary_vendors_count: int
     purged_duplicate_ids: list[str]
+    # Populated on every call, including a dry run, so the UI can show exactly which
+    # records would be combined BEFORE anything is deleted. Merging keeps one bank
+    # account and discards the others, so this must be reviewable.
+    groups: list["DuplicateGroupSchema"] = []
+    dry_run: bool = False
+
+
+class DuplicateVendorSchema(BaseModel):
+    id: str
+    name: str
+    routing_number_last4: str
+    account_number_last4: str
+    is_active: bool
+    payment_count: int
+
+
+class DuplicateGroupSchema(BaseModel):
+    reason: str
+    # Bank details differing inside a group means one of the records is WRONG. Merging
+    # then silently discards an account number, so the UI must warn rather than proceed.
+    bank_details_conflict: bool
+    keeps: DuplicateVendorSchema
+    removes: list[DuplicateVendorSchema]
+
+
+class DeduplicateRequestSchema(BaseModel):
+    # Defaults to a PREVIEW. Merging deletes vendor rows and keeps only one bank account
+    # per group, and the dashboard previously called this endpoint with no confirmation
+    # step at all, so the safe default is to change nothing.
+    dry_run: bool = True
 
 
 @router.post("/deduplicate", response_model=DeduplicateVendorsResponseSchema)
 async def deduplicate_vendors(
+    payload: DeduplicateRequestSchema | None = None,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_admin),
 ):
@@ -1064,6 +1095,74 @@ async def deduplicate_vendors(
         str(root): sorted(members, key=lambda x: x.created_at)
         for root, members in grouped.items()
     }
+
+    is_dry_run = True if payload is None else payload.dry_run
+
+    def _tail(value: Optional[str]) -> str:
+        v = (value or "").strip()
+        return v[-4:] if len(v) > 4 else ("*" * len(v) if v else "")
+
+    # Describe what a merge WOULD do. Built before anything is written so the same
+    # payload is returned whether or not the caller is applying it.
+    preview: list[DuplicateGroupSchema] = []
+    payment_counts: dict[uuid.UUID, int] = {}
+    for root, v_list in groups.items():
+        if len(v_list) <= 1:
+            continue
+        for v in v_list:
+            cnt = await db.execute(
+                select(func.count()).select_from(Payment).where(Payment.vendor_id == v.id)
+            )
+            payment_counts[v.id] = cnt.scalar() or 0
+
+        keeps, removes = v_list[0], v_list[1:]
+        names = {normalize_vendor_name(v.name) for v in v_list}
+        banks = {((v.routing_number or "").strip(), (v.account_number or "").strip()) for v in v_list}
+        if len(names) == 1 and len(banks) == 1:
+            reason = "Same name and same bank details."
+        elif len(names) == 1:
+            reason = "Same name, but the bank details differ."
+        else:
+            reason = "Different names sharing one bank account."
+
+        def _row(v: Vendor) -> DuplicateVendorSchema:
+            return DuplicateVendorSchema(
+                id=str(v.id),
+                name=v.name,
+                routing_number_last4=_tail(v.routing_number),
+                account_number_last4=_tail(v.account_number),
+                is_active=bool(v.is_active),
+                payment_count=payment_counts.get(v.id, 0),
+            )
+
+        preview.append(DuplicateGroupSchema(
+            reason=reason,
+            bank_details_conflict=len(banks) > 1,
+            keeps=_row(keeps),
+            removes=[_row(v) for v in removes],
+        ))
+
+    if is_dry_run:
+        would_remove = sum(len(g.removes) for g in preview)
+        conflicts = sum(1 for g in preview if g.bank_details_conflict)
+        msg = (
+            f"Preview only, nothing was changed. {would_remove} duplicate record(s) in "
+            f"{len(preview)} group(s) would be merged."
+        )
+        if conflicts:
+            msg += (
+                f" WARNING: {conflicts} group(s) hold DIFFERENT bank details; merging "
+                f"keeps one account number and discards the other. Confirm against bank "
+                f"records first."
+            )
+        return DeduplicateVendorsResponseSchema(
+            message=msg,
+            merged_count=0,
+            primary_vendors_count=len(groups),
+            purged_duplicate_ids=[],
+            groups=preview,
+            dry_run=True,
+        )
 
     merged_count = 0
     purged_ids: list[str] = []
@@ -1132,10 +1231,15 @@ async def deduplicate_vendors(
         await db.commit()
 
     return DeduplicateVendorsResponseSchema(
-        message=f"Successfully identified and merged {merged_count} duplicate vendor record(s). All payment histories and remittances are safely preserved under unified profiles.",
+        message=(
+            f"Merged {merged_count} duplicate vendor record(s). Payment history, "
+            f"remittances and change requests were re-linked to the record that was kept."
+        ),
         merged_count=merged_count,
         primary_vendors_count=len(groups),
         purged_duplicate_ids=purged_ids,
+        groups=preview,
+        dry_run=False,
     )
 
 
