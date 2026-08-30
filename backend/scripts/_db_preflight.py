@@ -38,7 +38,15 @@ def require_database_url() -> str:
     app.config, which already converts postgres:// and postgresql:// and rewrites
     sslmode for asyncpg.
     """
-    raw = os.getenv("DATABASE_URL", "")
+    raw = os.getenv("DATABASE_URL", "").strip()
+
+    # A value pasted with its quotes included, e.g. DATABASE_URL='"postgresql://..."',
+    # arrives with the quote characters as part of the string.
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        raw = raw[1:-1].strip()
+        os.environ["DATABASE_URL"] = raw
+    elif raw != os.getenv("DATABASE_URL", ""):
+        os.environ["DATABASE_URL"] = raw
 
     def fail(problem: str, fix: str) -> None:
         print("=" * 70)
@@ -68,6 +76,10 @@ def require_database_url() -> str:
         fail("it still contains placeholder text rather than a real connection string",
              "Replace the whole value, including removing any < > brackets.")
 
+    if raw.count("'") or raw.count('"'):
+        fail("it contains a quote character, so the shell quoting was not what you meant",
+             "Use exactly one pair of quotes: export DATABASE_URL=\"postgresql://...\"")
+
     if "\n" in raw or "\r" in raw:
         fail("it contains a line break, so only part of it was captured",
              "Re-copy the URL as a single line and quote it.")
@@ -95,6 +107,48 @@ def require_database_url() -> str:
              "Append the database name: .../DBNAME")
 
     return raw
+
+
+def _looks_broken(value: str) -> str | None:
+    """Return a one-line reason the value is unusable, or None if it looks fine."""
+    if not value.strip():
+        return "empty"
+    if any(h in value for h in PLACEHOLDER_HINTS):
+        return "still contains placeholder text"
+    if "\n" in value or "\r" in value:
+        return "contains a line break"
+    if "://" not in value:
+        return "not a connection URL"
+    scheme, _, remainder = value.partition("://")
+    if not scheme.startswith(("postgres", "postgresql")):
+        return f"scheme {scheme!r} is not PostgreSQL"
+    if "@" not in remainder or "/" not in remainder.rpartition("@")[2]:
+        return "missing host or database name"
+    return None
+
+
+def relax_sync_database_url() -> None:
+    """
+    Drop SYNC_DATABASE_URL if it is unusable.
+
+    `app.config` prefers an explicit SYNC_DATABASE_URL over deriving one from
+    DATABASE_URL, so a stale or placeholder value left in the shell breaks the sync
+    engine even when DATABASE_URL is perfectly good — and it fails at import, inside
+    app.db.session, which is confusing.
+
+    The variable is optional: with it unset, the correct psycopg2 URL is derived from
+    DATABASE_URL. So rather than refuse to run, drop it and say so.
+    """
+    value = os.getenv("SYNC_DATABASE_URL")
+    if value is None:
+        return
+    reason = _looks_broken(value)
+    if reason is None:
+        return
+    print(f"  note: ignoring SYNC_DATABASE_URL ({reason});")
+    print(f"        deriving it from DATABASE_URL instead. Value: {describe(value)}")
+    print("        Run 'unset SYNC_DATABASE_URL' to silence this.")
+    del os.environ["SYNC_DATABASE_URL"]
 
 
 def report(url: str) -> None:

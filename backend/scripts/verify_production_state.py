@@ -22,9 +22,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # Validate the connection string BEFORE importing app.db.session, which builds its
 # engines at import time and would otherwise fail with a SQLAlchemy stack trace.
-from _db_preflight import report, require_database_url  # noqa: E402
+from _db_preflight import relax_sync_database_url, report, require_database_url  # noqa: E402
 
 _DB_URL = require_database_url()
+relax_sync_database_url()
 
 from sqlalchemy import text  # noqa: E402
 
