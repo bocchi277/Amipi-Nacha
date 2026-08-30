@@ -10,5 +10,11 @@ services:
         sync: false # Set your free PostgreSQL database URL (e.g. from Neon.tech or Render)
       - key: SECRET_KEY
         generateValue: true
+      # Encrypts vendor routing/account numbers at rest. REQUIRED.
+      # sync:false so it is set once in the dashboard and never rotated by a deploy:
+      # changing this value makes existing encrypted rows unreadable until
+      # scripts/rotate_encryption_key.py has run with the old key as a fallback.
+      - key: BANK_DETAILS_ENCRYPTION_KEY
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "https://amipi-nacha.netlify.app"

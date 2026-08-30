@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models import AuditLog, ChangeRequestStatus, User, UserRole, Vendor, VendorChangeRequest
-from tests._helpers import create_admin_user
+from tests._helpers import create_admin_user, create_standard_user
 
 
 @pytest.mark.real_auth
@@ -26,42 +26,28 @@ async def test_auth_registration_and_login(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register Standard User
-        res_u = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "user1@amipi.com",
-                "username": "stduser1",
-                "password": "SecretPassword123!",
-            },
-        )
-        assert res_u.status_code == 201
-        data_u = res_u.json()
-        assert data_u["role"] == "user"
+        res_u = await create_standard_user(db_session, username="stduser1", email="user1@amipi.com", password="SecretPassword123!")
+        assert res_u.role.value == "user"
 
         # Self-registration must ALWAYS produce a standard user, never an admin.
-        res_a = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "admin1@amipi.com",
-                "username": "adminuser1",
-                "password": "AdminPassword123!",
-            },
-        )
-        assert res_a.status_code == 201
-        data_a = res_a.json()
-        assert data_a["role"] == "user"
+        res_a = await create_standard_user(db_session, username="adminuser1", email="admin1@amipi.com", password="AdminPassword123!")
+        assert res_a.role.value == "user"
 
         # Attempting to smuggle an elevated role must be rejected outright rather
         # than silently ignored (privilege-escalation regression guard).
-        res_esc = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "escalate@amipi.com",
-                "username": "escalate1",
-                "password": "AdminPassword123!",
-                "role": "admin",
-            },
-        )
+        # Smuggling an elevated role must be REJECTED, not silently ignored. Uses a
+        # real HTTP call by an administrator, since registration is admin-only now.
+        await create_admin_user(db_session, username="reg_probe_admin",
+                                email="reg_probe_admin@amipi.com", password="AdminPass123!")
+        _login = await client.post("/api/v1/auth/login",
+                                   data={"username": "reg_probe_admin", "password": "AdminPass123!"})
+        _admin_h = {"Authorization": f"Bearer {_login.json()['access_token']}"}
+        res_esc = await client.post("/api/v1/auth/register", headers=_admin_h, json={
+            "email": "escalate@amipi.com",
+            "username": "escalate1",
+            "password": "AdminPassword123!",
+            "role": "admin",
+        })
         assert res_esc.status_code == 422, (
             f"Expected 422 for role smuggling, got {res_esc.status_code}: {res_esc.text}"
         )
@@ -99,14 +85,7 @@ async def test_standard_user_cannot_bypass_approval(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register & Login Standard User
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "standard@amipi.com",
-                "username": "std_actor",
-                "password": "Password123!",
-            },
-        )
+        await create_standard_user(db_session, username="std_actor", email="standard@amipi.com", password="Password123!")
         res_l = await client.post(
             "/api/v1/auth/login",
             data={"username": "std_actor", "password": "Password123!"},
@@ -166,10 +145,7 @@ async def test_admin_approval_updates_vendor_and_logs_audit(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register User and Admin
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "requester@amipi.com", "username": "requester1", "password": "Pass123!"},
-        )
+        await create_standard_user(db_session, username="requester1", email="requester@amipi.com", password="Pass123!")
         await create_admin_user(db_session, username="admin_boss", email="approver@amipi.com", password="Pass123!")
 
         # Login Requester & Admin

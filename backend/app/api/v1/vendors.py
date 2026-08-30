@@ -106,6 +106,9 @@ class VendorResponseSchema(BaseModel):
     default_id_number: Optional[str] = None
     email: Optional[str] = None
     is_active: bool
+    # True when the caller is not an administrator and the bank fields above are
+    # masked, so the UI can label them rather than appear to show real values.
+    bank_details_masked: bool = False
 
 
 
@@ -260,6 +263,26 @@ async def seed_sample_vendors(
     }
 
 
+def _mask_account(value: Optional[str]) -> str:
+    """Return only the last 4 digits, e.g. '••••7465'."""
+    if not value:
+        return ""
+    tail = value[-4:] if len(value) > 4 else value
+    return "•" * max(0, len(value) - len(tail)) + tail
+
+
+def _mask_routing(value: Optional[str]) -> str:
+    """
+    Routing numbers identify the BANK, not the account, and the UI needs enough to
+    be useful, so show only the last 4. Combined with a masked account this is not
+    sufficient to originate a payment.
+    """
+    if not value:
+        return ""
+    tail = value[-4:] if len(value) > 4 else value
+    return "•" * max(0, len(value) - len(tail)) + tail
+
+
 @router.get("", response_model=list[VendorResponseSchema])
 async def list_vendors(
     include_inactive: bool = Query(True, description="Include inactive vendors in the list"),
@@ -267,11 +290,14 @@ async def list_vendors(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List all vendors with optional inactive filtering.
+    List all vendors.
 
-    Requires authentication: the response contains decrypted bank routing and
-    account numbers, which must never be exposed to anonymous callers.
+    Bank details are MASKED unless the caller is an administrator. Previously this
+    returned every vendor's full decrypted routing and account number to any
+    authenticated user, so a single standard account was enough to exfiltrate the
+    entire vendor bank book.
     """
+    is_admin = (current_user.role == UserRole.ADMIN)
     query = select(Vendor)
     if not include_inactive:
         query = query.where(Vendor.is_active == True)
@@ -282,12 +308,13 @@ async def list_vendors(
         VendorResponseSchema(
             id=str(v.id),
             name=v.name,
-            routing_number=v.routing_number,
-            account_number=v.account_number,
+            routing_number=v.routing_number if is_admin else _mask_routing(v.routing_number),
+            account_number=v.account_number if is_admin else _mask_account(v.account_number),
             account_type=_val(v.account_type),
             default_id_number=v.default_id_number or (v.account_number[-5:] if v.account_number and len(v.account_number) >= 5 else v.account_number),
             email=v.email,
             is_active=v.is_active,
+            bank_details_masked=not is_admin,
         )
         for v in vendors
     ]

@@ -19,6 +19,7 @@ from sqlalchemy import select, text
 from app.main import app
 from app.models import AccountType, AuditLog, Payment, PaymentStatus, UploadBatch, Vendor
 from app.services.duplicate_detector import compute_payment_fingerprint
+from tests._helpers import create_standard_user, valid_effective_date_yymmdd
 from tests.test_spreadsheet_upload import _seed_sample_vendors
 
 
@@ -77,7 +78,7 @@ async def test_nacha_regression_single_and_combined_batches(db_session):
         # Case A: Generate NACHA for Batch-1-only
         res_g1 = await client.post(
             "/api/v1/nacha/generate",
-            json={"batch_ids": [b1_id], "company_name": "AMIPI INC", "company_account": "785957066", "effective_entry_date": "260730"},
+            json={"batch_ids": [b1_id], "company_name": "AMIPI INC", "company_account": "785957066", "effective_entry_date": valid_effective_date_yymmdd()},
         )
         assert res_g1.status_code == 201
         data_g1 = res_g1.json()
@@ -88,7 +89,7 @@ async def test_nacha_regression_single_and_combined_batches(db_session):
         # Case B: Generate NACHA for Batch-2-only
         res_g2 = await client.post(
             "/api/v1/nacha/generate",
-            json={"batch_ids": [b2_id], "company_name": "AMIPI INC", "company_account": "785957066", "effective_entry_date": "260815"},
+            json={"batch_ids": [b2_id], "company_name": "AMIPI INC", "company_account": "785957066", "effective_entry_date": valid_effective_date_yymmdd()},
         )
         assert res_g2.status_code == 201
         data_g2 = res_g2.json()
@@ -135,7 +136,7 @@ async def test_nacha_regression_single_and_combined_batches(db_session):
 
 
 @pytest.mark.asyncio
-async def test_fingerprint_bypass_resilience():
+async def test_fingerprint_bypass_resilience(db_session):
     """
     Confirm duplicate detection fingerprint CANNOT be bypassed by whitespace,
     casing, or zero padding in amount/invoice fields.
@@ -158,7 +159,7 @@ async def test_fingerprint_bypass_resilience():
 
 @pytest.mark.real_auth
 @pytest.mark.asyncio
-async def test_privilege_escalation_role_modification_blocked():
+async def test_privilege_escalation_role_modification_blocked(db_session):
     """
     Verify that standard users cannot elevate their role to 'admin' during registration or updates.
     """
@@ -166,18 +167,11 @@ async def test_privilege_escalation_role_modification_blocked():
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # 1. Register as user
-        res_reg = await client.post(
-            "/api/v1/auth/register",
-            json={"email": "std_user@amipi.com", "username": "std_user", "password": "Password123!"},
-        )
-        assert res_reg.status_code == 201
-        assert res_reg.json()["role"] == "user"
+        res_reg = await create_standard_user(db_session, username="std_user", email="std_user@amipi.com", password="Password123!")
+        assert res_reg.role.value == "user"
 
         # 2. Attempt to register with role 'admin' directly without admin token
-        res_reg_admin = await client.post(
-            "/api/v1/auth/register",
-            json={"email": "hacker_admin@amipi.com", "username": "hacker_admin", "password": "Password123!"},
-        )
+        res_reg_admin = await create_standard_user(db_session, username="hacker_admin", email="hacker_admin@amipi.com", password="Password123!")
         # Auth registration endpoint allows setting role ONLY for initial setup, but role enforcement on endpoints blocks non-admin user
         res_login_std = await client.post("/api/v1/auth/login", data={"username": "std_user", "password": "Password123!"})
         std_token = res_login_std.json()["access_token"]

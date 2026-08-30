@@ -4,6 +4,14 @@ Pytest configuration & fixtures for DB schema and API testing.
 import os
 import re
 import uuid
+
+# Bank-detail encryption now REQUIRES a key (the old hardcoded default could decrypt
+# any database dump). Set a deterministic test key before anything touches the cipher
+# so the suite exercises the same code path as production rather than a dev fallback.
+os.environ.setdefault(
+    "BANK_DETAILS_ENCRYPTION_KEY",
+    "amipi-test-only-bank-detail-encryption-key-do-not-use-in-production",
+)
 from typing import AsyncGenerator
 
 import pytest

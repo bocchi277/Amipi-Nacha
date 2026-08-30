@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models import AuditLog, RemittanceStatus, User, UserRole, Vendor, VendorRemittance
+from tests._helpers import create_standard_user
 
 
 @pytest.mark.asyncio
@@ -33,10 +34,7 @@ async def test_auto_remittance_creation_and_send(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register and Login User
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "remit_user@amipi.com", "username": "remit_user", "password": "Password123!"},
-        )
+        await create_standard_user(db_session, username="remit_user", email="remit_user@amipi.com", password="Password123!")
         res_l = await client.post("/api/v1/auth/login", data={"username": "remit_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
 
@@ -97,10 +95,7 @@ async def test_remittance_table_filtering(db_session):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "filter_user@amipi.com", "username": "filter_user", "password": "Password123!"},
-        )
+        await create_standard_user(db_session, username="filter_user", email="filter_user@amipi.com", password="Password123!")
         res_l = await client.post("/api/v1/auth/login", data={"username": "filter_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
 
@@ -143,10 +138,7 @@ async def test_bulk_resend_on_filtered_selection(db_session):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "bulk_user@amipi.com", "username": "bulk_user", "password": "Password123!"},
-        )
+        await create_standard_user(db_session, username="bulk_user", email="bulk_user@amipi.com", password="Password123!")
         res_l = await client.post("/api/v1/auth/login", data={"username": "bulk_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
 

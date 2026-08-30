@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_async_db
-from app.models import User, UserRole
+from app.models import AuditLog, User, UserRole
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -134,8 +134,21 @@ class UserProfileSchema(BaseModel):
 async def register_user(
     payload: RegisterUserSchema,
     db: AsyncSession = Depends(get_async_db),
+    admin_user: User = Depends(require_admin),
 ):
-    """Register a new standard user account."""
+    """
+    Provision a new standard user account. **Administrator only.**
+
+    This endpoint used to be public. Combined with vendor endpoints that returned
+    decrypted bank details to any authenticated user, that gave anyone on the internet
+    a three-request path to AMIPI's entire vendor bank book: register, log in, read
+    /vendors. Since every operator account is created by an administrator anyway,
+    self-service registration has no legitimate use here and is now closed.
+
+    Use this endpoint or ``POST /api/v1/users`` (which can also assign the admin role)
+    to create accounts. The very first administrator is created out-of-band with
+    ``scripts/create_user.py``.
+    """
     if len(payload.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
 
@@ -159,6 +172,23 @@ async def register_user(
         is_active=True,
     )
     db.add(user)
+    await db.flush()
+
+    db.add(
+        AuditLog(
+            user_id=admin_user.id,
+            action="USER_REGISTERED_BY_ADMIN",
+            entity_type="user",
+            entity_id=user.username,
+            details={
+                "created_by_admin": admin_user.username,
+                "created_username": user.username,
+                "created_email": user.email,
+                "role": user.role.value,
+            },
+        )
+    )
+
     await db.commit()
     await db.refresh(user)
 

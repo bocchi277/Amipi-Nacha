@@ -21,7 +21,7 @@ from sqlalchemy import select, text, update
 
 from app.main import app
 from app.models import AuditLog, Vendor, VendorChangeRequest, VendorRemittance
-from tests._helpers import create_admin_user
+from tests._helpers import create_admin_user, create_standard_user, valid_effective_date_yymmdd
 
 
 from tests.test_spreadsheet_upload import _seed_sample_vendors
@@ -54,11 +54,8 @@ async def test_phase8_full_end_to_end_workflow_and_security(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Step 1: Authentication & Role Setup
-        res_u = await client.post(
-            "/api/v1/auth/register",
-            json={"email": "e2e_user@amipi.com", "username": "e2e_user", "password": "Password123!"},
-        )
-        assert res_u.status_code == 201
+        res_u = await create_standard_user(db_session, username="e2e_user", email="e2e_user@amipi.com", password="Password123!")
+        assert res_u.role.value == "user"
 
         res_a = await create_admin_user(db_session, username="e2e_admin", email="e2e_admin@amipi.com", password="Password123!")
         assert res_a.role.value == "admin"
@@ -138,7 +135,7 @@ async def test_phase8_full_end_to_end_workflow_and_security(db_session):
                 "batch_ids": [batch1_id],
                 "company_name": "AMIPI INC",
                 "company_account": "785957066",
-                "effective_entry_date": "260730",
+                "effective_entry_date": valid_effective_date_yymmdd(),
                 "file_id_modifier": "A",
             },
         )

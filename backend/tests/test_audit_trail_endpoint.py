@@ -2,6 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from app.main import app
 from app.models import AuditLog
+from tests._helpers import create_standard_user
 
 
 @pytest.mark.asyncio
@@ -20,14 +21,7 @@ async def test_admin_can_fetch_audit_logs(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register and login admin
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "audit_admin@amipi.com",
-                "username": "audit_admin",
-                "password": "Password123!",
-            },
-        )
+        await create_standard_user(db_session, username="audit_admin", email="audit_admin@amipi.com", password="Password123!")
         res_login = await client.post(
             "/api/v1/auth/login",
             data={"username": "audit_admin", "password": "Password123!"},

@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app.main import app
 from app.models import AccountType, Payment, User, UserRole, Vendor
 from app.services.spreadsheet_parser import _compress_invoices, match_vendor
-from tests._helpers import create_admin_user
+from tests._helpers import create_admin_user, create_standard_user, valid_effective_date_yymmdd
 
 
 def _client() -> AsyncClient:
@@ -73,27 +73,88 @@ async def test_bank_data_and_money_endpoints_require_authentication(db_session):
 
 @pytest.mark.real_auth
 @pytest.mark.asyncio
-async def test_self_registration_cannot_grant_admin_role(db_session):
+async def test_registration_is_admin_only_and_cannot_grant_admin_role(db_session):
     """
-    Risk: public registration accepted a caller-supplied `role`, so anyone could
-    create themselves an administrator account and gain full access.
+    Two distinct risks, both closed here.
+
+    1. Registration accepted a caller-supplied `role`, so anyone could self-register as
+       an administrator.
+    2. Registration was PUBLIC. Combined with vendor endpoints that returned decrypted
+       bank details to any authenticated user, that gave anyone on the internet a
+       three-request path to AMIPI's whole vendor bank book: register, log in,
+       read /vendors.
     """
     async with _client() as client:
-        res = await client.post("/api/v1/auth/register", json={
-            "email": "escalate_guard@amipi.test", "username": "escalate_guard",
-            "password": "Password123!", "role": "admin",
-        })
-        assert res.status_code == 422, f"role smuggling must be rejected: {res.text}"
-
-        res_ok = await client.post("/api/v1/auth/register", json={
-            "email": "plain_guard@amipi.test", "username": "plain_guard",
+        # Anonymous registration must be refused outright.
+        anon = await client.post("/api/v1/auth/register", json={
+            "email": "anon@evil.example", "username": "anon_probe",
             "password": "Password123!",
         })
-        assert res_ok.status_code == 201
-        assert res_ok.json()["role"] == "user"
+        assert anon.status_code in (401, 403), (
+            f"registration must not be public, got {anon.status_code}"
+        )
 
-    row = await db_session.execute(select(User).where(User.username == "plain_guard"))
+        headers = await _admin_headers(client, db_session, "reg")
+
+        # An admin may provision an account, but it is always a standard user.
+        made = await client.post("/api/v1/auth/register", headers=headers, json={
+            "email": "operator@amipi.test", "username": "operator_one",
+            "password": "Password123!",
+        })
+        assert made.status_code == 201, made.text
+        assert made.json()["role"] == "user"
+
+        # Smuggling a role is rejected rather than silently ignored.
+        smuggled = await client.post("/api/v1/auth/register", headers=headers, json={
+            "email": "escalate@amipi.test", "username": "escalate_probe",
+            "password": "Password123!", "role": "admin",
+        })
+        assert smuggled.status_code == 422, smuggled.text
+
+    row = await db_session.execute(select(User).where(User.username == "operator_one"))
     assert row.scalar_one().role == UserRole.USER
+
+
+@pytest.mark.real_auth
+@pytest.mark.asyncio
+async def test_standard_user_cannot_read_bank_details_or_ach_files(db_session):
+    """
+    The second half of the breach path: even a legitimate standard account must not be
+    able to read full bank details or download a generated ACH file.
+    """
+    async with _client() as client:
+        admin_headers = await _admin_headers(client, db_session, "maskadm")
+        created = await client.post("/api/v1/vendors", headers=admin_headers, json={
+            "name": "MASKING PROBE VENDOR", "routing_number": "021000021",
+            "account_number": "918025393", "account_type": "checking"})
+        assert created.status_code == 201, created.text
+
+        # Admin sees real values - required to build files.
+        as_admin = await client.get("/api/v1/vendors", headers=admin_headers)
+        admin_row = next(v for v in as_admin.json() if v["name"] == "MASKING PROBE VENDOR")
+        assert admin_row["account_number"] == "918025393"
+        assert admin_row["routing_number"] == "021000021"
+        assert admin_row["bank_details_masked"] is False
+
+        # A standard user does not.
+        await create_standard_user(db_session, username="masking_std",
+                                   email="masking_std@amipi.test", password="StdPass123!")
+        login = await client.post("/api/v1/auth/login",
+                                  data={"username": "masking_std", "password": "StdPass123!"})
+        std_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        as_std = await client.get("/api/v1/vendors", headers=std_headers)
+        assert as_std.status_code == 200
+        std_row = next(v for v in as_std.json() if v["name"] == "MASKING PROBE VENDOR")
+        assert std_row["bank_details_masked"] is True
+        assert "918025393" not in std_row["account_number"], std_row
+        assert "021000021" not in std_row["routing_number"], std_row
+        assert std_row["account_number"].endswith("5393"), "last 4 should stay visible"
+
+        # No standard user may read a generated ACH file or burn a trace number.
+        for path in ["/api/v1/nacha/latest", "/api/v1/nacha/next-trace-sequence"]:
+            res = await client.get(path, headers=std_headers)
+            assert res.status_code == 403, f"{path} must be admin-only, got {res.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +187,7 @@ async def test_batch_cannot_be_regenerated_into_a_second_nacha_file(db_session):
         batch_id = res_b.json()["batch_id"]
 
         payload = {"batch_ids": [batch_id], "company_name": "AMIPI INC",
-                   "company_account": "785957066", "effective_entry_date": "2026-09-01"}
+                   "company_account": "785957066", "effective_entry_date": valid_effective_date_yymmdd()}
 
         first = await client.post("/api/v1/nacha/generate", headers=headers, json=payload)
         assert first.status_code == 201, first.text
@@ -174,7 +235,7 @@ async def test_payment_is_immutable_after_nacha_generation(db_session):
 
         gen = await client.post("/api/v1/nacha/generate", headers=headers, json={
             "batch_ids": [batch_id], "company_name": "AMIPI INC",
-            "company_account": "785957066", "effective_entry_date": "2026-09-01"})
+            "company_account": "785957066", "effective_entry_date": valid_effective_date_yymmdd()})
         assert gen.status_code == 201, gen.text
 
         post = await client.put(f"/api/v1/payments/{payment_id}", headers=headers,

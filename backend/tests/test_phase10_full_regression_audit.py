@@ -27,7 +27,7 @@ from app.models import (
     Payment, PaymentStatus, RemittanceStatus, UploadBatch, User, UserRole, Vendor, VendorChangeRequest, VendorRemittance
 )
 from app.services.nacha_service import combine_batches_and_generate_nacha, get_next_trace_sequence
-from tests._helpers import create_admin_user
+from tests._helpers import create_admin_user, create_standard_user
 
 
 @pytest.mark.asyncio
@@ -75,16 +75,42 @@ async def test_chase_nacha_format_strict_compliance(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession):
-    """Test 2: Verify next trace sequence queries latest NACHA file and auto-starts at last_trace + 1."""
-    line1 = "101 021000021 021000021 260813 0000 A094101J.PMT CHASE              AMIPI INC       "
-    line2 = "5220AMIPI INC                         021000021CCDREMITTANCE 260813260813   102100001000001"
-    line3 = "622" + "021000021" + "01234567890      " + "0000015000" + "INV-2026-X     " + "ARTN DESIGN INC       " + "00" + "0" + "02100002" + "0004050"
-    line4 = "8220000001000210000200000000000000000000150000021000021                         02100001000001"
-    line5 = "900000100000100000001000210000200000000000000000000150000                                       "
+    """
+    Test 2: trace numbers come from an atomic database sequence.
 
+    This previously asserted that the next sequence was recovered by re-parsing
+    characters 88-94 of the last Entry Detail record in the most recent file. That
+    approach collided when two generations ran at once, and silently returned 1 when
+    the last file was absent or unparseable, re-issuing trace numbers the bank had
+    already seen. Allocation is now atomic, monotonic, and independent of file text.
+    """
+    from app.services.nacha_service import allocate_trace_sequence
+
+    # Peeking must not consume a number, so the operator can be shown a preview.
+    peek_one = await get_next_trace_sequence(db_session)
+    peek_two = await get_next_trace_sequence(db_session)
+    assert peek_one == peek_two, "peeking must not consume a trace number"
+
+    # Allocation hands out a contiguous block and advances the sequence.
+    first = await allocate_trace_sequence(db_session, 3)
+    await db_session.commit()
+    assert first >= peek_one
+
+    following = await allocate_trace_sequence(db_session, 2)
+    await db_session.commit()
+    assert following == first + 3, (
+        f"blocks must be contiguous and non-overlapping: {first}+3 != {following}"
+    )
+
+    # And the peek reflects what was consumed.
+    assert await get_next_trace_sequence(db_session) == following + 2
+
+    # A stored file's text must have no bearing on allocation any more.
+    line3 = ("622" + "021000021" + "01234567890      " + "0000015000"
+             + "INV-2026-X     " + "ARTN DESIGN INC       " + "00" + "0"
+             + "02100002" + "0004050")
     assert len(line3) == 94
-
-    n_rec = NachaFileRecord(
+    db_session.add(NachaFileRecord(
         filename="chase_nacha_20260813.txt",
         file_creation_date="260813",
         file_creation_time="0000",
@@ -93,13 +119,15 @@ async def test_trace_sequence_auto_increment_regression(db_session: AsyncSession
         total_batch_count=1,
         total_block_count=1,
         entry_hash="021000021",
-        raw_content=f"{line1}\n{line2}\n{line3}\n{line4}\n{line5}",
-    )
-    db_session.add(n_rec)
+        raw_content=line3,
+    ))
     await db_session.commit()
 
-    next_seq = await get_next_trace_sequence(db_session)
-    assert next_seq == 4051
+    after_insert = await get_next_trace_sequence(db_session)
+    assert after_insert == following + 2, (
+        "inserting a file containing trace 0004050 must not move the sequence; "
+        f"expected {following + 2}, got {after_insert}"
+    )
 
 
 @pytest.mark.asyncio
@@ -187,7 +215,7 @@ async def test_vendor_profile_email_update_endpoint(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": "prof_user@amipi.com", "username": "prof_user", "password": "Password123!"})
+        await create_standard_user(db_session, username="prof_user", email="prof_user@amipi.com", password="Password123!")
         res_login = await client.post("/api/v1/auth/login", data={"username": "prof_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_login.json()['access_token']}"}
 
@@ -222,7 +250,7 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": "std_user@amipi.com", "username": "std_user", "password": "Password123!"})
+        await create_standard_user(db_session, username="std_user", email="std_user@amipi.com", password="Password123!")
         res_std = await client.post("/api/v1/auth/login", data={"username": "std_user", "password": "Password123!"})
         std_headers = {"Authorization": f"Bearer {res_std.json()['access_token']}"}
 
@@ -272,7 +300,7 @@ async def test_remittance_advice_template_and_dispatch(db_session: AsyncSession)
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": "remit_user@amipi.com", "username": "remit_user", "password": "Password123!"})
+        await create_standard_user(db_session, username="remit_user", email="remit_user@amipi.com", password="Password123!")
         res_login = await client.post("/api/v1/auth/login", data={"username": "remit_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_login.json()['access_token']}"}
 
@@ -305,7 +333,7 @@ async def test_admin_security_audit_trail_query(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": "std_audit@amipi.com", "username": "std_audit", "password": "Password123!"})
+        await create_standard_user(db_session, username="std_audit", email="std_audit@amipi.com", password="Password123!")
         res_std = await client.post("/api/v1/auth/login", data={"username": "std_audit", "password": "Password123!"})
         std_headers = {"Authorization": f"Bearer {res_std.json()['access_token']}"}
 

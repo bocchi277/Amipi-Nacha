@@ -49,6 +49,26 @@ LINE_ENDING = "\r\n"
 from decimal import Decimal, InvalidOperation
 
 
+class NachaRecordLengthError(ValueError):
+    """
+    Raised when a built record is not exactly 94 characters.
+
+    This was previously an ``assert``. Python removes assert statements entirely when
+    run with -O / PYTHONOPTIMIZE, which would silently delete the only guarantee that
+    the file is well-formed and let a malformed file reach the bank. A real exception
+    cannot be optimised away.
+    """
+
+
+def _require_record_length(record: str, label: str) -> str:
+    if len(record) != RECORD_LEN:
+        raise NachaRecordLengthError(
+            f"{label} is {len(record)} characters, expected exactly {RECORD_LEN}. "
+            f"Record: {record!r}"
+        )
+    return record
+
+
 def _clean_str(value: str) -> str:
     """Sanitize string fields by stripping CRLF, control chars, and non-ASCII chars."""
     if not value:
@@ -124,8 +144,7 @@ def _build_file_header(cfg: FileHeaderConfig) -> str:
         + _pad_right(cfg.company_name, 23)                 # 64-86   Origin name
         + " " * 8                                          # 87-94   Reference code
     )
-    assert len(rec) == RECORD_LEN, f"File header is {len(rec)} chars, expected {RECORD_LEN}"
-    return rec
+    return _require_record_length(rec, "File Header record")
 
 
 def _build_batch_header(cfg: FileHeaderConfig, batch_number: int) -> str:
@@ -165,8 +184,7 @@ def _build_batch_header(cfg: FileHeaderConfig, batch_number: int) -> str:
         + ODFI                                             # 80-87   ODFI
         + _pad_left(str(batch_number), 7)                  # 88-94   Batch number
     )
-    assert len(rec) == RECORD_LEN, f"Batch header is {len(rec)} chars, expected {RECORD_LEN}"
-    return rec
+    return _require_record_length(rec, f"Batch Header record (batch {batch_number})")
 
 
 def _build_entry_detail(entry: EntryDetail, trace_number: int) -> str:
@@ -205,8 +223,7 @@ def _build_entry_detail(entry: EntryDetail, trace_number: int) -> str:
         + ODFI                                             # 80-87   Trace: ODFI
         + _pad_left(str(trace_number), 7)                  # 88-94   Trace: sequence
     )
-    assert len(rec) == RECORD_LEN, f"Entry detail is {len(rec)} chars, expected {RECORD_LEN}"
-    return rec
+    return _require_record_length(rec, f"Entry Detail record (trace {trace_number})")
 
 
 def _build_batch_control(
@@ -249,8 +266,7 @@ def _build_batch_control(
         + ODFI                                             # 80-87   ODFI
         + _pad_left(str(batch_number), 7)                  # 88-94   Batch number
     )
-    assert len(rec) == RECORD_LEN, f"Batch control is {len(rec)} chars, expected {RECORD_LEN}"
-    return rec
+    return _require_record_length(rec, f"Batch Control record (batch {batch_number})")
 
 
 def _build_file_control(
@@ -286,8 +302,7 @@ def _build_file_control(
         + _pad_left(str(total_credit), 12)                 # 44-55   Total credit
         + " " * 39                                         # 56-94   Reserved
     )
-    assert len(rec) == RECORD_LEN, f"File control is {len(rec)} chars, expected {RECORD_LEN}"
-    return rec
+    return _require_record_length(rec, "File Control record")
 
 
 # ---------------------------------------------------------------------------
@@ -405,11 +420,10 @@ def generate_nacha_file(
         records.append("9" * RECORD_LEN)
 
     # ── Assemble ──────────────────────────────────────────────────────────
-    # Sanity: every record must be exactly 94 characters
+    # Final invariant sweep: every record, including 9-filler lines, must be exactly
+    # 94 characters. Raised rather than asserted so -O cannot strip the check.
     for i, rec in enumerate(records):
-        assert len(rec) == RECORD_LEN, (
-            f"Record {i} has {len(rec)} chars (expected {RECORD_LEN}): {rec!r}"
-        )
+        _require_record_length(rec, f"Record {i} (line {i + 1})")
 
     content = LINE_ENDING.join(records) + LINE_ENDING
 

@@ -20,6 +20,7 @@ from app.main import app
 from app.models import NachaFileRecord, Payment, PaymentStatus, UploadBatch, Vendor
 from app.nacha.generator import generate_nacha_file
 from app.services.nacha_service import combine_batches_and_generate_nacha
+from tests._helpers import valid_effective_date_yymmdd
 
 
 @pytest.mark.asyncio
@@ -107,7 +108,7 @@ async def test_combine_batch1_and_batch2_nacha_generation(db_session):
                 "batch_ids": [b1_id, b2_id],
                 "company_name": "AMIPI INC",
                 "company_account": "785957066",
-                "effective_entry_date": "2026-08-10",
+                "effective_entry_date": valid_effective_date_yymmdd(),
                 "file_id_modifier": "A",
                 "trace_sequence_start": 1,
             },

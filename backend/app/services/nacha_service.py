@@ -11,9 +11,15 @@ from decimal import Decimal
 from typing import Optional
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.business_dates import (
+    default_effective_date,
+    file_creation_stamp,
+    today_bank_time,
+    validate_effective_date,
+)
 from app.models import AuditLog, BatchStatus, NachaFileRecord, Payment, PaymentStatus, UploadBatch, Vendor
 from app.nacha.generator import generate_nacha_file, GenerationResult
 from app.nacha.models import Batch, EntryDetail, FileHeaderConfig, NachaFileInput
@@ -24,25 +30,55 @@ class BatchAlreadyProcessedError(Exception):
 
 
 async def get_next_trace_sequence(db_session: AsyncSession) -> int:
-    """Fetch the auto-incremented starting trace sequence for the next NACHA file."""
-    res = await db_session.execute(
-        select(NachaFileRecord).order_by(NachaFileRecord.created_at.desc())
-    )
-    last_file = res.scalars().first()
-    if not last_file or not last_file.raw_content:
-        return 1
+    """
+    Peek at the next trace sequence WITHOUT consuming it (for display only).
 
-    # Extract trace sequence from the last Entry Detail record (line starting with '6')
-    lines = [l for l in last_file.raw_content.splitlines() if l.startswith("6")]
-    if not lines:
+    Uses ``last_value``/``is_called`` rather than ``nextval`` so calling this to show
+    the operator a preview does not burn a trace number.
+    """
+    row = (await db_session.execute(
+        text("SELECT last_value, is_called FROM nacha_trace_sequence")
+    )).first()
+    if row is None:
         return 1
+    last_value, is_called = row[0], row[1]
+    return int(last_value) + 1 if is_called else int(last_value)
 
-    last_line = lines[-1]
-    try:
-        last_seq = int(last_line[87:94])
-        return last_seq + 1
-    except (ValueError, IndexError):
-        return 1
+
+async def allocate_trace_sequence(db_session: AsyncSession, count: int) -> int:
+    """
+    Atomically reserve ``count`` consecutive trace numbers and return the first.
+
+    Replaces re-parsing the previous file's text, which collided when two generations
+    ran concurrently and silently restarted at 1 whenever the last file was missing or
+    unparseable -- re-issuing trace numbers the bank had already seen.
+
+    ``nextval`` is transaction-safe and never hands the same value to two callers, so
+    no explicit locking is required.
+    """
+    if count <= 0:
+        raise ValueError("Cannot allocate a non-positive number of trace numbers.")
+
+    rows = (await db_session.execute(
+        text("SELECT nextval('nacha_trace_sequence') FROM generate_series(1, :n)"),
+        {"n": count},
+    )).scalars().all()
+
+    allocated = [int(v) for v in rows]
+    first, last = allocated[0], allocated[-1]
+
+    # The trace field is 7 digits (positions 88-94).
+    if last > 9_999_999:
+        raise ValueError(
+            f"Trace sequence {last} exceeds the 7-digit NACHA field. The sequence "
+            f"must be reset in coordination with Chase before further files are sent."
+        )
+    if last - first != count - 1:
+        raise ValueError(
+            f"Trace number allocation was not contiguous ({first}..{last} for "
+            f"{count} entries); refusing to build a file with non-sequential traces."
+        )
+    return first
 
 
 async def combine_batches_and_generate_nacha(
@@ -94,40 +130,41 @@ async def combine_batches_and_generate_nacha(
     if len(set(batch_ids)) != len(batch_ids):
         raise ValueError("The same batch was supplied more than once in batch_ids.")
 
-    # Format dates
-    now = datetime.datetime.now(datetime.timezone.utc)
-    file_date_yymmdd = now.strftime("%y%m%d")
-    file_time_hhmm = now.strftime("%H%M")
+    # File creation date/time in the BANK's timezone (Eastern), not UTC. UTC runs 4-5
+    # hours ahead, so it both wrote the wrong clock time and, after ~20:00 ET, stamped
+    # the following day's date. AMIPI's real Chase files carry Eastern times.
+    file_date_yymmdd, file_time_hhmm = file_creation_stamp()
+    today_et = today_bank_time()
 
-    if isinstance(effective_entry_date, str):
-        # YYYY-MM-DD or YYMMDD
-        eff_str = effective_entry_date.strip().replace("-", "")
-        if len(eff_str) == 8:
-            eff_yymmdd = eff_str[2:]
-        elif len(eff_str) == 6:
-            eff_yymmdd = eff_str
-        else:
-            eff_yymmdd = file_date_yymmdd
+    # ---- Effective entry date -------------------------------------------------
+    # Resolve to a real date first so it can be validated as a banking day. Nothing
+    # previously checked this, and an effective date in the past or on a weekend or
+    # Federal Reserve holiday will not settle.
+    resolved_effective: Optional[datetime.date] = None
+    if isinstance(effective_entry_date, str) and effective_entry_date.strip():
+        raw = effective_entry_date.strip().replace("-", "").replace("/", "")
+        try:
+            if len(raw) == 8:        # YYYYMMDD
+                resolved_effective = datetime.datetime.strptime(raw, "%Y%m%d").date()
+            elif len(raw) == 6:      # YYMMDD
+                resolved_effective = datetime.datetime.strptime(raw, "%y%m%d").date()
+            else:
+                raise ValueError
+        except ValueError:
+            raise ValueError(
+                f"Effective entry date '{effective_entry_date}' is not a valid date. "
+                f"Use YYYY-MM-DD or YYMMDD."
+            )
     elif isinstance(effective_entry_date, datetime.date):
-        eff_yymmdd = effective_entry_date.strftime("%y%m%d")
-    else:
-        eff_yymmdd = file_date_yymmdd
+        resolved_effective = effective_entry_date
 
-    if trace_sequence_start is None or trace_sequence_start <= 0:
-        trace_sequence_start = await get_next_trace_sequence(db_session)
+    if resolved_effective is None:
+        # Default to the next banking day rather than today. The real transmit files
+        # show creation 07/30 -> effective 07/31, i.e. one banking day ahead.
+        resolved_effective = default_effective_date(today_et)
 
-    cfg = FileHeaderConfig(
-        company_name=company_name,
-        company_account=company_account,
-        entry_description=entry_description,
-        effective_entry_date=eff_yymmdd,
-        file_creation_date=file_date_yymmdd,
-        file_creation_time=file_time_hhmm,
-        file_id_modifier=file_id_modifier.upper()[:1],
-        trace_sequence_start=trace_sequence_start,
-    )
-
-
+    validate_effective_date(resolved_effective, reference=today_et)
+    eff_yymmdd = resolved_effective.strftime("%y%m%d")
 
     nacha_batches: list[Batch] = []
     payments_to_update: list[Payment] = []
@@ -189,6 +226,26 @@ async def combine_batches_and_generate_nacha(
             payments_to_update.append(p)
 
         nacha_batches.append(Batch(entries=entries))
+
+    # ---- Trace numbers --------------------------------------------------------
+    # Allocated only now that the exact entry count is known, and reserved atomically
+    # from a database sequence so two concurrent generations cannot receive the same
+    # numbers. An explicit trace_sequence_start is still honoured for the rare case of
+    # deliberately regenerating a file to match one already sent to the bank.
+    total_entries = sum(len(b.entries) for b in nacha_batches)
+    if trace_sequence_start is None or trace_sequence_start <= 0:
+        trace_sequence_start = await allocate_trace_sequence(db_session, total_entries)
+
+    cfg = FileHeaderConfig(
+        company_name=company_name,
+        company_account=company_account,
+        entry_description=entry_description,
+        effective_entry_date=eff_yymmdd,
+        file_creation_date=file_date_yymmdd,
+        file_creation_time=file_time_hhmm,
+        file_id_modifier=file_id_modifier.upper()[:1],
+        trace_sequence_start=trace_sequence_start,
+    )
 
     # Invoke Phase 1 Core NACHA generator
     input_spec = NachaFileInput(header=cfg, batches=nacha_batches)

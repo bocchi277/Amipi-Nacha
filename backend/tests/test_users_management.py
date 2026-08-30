@@ -15,6 +15,7 @@ import uuid
 import pytest
 from httpx import ASGITransport, AsyncClient
 from app.main import app
+from tests._helpers import create_admin_user, create_standard_user
 
 
 _RUN_ID = uuid.uuid4().hex[:6]
@@ -42,8 +43,9 @@ async def test_user_management_access_control(db_session):
     """Verify standard user and unauthenticated access to /users is blocked."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         # Register admin & standard user
-        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD})
-        await client.post("/api/v1/auth/register", json={"email": STD_EMAIL, "username": STD_USER, "password": STD_PASSWORD})
+        # Registration is administrator-only now, so provision both accounts directly.
+        await create_admin_user(db_session, username=ADMIN_USER, email=ADMIN_EMAIL, password=ADMIN_PASSWORD)
+        await create_standard_user(db_session, username=STD_USER, email=STD_EMAIL, password=STD_PASSWORD)
 
         # 1. Unauthenticated request -> 401
         res = await client.get("/api/v1/users")
@@ -59,7 +61,7 @@ async def test_user_management_access_control(db_session):
 async def test_admin_user_crud_and_status(db_session):
     """Verify admin user listing, creation, status toggle, and password reset."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD})
+        await create_admin_user(db_session, username=ADMIN_USER, email=ADMIN_EMAIL, password=ADMIN_PASSWORD)
         admin_token = await _get_auth_token(client, ADMIN_USER, ADMIN_PASSWORD)
         headers = {"Authorization": f"Bearer {admin_token}"}
 

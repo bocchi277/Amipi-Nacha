@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.db.session import get_async_db
 from app.models import User
 from app.services.nacha_service import BatchAlreadyProcessedError, combine_batches_and_generate_nacha
@@ -50,7 +50,7 @@ class NachaFileResponse(BaseModel):
 @router.get("/next-trace-sequence", status_code=status.HTTP_200_OK)
 async def get_next_trace_sequence_endpoint(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    admin_user: User = Depends(require_admin),
 ):
     """Fetch the next auto-incremented starting trace sequence number."""
     from app.services.nacha_service import get_next_trace_sequence
@@ -61,9 +61,14 @@ async def get_next_trace_sequence_endpoint(
 @router.get("/latest", response_model=NachaFileResponse, status_code=status.HTTP_200_OK)
 async def get_latest_nacha_file_endpoint(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    admin_user: User = Depends(require_admin),
 ):
-    """Fetch the most recently generated NACHA file record from the database."""
+    """
+    Fetch the most recently generated NACHA file record.
+
+    Admin-only: the response includes ``raw_content``, i.e. the complete ACH file
+    containing every vendor's routing and account number.
+    """
     from sqlalchemy import select
     from app.models import NachaFileRecord
 
@@ -147,9 +152,13 @@ async def generate_nacha_file_endpoint(
 async def download_nacha_file(
     file_id: str,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    admin_user: User = Depends(require_admin),
 ):
-    """Download generated NACHA file as a .txt attachment."""
+    """
+    Download generated NACHA file as a .txt attachment.
+
+    Admin-only: the file contains full bank details for every payee in the batch.
+    """
     from fastapi.responses import Response
     from sqlalchemy import select
     from app.models import NachaFileRecord
