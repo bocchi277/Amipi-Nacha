@@ -594,7 +594,51 @@ code, pre {
 }
 .data-table td,
 .table-responsive .table td {
+  /*
+   * `break-word`, NOT `anywhere`.
+   *
+   * `overflow-wrap: anywhere` lets a cell's MINIMUM width fall to a single character, and
+   * an auto-layout table honours that. On the Audit Trail, where one cell holds a very
+   * long payload, the browser gave that cell nearly all the width and squeezed Timestamp,
+   * User and Target Entity down to one character per line - the text rendered vertically.
+   *
+   * `break-word` keeps each cell's minimum at its longest word, so no column can be
+   * starved that way, while still breaking a word that genuinely cannot fit.
+   */
+  overflow-wrap: break-word;
+}
+
+/*
+ * The audit payload is the one cell allowed to break mid-token, so it can absorb the
+ * slack instead of a single long entry dictating every other column's width.
+ */
+.data-table td[data-label="Details"],
+.table-responsive .table td[data-label="Details"] {
   overflow-wrap: anywhere;
+}
+
+/*
+ * Keeping short structured values on one line is a nicety, so it only applies where there
+ * is room. Below this width these minimums would exceed the container and bring back a
+ * horizontal scrollbar; letting them wrap is safe because `overflow-wrap: break-word`
+ * holds each cell's minimum at its longest word, so no column can collapse to a single
+ * character the way it did with `anywhere`.
+ */
+@media (min-width: 1280px) {
+  .data-table td[data-label="Timestamp"],
+  .data-table td[data-label="User"],
+  .data-table td[data-label="Action"],
+  .data-table td[data-label="Entity"],
+  .table-responsive .table td[data-label="Timestamp"],
+  .table-responsive .table td[data-label="User"],
+  .table-responsive .table td[data-label="Action"],
+  .table-responsive .table td[data-label="Entity"] {
+    white-space: nowrap;
+  }
+  .data-table td[data-label="Details"],
+  .table-responsive .table td[data-label="Details"] {
+    min-width: 18rem;
+  }
 }
 
 /*
@@ -1048,8 +1092,12 @@ textarea:focus-visible,
 .card,
 .vendor-card,
 .data-table td {
+  /*
+   * `word-break: break-word` is deliberately NOT used here: it behaves like
+   * `overflow-wrap: anywhere`, which lets a table cell's minimum width fall to one
+   * character and let the Audit Trail render its columns vertically.
+   */
   overflow-wrap: break-word;
-  word-break: break-word;
 }
 
 /*
@@ -1088,7 +1136,12 @@ textarea:focus-visible,
  * This applies to `.stack-on-mobile` only, so tables whose columns are meant to be read
  * across (the manual payment entry grid) keep their layout.
  */
-@media (max-width: 768px) {
+/*
+ * 1100px, not 768px: these tables carry up to nine columns plus a group of row action
+ * buttons, and between roughly 770px and 1100px they still could not fit and fell back to
+ * a horizontal scrollbar. Stacking is more readable there than a squeezed table.
+ */
+@media (max-width: 1100px) {
   .stack-on-mobile thead {
     display: none;
   }
