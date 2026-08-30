@@ -15,6 +15,7 @@ from app.api.v1.remittances import router as remittances_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vendors import router as vendors_router
 from app.config import settings
+from app.core.request_context import resolve_client_ip, set_client_ip
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,6 +119,9 @@ async def add_security_headers(request, call_next):
     response, defeating the allowlist above, and (b) returned `str(exc)` to the
     client on any unhandled exception, leaking schema details and internal state.
     """
+    # Make the caller's IP available to audit logging for this request.
+    set_client_ip(resolve_client_ip(request))
+
     try:
         response = await call_next(request)
     except Exception:

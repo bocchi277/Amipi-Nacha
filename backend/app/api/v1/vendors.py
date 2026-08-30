@@ -464,6 +464,29 @@ async def create_vendor(
         is_active=True,
     )
     db.add(vendor)
+    await db.flush()
+
+    # Creating a vendor establishes where money will be sent, so it must be
+    # attributable. Only vendor UPDATES were audited previously, leaving the initial
+    # creation of a bank account completely untracked.
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="VENDOR_CREATED",
+            entity_type="Vendor",
+            entity_id=str(vendor.id),
+            details={
+                "vendor_name": vendor.name,
+                "created_by": current_user.username,
+                "routing_number": rt,
+                # Account number is masked: the audit trail is broadly readable by
+                # admins and should not become a second copy of full bank details.
+                "account_number_last4": acc[-4:] if len(acc) >= 4 else acc,
+                "account_type": _val(vendor.account_type),
+            },
+        )
+    )
+
     await db.commit()
     await db.refresh(vendor)
 

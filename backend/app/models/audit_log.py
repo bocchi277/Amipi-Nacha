@@ -3,7 +3,7 @@ Audit Log ORM model.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, event, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,3 +30,18 @@ class AuditLog(Base):
 
     # Relationships
     user = relationship("User", back_populates="audit_logs")
+
+
+@event.listens_for(AuditLog, "before_insert")
+def _stamp_client_ip(mapper, connection, target: "AuditLog") -> None:
+    """
+    Fill ip_address from the current request context.
+
+    Applied as a mapper event so every AuditLog call site is covered by one change
+    rather than requiring a Request to be threaded through each service function.
+    An explicitly supplied value is respected.
+    """
+    if target.ip_address is None:
+        from app.core.request_context import get_client_ip
+
+        target.ip_address = get_client_ip()

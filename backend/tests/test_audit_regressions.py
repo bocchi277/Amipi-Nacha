@@ -283,6 +283,112 @@ async def test_deduplicate_merges_by_bank_details_not_only_name(db_session):
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Audit trail integrity
+# ---------------------------------------------------------------------------
+
+@pytest.mark.real_auth
+@pytest.mark.asyncio
+async def test_audit_log_rows_cannot_be_altered_or_deleted(db_session):
+    """
+    Risk: the README advertised append-only audit logs "via DB triggers", but no
+    trigger existed and any UPDATE or DELETE on audit_logs succeeded. For a payments
+    audit trail that is the difference between evidence and a suggestion.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError, IntegrityError
+
+    await db_session.execute(text(
+        "INSERT INTO audit_logs (id, action, entity_type, details) "
+        "VALUES ('22222222-2222-2222-2222-222222222222', 'IMMUTABLE_PROBE', "
+        "'Test', '{\"v\": 1}'::jsonb)"
+    ))
+    await db_session.commit()
+
+    for statement, label in [
+        ("UPDATE audit_logs SET action = 'TAMPERED' "
+         "WHERE id = '22222222-2222-2222-2222-222222222222'", "action change"),
+        ("UPDATE audit_logs SET details = '{\"v\": 999}'::jsonb "
+         "WHERE id = '22222222-2222-2222-2222-222222222222'", "details change"),
+        ("DELETE FROM audit_logs "
+         "WHERE id = '22222222-2222-2222-2222-222222222222'", "deletion"),
+    ]:
+        with pytest.raises((DBAPIError, IntegrityError)) as exc:
+            await db_session.execute(text(statement))
+            await db_session.commit()
+        assert "append-only" in str(exc.value), (
+            f"{label} was not blocked by the immutability trigger: {exc.value}"
+        )
+        await db_session.rollback()
+
+    # The row must still be intact and unmodified.
+    row = (await db_session.execute(text(
+        "SELECT action, details FROM audit_logs "
+        "WHERE id = '22222222-2222-2222-2222-222222222222'"
+    ))).first()
+    assert row is not None, "audit row was deleted despite the trigger"
+    assert row[0] == "IMMUTABLE_PROBE"
+    assert row[1] == {"v": 1}
+
+
+@pytest.mark.real_auth
+@pytest.mark.asyncio
+async def test_audit_entries_record_originating_ip_address(db_session):
+    """
+    Risk: AuditLog.ip_address existed and the README claimed IP tracking, but no code
+    ever populated it, so the audit trail could not answer where a suspicious
+    bank-detail change came from.
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.models import AuditLog
+
+    transport = ASGITransport(app=app, client=("203.0.113.99", 5555))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        headers = await _admin_headers(client, db_session, "ipaudit")
+        res = await client.post("/api/v1/vendors", headers=headers, json={
+            "name": "IP AUDIT VENDOR", "routing_number": "021000021",
+            "account_number": "556677889", "account_type": "checking"})
+        assert res.status_code == 201, res.text
+
+    rows = (await db_session.execute(
+        sa_select(AuditLog).where(AuditLog.action == "VENDOR_CREATED")
+    )).scalars().all()
+    assert rows, "creating a vendor must write an audit entry"
+    assert rows[0].ip_address == "203.0.113.99", (
+        f"expected the caller IP to be recorded, got {rows[0].ip_address!r}"
+    )
+    # Full bank account numbers must not be duplicated into the audit trail.
+    details = rows[0].details or {}
+    assert "account_number" not in details
+    assert details.get("account_number_last4") == "7889"
+
+
+@pytest.mark.real_auth
+@pytest.mark.asyncio
+async def test_proxy_forwarded_ip_is_preferred_over_socket_peer(db_session):
+    """Behind Render/Netlify the socket peer is the proxy, not the caller."""
+    from sqlalchemy import select as sa_select
+
+    from app.models import AuditLog
+
+    transport = ASGITransport(app=app, client=("10.0.0.1", 1))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        headers = await _admin_headers(client, db_session, "fwdip")
+        res = await client.post(
+            "/api/v1/vendors",
+            headers={**headers, "X-Forwarded-For": "198.51.100.23, 10.0.0.1"},
+            json={"name": "FWD AUDIT VENDOR", "routing_number": "021000021",
+                  "account_number": "334455667", "account_type": "checking"},
+        )
+        assert res.status_code == 201, res.text
+
+    rows = (await db_session.execute(
+        sa_select(AuditLog).where(AuditLog.action == "VENDOR_CREATED")
+    )).scalars().all()
+    assert rows[0].ip_address == "198.51.100.23", rows[0].ip_address
+
+
+# ---------------------------------------------------------------------------
 # Vendor name matching (misrouting)
 # ---------------------------------------------------------------------------
 
