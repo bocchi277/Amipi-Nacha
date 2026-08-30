@@ -28,6 +28,12 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Validate the connection string before app.db.session builds its engines.
+from _db_preflight import require_database_url  # noqa: E402
+
+require_database_url()
 
 from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402

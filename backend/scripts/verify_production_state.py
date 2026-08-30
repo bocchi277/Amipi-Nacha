@@ -18,6 +18,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Validate the connection string BEFORE importing app.db.session, which builds its
+# engines at import time and would otherwise fail with a SQLAlchemy stack trace.
+from _db_preflight import report, require_database_url  # noqa: E402
+
+_DB_URL = require_database_url()
 
 from sqlalchemy import text  # noqa: E402
 
@@ -44,6 +51,7 @@ async def main() -> int:
         print("=" * 66)
         print(" SCHEMA")
         print("=" * 66)
+        report(_DB_URL)
 
         version = (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar()
         ok = version == EXPECTED_HEAD
@@ -193,5 +201,27 @@ async def main() -> int:
     return 1 if problems else 0
 
 
+def _run() -> int:
+    try:
+        return asyncio.run(main())
+    except Exception as exc:  # connection problems, not schema problems
+        name = type(exc).__name__
+        print()
+        print("=" * 66)
+        print(" COULD NOT REACH THE DATABASE")
+        print("=" * 66)
+        print(f" {name}: {str(exc).splitlines()[0][:200] if str(exc) else '(no detail)'}")
+        print()
+        print(" The connection string parsed correctly, so this is connectivity, not")
+        print(" formatting. Common causes:")
+        print("   - Using Render's INTERNAL URL from outside Render. Use the")
+        print("     'External Database URL' for a local run.")
+        print("   - The free Postgres instance is suspended or still starting.")
+        print("   - SSL required. Append '?ssl=require' for asyncpg.")
+        print("   - Outbound port 5432 blocked by your network.")
+        print("=" * 66)
+        return 3
+
+
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    raise SystemExit(_run())
