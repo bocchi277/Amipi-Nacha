@@ -88,6 +88,36 @@ def _parse_date(value: Any) -> Optional[date]:
 # NACHA Entry Detail "Individual Identification Number" field width (positions 40-54).
 _ID_FIELD_WIDTH = 15
 
+# The human-readable reference kept in the database and shown in the UI may exceed the
+# bank field: app/nacha/id_field.py strips and truncates it when the file is written.
+_READABLE_REFERENCE_MAX = 80
+
+
+def _is_account_number_bleed(candidate: Any, account_number: str) -> bool:
+    """
+    True when a supposed invoice number is really the vendor's account number.
+
+    QuickBooks exports and hand-maintained sheets sometimes carry the bank account in
+    the reference column. Writing that into the NACHA ID field is wrong twice over: the
+    vendor learns nothing about which invoice was paid, and the account number is
+    duplicated into a second field of the file.
+
+    Mirrors the v7 prototype: only purely numeric candidates of 6 or more digits are
+    considered, and only when the account number STARTS WITH the candidate. The length
+    floor stops short invoice numbers like "1139" from being discarded, and requiring a
+    prefix match avoids rejecting the legitimate account-tail convention (the last 4-5
+    digits) that AMIPI uses when no invoice reference exists.
+    """
+    ref = str(candidate or "").strip()
+    account = str(account_number or "").strip()
+    if not ref or not account:
+        return False
+    if not ref.isdigit():
+        return False
+    if len(ref) < 6:
+        return False
+    return account.startswith(ref)
+
 
 def _compress_invoices(invoice_list: list[str]) -> str:
     """
@@ -140,9 +170,15 @@ def _compress_invoices(invoice_list: list[str]) -> str:
     if len(plain) <= _ID_FIELD_WIDTH:
         return plain
 
-    # 4. Explicit "first + N more" marker.
-    marker = f"+{len(unique) - 1}"
-    return unique[0][: _ID_FIELD_WIDTH - len(marker)] + marker
+    # 4. Nothing fits. Return the full readable reference anyway and let the record
+    #    builder decide what reaches the file.
+    #
+    #    An earlier revision emitted an invented "875886+2" marker here. No such value
+    #    appears anywhere in AMIPI's real Chase files -- all 97 ID fields are purely
+    #    alphanumeric -- so it would have broken byte parity with the tool this
+    #    replaces. The complete invoice list is preserved in the payment's
+    #    invoice_breakdown and on the remittance advice either way.
+    return plain[:_READABLE_REFERENCE_MAX]
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +478,11 @@ def _parse_qb_excel(
     name_col = col_map.get("name", 8)
     amt_col = col_map.get("amount", 14)
 
+    # Rows carrying an amount but no vendor context at all. Previously ignored in
+    # silence, which meant money present in the export could vanish from the batch
+    # without anyone being told.
+    orphan_rows: list[dict[str, Any]] = []
+
     for r in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
         first_val = str(row_vals[0] or "").strip().upper()
@@ -534,6 +575,9 @@ def _parse_qb_excel(
                     "invoice_number": row_num,
                     "amount": sub_amt,
                     "invoice_date": sub_date,
+                    # Transaction type is retained so Advance entries (e.g. casting
+                    # orders) can be recognised later; they carry no invoice reference.
+                    "transaction_type": row_type,
                 })
             if row_amt is not None and row_type.lower() == "bill":
                 current_amount += abs(row_amt)
@@ -550,13 +594,32 @@ def _parse_qb_excel(
                     "invoice_number": row_num,
                     "amount": sub_amt,
                     "invoice_date": sub_date,
+                    "transaction_type": row_type,
                 })
+
+        # Orphan row: an amount with neither a vendor name nor a transaction type,
+        # and no vendor block currently open to attach it to.
+        if not row_name and not row_type and current_vendor is None and row_amt and abs(row_amt) > 0:
+            orphan_rows.append({"row": r, "amount": str(abs(row_amt))})
 
     # Process trailing block if file ends without explicit TOTAL row
     if current_vendor and current_amount > 0:
         _process_qb_vendor_block(
             ws.max_row, current_vendor, abs(current_amount), current_invoices, current_date,
             vendor_map, default_effective_date, result
+        )
+
+    for orphan in orphan_rows:
+        result.errors.append(
+            ParsedRowError(
+                row_number=orphan["row"],
+                raw_data=orphan,
+                errors=[
+                    f"Row {orphan['row']} carries an amount of {orphan['amount']} but no "
+                    f"vendor could be associated with it. It has been EXCLUDED from the "
+                    f"batch - check the spreadsheet layout so this payment is not lost."
+                ],
+            )
         )
 
     return result
@@ -601,12 +664,39 @@ def _process_qb_vendor_block(
     if row_errors:
         result.errors.append(ParsedRowError(row_number=row_idx, raw_data=raw_info, errors=row_errors))
     else:
+        vendor_account = str(getattr(v_obj, "account_number", "") or "")
+
         filtered_invoices = [
             inv for inv in invoices
-            if isinstance(inv, dict) and inv.get("invoice_number", "").upper() not in ("ACH", "CHECK", "EFT", "PMT", "PAYMENT", "BILL PMT -CHECK", "BILL PMT")
+            if isinstance(inv, dict) and inv.get("invoice_number", "").upper() not in (
+                "ACH", "CHECK", "EFT", "PMT", "PAYMENT", "BILL PMT -CHECK", "BILL PMT"
+            )
         ]
-        inv_nums = [inv["invoice_number"] for inv in filtered_invoices]
+
+        # "Advance" entries (e.g. LA BELLE casting orders) are prepayments with no
+        # invoice to reference, so they must not borrow a number from elsewhere.
+        types = [
+            str(inv.get("transaction_type") or "").strip().lower()
+            for inv in filtered_invoices
+        ]
+        all_advance = bool(types) and all(t == "advance" for t in types)
+
+        if all_advance:
+            inv_nums: list[str] = []
+        else:
+            inv_nums = [
+                inv["invoice_number"] for inv in filtered_invoices
+                if not _is_account_number_bleed(inv.get("invoice_number", ""), vendor_account)
+            ]
+
         id_ref = _compress_invoices(inv_nums)
+
+        # Final guard: if what survived still looks like the account number rather than
+        # an invoice reference, drop it. Writing account digits into the reference field
+        # tells the vendor nothing and leaks the account into a second field.
+        if _is_account_number_bleed(id_ref, vendor_account):
+            id_ref = "EPAY"
+
         breakdown_list = filtered_invoices if len(filtered_invoices) > 0 else None
 
         result.valid_payments.append(

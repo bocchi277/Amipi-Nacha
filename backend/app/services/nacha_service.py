@@ -22,6 +22,7 @@ from app.core.business_dates import (
 )
 from app.models import AuditLog, BatchStatus, NachaFileRecord, Payment, PaymentStatus, UploadBatch, Vendor
 from app.nacha.generator import generate_nacha_file, GenerationResult
+from app.nacha.id_field import nacha_id_field
 from app.nacha.models import Batch, EntryDetail, FileHeaderConfig, NachaFileInput
 
 
@@ -217,7 +218,11 @@ async def combine_batches_and_generate_nacha(
                     routing_number=vendor.routing_number,
                     account_number=vendor.account_number,
                     amount=str(p.amount),
-                    id_number=p.id_number or "EPAY",
+                    # The stored id_number is the human-readable reference (it may
+                    # contain '/' separators for multi-invoice payments). Chase files
+                    # contain ONLY alphanumerics in this field, so derive the written
+                    # value here rather than passing the display form through.
+                    id_number=nacha_id_field(p.id_number, vendor.account_number),
                     receiver_name=vendor.name[:22],
                     discretionary_data="  ",
                     addenda_indicator="0",

@@ -14,7 +14,8 @@ An enterprise-grade B2B payment generation, validation, and security management 
 - **Spreadsheet Ingestion**:
   - Parses Excel (`.xlsx`) and CSV payment files, plus grouped QuickBooks report exports, with per-row validation (ABA routing check digit, SEC code whitelisting, account type validation).
   - Vendor names resolve by exact match → curated alias map → punctuation-insensitive match → scored word overlap. Genuinely ambiguous names are reported as row errors rather than guessed, because guessing means paying the wrong bank account.
-  - Multiple invoices per vendor are merged into one entry and compressed into the 15-character NACHA ID field (`UDI261954/65/55`) without losing invoice identity.
+  - Multiple invoices per vendor are merged into one entry. The database keeps a readable reference (`UDI261954/65/55`); the 15-character NACHA ID field is derived from it by `app/nacha/id_field.py`, which strips to alphanumerics because **all 97 ID fields in AMIPI's real transmit files are purely alphanumeric**. With no invoice reference the field falls back to the last 5 digits of the account, the dominant convention in those files (26 of 46 numeric cases; 12 use the last 4).
+  - Invoice numbers that are really the vendor's account number are detected and discarded, `Advance` entries carry no invoice reference, and rows with an amount but no vendor are reported rather than silently dropped.
 - **Duplicate Transaction Defense**:
   - Deterministic SHA-256 fingerprint hashing flags duplicate payments across historical batches with explicit manual override.
   - Batches already written into a generated file cannot be reused, and payments in a generated file are immutable.
@@ -30,7 +31,7 @@ An enterprise-grade B2B payment generation, validation, and security management 
   - Roles are server-assigned; self-registration cannot grant administrator access.
   - Login throttling, CORS allowlist, CSP and related response headers, and HTML escaping on all rendered database values.
 - **Automated Testing Suite**:
-  - **169 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
+  - **185 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
   - **41 Playwright E2E test cases** in `frontend/tests/` validating user journeys, admin approvals, and file downloads.
   - **5 live browser verification tests** in `backend/tests_live/` (opt-in; excluded from the default run).
 
@@ -48,7 +49,7 @@ FirstProject/
 │   │   ├── db/               # Async Engine & Session management
 │   │   ├── models/           # SQLAlchemy ORM models (User, Vendor, Payment, NachaFile, AuditLog)
 │   │   └── services/         # NACHA generation, spreadsheet parsing, email remittance
-│   ├── tests/                # 169 hermetic Pytest cases (run by default)
+│   ├── tests/                # 185 hermetic Pytest cases (run by default)
 │   ├── tests_live/           # Opt-in browser tests against a running server
 │   ├── alembic.ini
 │   ├── pytest.ini
@@ -100,9 +101,16 @@ export SECRET_KEY="<a long random value>"
 export BANK_DETAILS_ENCRYPTION_KEY="<a long random value>"
 ```
 
-> **Both secrets have insecure built-in defaults and the app warns loudly at startup if they are unset.**
-> `SECRET_KEY` signs JWTs — leaving it at the default allows token forgery.
-> `BANK_DETAILS_ENCRYPTION_KEY` encrypts vendor routing/account numbers at rest. **Changing it makes existing encrypted rows unreadable**, so set it before entering data and rotate only via a re-encryption migration.
+> **`BANK_DETAILS_ENCRYPTION_KEY` is REQUIRED — the app refuses to start without it.** It has no default, because the previous built-in default was committed to source control and could decrypt any database dump. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+>
+> `SECRET_KEY` signs JWTs; leaving it at the built-in default allows token forgery, and the app warns loudly at startup.
+>
+> **Rotating the encryption key** requires a fallback window, because changing it outright makes every existing row unreadable:
+> 1. Set the new key, and put the old one in `BANK_DETAILS_ENCRYPTION_KEY_FALLBACKS` (comma separated, decrypt-only).
+> 2. Run `python scripts/rotate_encryption_key.py --dry-run`, then without the flag.
+> 3. Remove the old key from the fallback list.
+>
+> Deployments migrating off the old built-in default pass that value as the fallback. The script never overwrites a value it cannot first decrypt.
 
 Run migrations and start the server:
 ```bash
@@ -114,10 +122,11 @@ API documentation: `http://127.0.0.1:8099/api/v1/docs`
 The frontend is served by the same process at `http://127.0.0.1:8099`.
 
 ### 3. Create the first administrator
-Self-registration always creates a standard user, so provision the first admin directly:
+**There is no public registration.** `POST /api/v1/auth/register` is administrator-only, because leaving it open meant anyone on the internet could create an account, and an account was enough to read vendor bank details. Provision the first admin directly:
 ```bash
 python scripts/create_user.py        # follow the prompts
 ```
+Thereafter administrators create accounts via the Admin panel, `POST /api/v1/auth/register`, or `POST /api/v1/users` (which can also grant the admin role).
 
 ### 4. Frontend (standalone, optional)
 ```bash
@@ -130,12 +139,13 @@ When served separately, add its origin to `ALLOWED_ORIGINS`.
 
 ## 🧪 Running Automated Tests
 
-### Backend (169 tests)
+### Backend (185 tests)
 ```bash
 cd backend
 export DATABASE_URL="postgresql+asyncpg://amipi:amipipass@localhost:5432/amipi_ach_test"
 export SYNC_DATABASE_URL="postgresql+psycopg2://amipi:amipipass@localhost:5432/amipi_ach_test"
 export SECRET_KEY="test-secret"
+export BANK_DETAILS_ENCRYPTION_KEY="any-value-for-local-testing"
 alembic upgrade head
 pytest
 ```
@@ -160,16 +170,17 @@ pytest tests_live/test_live_ui_verification.py -v
 ## 🔒 Security Notes
 
 - **OAuth2 + JWT authentication** with role-based access control (`user` vs `admin`). Roles are assigned server-side only.
-- **Encrypted bank data at rest** via Fernet. Because Fernet is non-deterministic, bank-detail lookups compare decrypted values in memory rather than in SQL.
+- **Encrypted bank data at rest** via Fernet (`MultiFernet`, so keys can be rotated). Because Fernet is non-deterministic, bank-detail lookups compare decrypted values in memory rather than in SQL.
+- **Bank details are masked for non-administrators.** `GET /vendors` returns only the last 4 digits to standard users and sets `bank_details_masked`. Endpoints that return a whole ACH file (`/nacha/latest`, `/nacha/{id}/download`) are admin-only.
+- **Banking calendar**: effective entry dates are validated against the Federal Reserve holiday schedule and default to the next banking day. Past dates, weekends and holidays are rejected.
+- **Trace numbers** come from a PostgreSQL sequence, allocated atomically, so concurrent generation cannot produce duplicates.
 - **Login throttling**: 8 failed attempts per (IP, username) per 5 minutes, then HTTP 429. In-process — move to a shared store if running multiple workers.
 - **Injection defenses**: parameterised queries via SQLAlchemy, HTML escaping on all rendered database values, CSV formula escaping.
 - **Response headers**: CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, and HSTS over HTTPS.
 - **CORS**: explicit allowlist, configurable via `ALLOWED_ORIGINS`.
 
 ### Known limitations
-- Vendor list responses return full decrypted bank details to any authenticated user; per-role masking is not yet implemented.
 - Remittance email delivery is **not wired to SMTP** — `send_single_remittance` marks records as sent without dispatching mail. Vendors without an email address are skipped and recorded in the audit log rather than being sent to a fabricated address.
-- NACHA effective dates are not validated against a banking-holiday calendar, and the trace sequence is derived by parsing the previous file rather than from a database sequence (concurrent generation could collide).
 - `SAMPLE_VENDORS` is reference data derived from historical transmit files. Two payees (`KIRA JEWELS INC`, `TWINKLEDIAM INC.`) are deliberately excluded because their bank details could not be verified. **Always confirm against AMIPI's bank records before generating a live payment file.**
 
 ---

@@ -572,19 +572,14 @@ def test_invoice_compression_retains_every_invoice_number():
     assert _compress_invoices(["INV-9", "INV-9"]) == "INV-9"
 
 
-def test_invoice_compression_signals_overflow_instead_of_silent_truncation():
+def test_written_nacha_id_field_never_exceeds_the_bank_field_width():
     """
-    When unrelated long invoice numbers genuinely cannot fit in 15 characters the
-    field must make it EXPLICIT that more invoices are covered, instead of looking
-    like a single-invoice payment. The full list stays in `invoice_breakdown`.
+    The stored reference is deliberately readable and may exceed 15 characters; the
+    value WRITTEN TO THE FILE must not. That truncation lives in app.nacha.id_field,
+    not in the compression helper.
     """
-    got = _compress_invoices(["875886", "2425708", "876153"])
-    assert len(got) <= 15
-    assert got.startswith("875886")
-    assert got.endswith("+2"), f"must signal 2 further invoices, got {got!r}"
+    from app.nacha.id_field import nacha_id_field
 
-
-def test_invoice_compression_never_exceeds_the_nacha_field_width():
     cases = [
         ["UDI261954", "UDI261965", "UDI261955"],
         ["SI-5872", "SI-5919", "SI-5871"],
@@ -593,8 +588,10 @@ def test_invoice_compression_never_exceeds_the_nacha_field_width():
         ["INVOICE-2026-000001", "INVOICE-2026-000002"],
     ]
     for invoices in cases:
-        got = _compress_invoices(invoices)
-        assert len(got) <= 15, f"{invoices} -> {got!r} is {len(got)} chars"
+        reference = _compress_invoices(invoices)
+        written = nacha_id_field(reference, "918025393")
+        assert len(written) <= 15, f"{invoices} -> {written!r} is {len(written)} chars"
+        assert written.isalnum(), f"{invoices} -> {written!r} is not alphanumeric"
 
 
 def test_single_invoice_is_passed_through_unchanged():

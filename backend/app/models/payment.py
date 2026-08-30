@@ -33,7 +33,10 @@ class Payment(Base):
         UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True, index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    id_number: Mapped[str] = mapped_column(String(15), nullable=False)  # Invoice ref or derived ID
+    # Human-readable invoice reference, which may list several invoices with
+    # separators (e.g. "UDI261954/65/55"). The 15-character value actually written to
+    # the NACHA file is derived from this by app.nacha.id_field at generation time.
+    id_number: Mapped[str] = mapped_column(String(80), nullable=False)
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     invoice_breakdown: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[PaymentStatus] = mapped_column(
