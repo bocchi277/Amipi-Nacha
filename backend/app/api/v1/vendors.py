@@ -135,31 +135,57 @@ def _val(x):
     return x.value if hasattr(x, "value") else str(x)
 
 
+# ---------------------------------------------------------------------------
+# Reference vendor data
+# ---------------------------------------------------------------------------
+# DERIVED FROM AMIPI's ACTUAL CHASE TRANSMIT FILES (ACH Thru Treasury Soft/*.txt)
+# by decoding the routing/account fields of each type-6 Entry Detail record.
+#
+# WHY THIS IS ANNOTATED: the previous hardcoded values were mis-transcribed from the
+# wrong spreadsheet columns -- 13 of 33 entries carried the WRONG routing and/or
+# account number, several of them built out of digits taken from the invoice
+# reference field. Every one of those wrong routing numbers still passed ABA
+# check-digit validation, so no validation in this system could ever have caught it.
+# Seeding that data and generating a file would have sent money to wrong accounts.
+#
+# Two entries were REMOVED rather than guessed, because they cannot be verified
+# against any transmit file:
+#   * "KIRA JEWELS INC"  - the files contain a payee named "KIRA" (026013356 /
+#     ...8846). Whether these are the same legal entity needs AMIPI confirmation.
+#   * "TWINKLEDIAM INC."  - the files contain "TWINKELEDIAM, INC.", a different
+#     spelling; the mapping needs AMIPI confirmation.
+# Add them through the reviewed bulk-import flow once confirmed.
+#
+# NOTE: "LAB GROWN DIAMOND USA" appears with two different accounts across the
+# files; the most recent (07.16.2026) is used here.
+#
+# This list is locked to the transmit files by
+# tests/test_vendor_master_data.py, so it cannot silently drift again.
+# It is REFERENCE data for setup convenience -- always confirm against AMIPI's bank
+# records before generating a live payment file.
 SAMPLE_VENDORS = [
-    {"name": "ARTN DESIGN INC", "routing": "021000021", "account": "11391039"},
-    {"name": "B. H. C. DIAMONDS", "routing": "021000322", "account": "3761810589"},
-    {"name": "BRINKS GLOBLE SERVICES", "routing": "021000021", "account": "85016029033"},
+    {"name": "ARTN DESIGN INC", "routing": "021000021", "account": "918025393"},  # corrected from transmit file 07.30.2026
+    {"name": "B. H. C. DIAMONDS", "routing": "021000021", "account": "182810850"},  # corrected from transmit file 07.30.2026
+    {"name": "BRINKS GLOBLE SERVICES", "routing": "011900254", "account": "385016029033"},  # corrected from transmit file 07.16.2026
     {"name": "BELGIUM DIA LLC", "routing": "021000322", "account": "483110589481"},
     {"name": "BELGIUM NEW YORK LLC", "routing": "026009768", "account": "1330546"},
-    {"name": "BRILLIANT ART LTD.", "routing": "021000021", "account": "881733008"},
+    {"name": "BRILLIANT ART LTD.", "routing": "021000089", "account": "6881733008"},  # corrected from transmit file 07.02.2026
     {"name": "DHARM INTERNATIONAL LLC", "routing": "026009768", "account": "1355284"},
-    {"name": "DIAMEX INC", "routing": "026013356", "account": "106920399"},
-    {"name": "DIAMOND DAYS PROMOTION", "routing": "021000322", "account": "25789107"},
+    {"name": "DIAMEX INC", "routing": "026013673", "account": "4424759954"},  # corrected from transmit file 07.30.2026
+    {"name": "DIAMOND DAYS PROMOTION", "routing": "021000021", "account": "756311460"},  # corrected from transmit file 07.30.2026
     {"name": "DISONS GEMS INC", "routing": "026013576", "account": "1504846772"},
-    {"name": "FENIX DIAMONDS LLC", "routing": "021000021", "account": "795192196"},
+    {"name": "FENIX DIAMONDS LLC", "routing": "021000089", "account": "6795192196"},  # corrected from transmit file 07.30.2026
     {"name": "FOREVER GROWN DIAMONDS", "routing": "021000322", "account": "483107296800"},
     {"name": "KGK DIAMONDS USA", "routing": "026013356", "account": "0399027203"},
     {"name": "KGS JEWELS", "routing": "021000322", "account": "483059162859"},
-    {"name": "KIRA JEWELS INC", "routing": "026013356", "account": "3231970399"},
     {"name": "KIRAN GEMS USA INC", "routing": "026013356", "account": "0399016945"},
-    {"name": "LAB GROWN DIAMOND USA", "routing": "021000322", "account": "483110589436"},
+    {"name": "LAB GROWN DIAMOND USA", "routing": "021000021", "account": "785019693"},  # corrected from transmit file 07.16.2026
     {"name": "MC PRODUCTION US LLC", "routing": "021202337", "account": "706312066"},
-    {"name": "MR. F JEWELRY INC.", "routing": "021000021", "account": "008212026"},
-    {"name": "SHIVAM JEWELS INC", "routing": "026013356", "account": "265206440399"},
-    {"name": "SIGNOVA INC", "routing": "021000322", "account": "55014730231"},
+    {"name": "MR. F JEWELRY INC.", "routing": "021000021", "account": "582725381"},  # corrected from transmit file 07.30.2026
+    {"name": "SHIVAM JEWELS INC", "routing": "021000021", "account": "590399997"},  # corrected from transmit file 07.30.2026
+    {"name": "SIGNOVA INC", "routing": "081000032", "account": "355014730231"},  # corrected from transmit file 07.30.2026
     {"name": "SUNSHINE DIAMOND CUTTER", "routing": "021000322", "account": "483028574148"},
-    {"name": "TWINKLEDIAM INC.", "routing": "026013356", "account": "26012320399"},
-    {"name": "UNITED COLOR GEMS INC", "routing": "021000021", "account": "439617311"},
+    {"name": "UNITED COLOR GEMS INC", "routing": "021000322", "account": "483095583405"},  # corrected from transmit file 07.30.2026
     {"name": "TRUEARTH JEWELS INC", "routing": "021000021", "account": "731135862"},
     {"name": "UNICORN JEWELS USA INC", "routing": "021000322", "account": "483107642250"},
     {"name": "UNIVERSE JEWELRY INC", "routing": "021000021", "account": "731138338"},
@@ -179,21 +205,36 @@ async def seed_sample_vendors(
     admin_user: User = Depends(require_admin),  # ADMIN ONLY!
 ):
 
-    """Seed company sample vendors into database."""
+    """Seed company reference vendors into database."""
     added = 0
+    skipped: list[dict[str, str]] = []
     for v_data in SAMPLE_VENDORS:
         name_clean = v_data["name"].strip()
         acc = v_data["account"]
+        rt = v_data["routing"]
+
+        # Validate before writing. The seed endpoint previously performed NO
+        # validation at all (unlike create_vendor), so a bad routing number in this
+        # list would land straight in the database and produce a bank-rejected file.
+        if len(rt) != 9 or not validate_routing_checksum(rt):
+            skipped.append({"name": name_clean,
+                            "error": f"invalid ABA routing number '{rt}'"})
+            continue
+        if not acc or len(acc) > 17:
+            skipped.append({"name": name_clean,
+                            "error": f"invalid account number length {len(acc)}"})
+            continue
+
         def_id = acc[-5:] if len(acc) >= 5 else acc
         res = await db.execute(select(Vendor).where(Vendor.name == name_clean))
-        existing_v = res.scalar_one_or_none()
+        existing_v = res.scalars().first()
         if existing_v:
             if not existing_v.default_id_number or existing_v.default_id_number == "ABC":
                 existing_v.default_id_number = def_id
             continue
         vendor = Vendor(
             name=name_clean[:22],
-            routing_number=v_data["routing"],
+            routing_number=rt,
             account_number=acc,
             account_type=AccountType.CHECKING,
             default_id_number=def_id,
@@ -201,8 +242,22 @@ async def seed_sample_vendors(
         )
         db.add(vendor)
         added += 1
+
+    db.add(
+        AuditLog(
+            user_id=admin_user.id,
+            action="VENDOR_REFERENCE_DATA_SEEDED",
+            entity_type="Vendor",
+            details={"added": added, "skipped": skipped,
+                     "seeded_by": admin_user.username},
+        )
+    )
     await db.commit()
-    return {"message": f"Successfully seeded {added} sample vendors.", "added": added}
+    return {
+        "message": f"Successfully seeded {added} reference vendors.",
+        "added": added,
+        "skipped": skipped,
+    }
 
 
 @router.get("", response_model=list[VendorResponseSchema])
