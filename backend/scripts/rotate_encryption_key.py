@@ -40,10 +40,13 @@ from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.config import settings  # noqa: E402
+from cryptography.fernet import Fernet  # noqa: E402
+
 from app.core.encryption import (  # noqa: E402
     _FERNET_PREFIX,
+    _derive_fernet_key,
+    _load_keys,
     decrypt_bank_detail,
-    encrypt_bank_detail,
     get_cipher,
 )
 
@@ -60,6 +63,20 @@ def mask(value: str) -> str:
     return f"...{value[-4:]}" if len(value) > 4 else "*" * len(value)
 
 
+def _readable_by_primary(primary_cipher: Fernet, value: str) -> bool:
+    """
+    True when the primary key alone can read this value.
+
+    Derived from the configured key rather than reaching into MultiFernet internals,
+    so it does not depend on a private attribute of the cryptography package.
+    """
+    try:
+        primary_cipher.decrypt(value.encode("utf-8"))
+        return True
+    except Exception:
+        return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
@@ -71,6 +88,10 @@ def main() -> int:
     except RuntimeError as exc:
         print(exc)
         return 2
+
+    primary_raw, fallback_raw = _load_keys()
+    primary_cipher = Fernet(_derive_fernet_key(primary_raw))
+    print(f"primary key configured, {len(fallback_raw)} fallback key(s) available")
 
     engine = create_engine(settings.SYNC_DATABASE_URL, future=True)
 
@@ -110,24 +131,24 @@ def main() -> int:
                         failed += 1
                         continue
 
-                    recrypted = encrypt_bank_detail(plaintext) if not plaintext.startswith(_FERNET_PREFIX) else plaintext
-                    # Force a fresh encryption under the primary key.
-                    recrypted = get_cipher().encrypt(plaintext.encode("utf-8")).decode("utf-8")
+                    # Already readable by the PRIMARY key alone? Then it needs nothing.
+                    # Checked before re-encrypting so a completed rotation is a no-op.
+                    if _readable_by_primary(primary_cipher, stored):
+                        already += 1
+                        continue
 
-                    # Verify the round trip before trusting it.
+                    # Encrypt under the primary key, which is _fernets[0] of the
+                    # MultiFernet, and confirm the round trip before trusting it.
+                    recrypted = primary_cipher.encrypt(plaintext.encode("utf-8")).decode("utf-8")
                     if decrypt_bank_detail(recrypted) != plaintext:
                         print(f"  [FAIL] {table}.{col} {row[pk]}: round-trip mismatch - SKIPPED")
                         failed += 1
                         continue
-
-                    # Is it already readable by the PRIMARY key alone?
-                    primary_only = get_cipher()._fernets[0]  # noqa: SLF001
-                    try:
-                        primary_only.decrypt(stored.encode("utf-8"))
-                        already += 1
+                    if not _readable_by_primary(primary_cipher, recrypted):
+                        print(f"  [FAIL] {table}.{col} {row[pk]}: rewrite is not readable "
+                              f"by the primary key - SKIPPED")
+                        failed += 1
                         continue
-                    except Exception:
-                        pass
 
                     updates[col] = recrypted
                     print(f"  [{'would rewrite' if args.dry_run else 'rewrite'}] "
