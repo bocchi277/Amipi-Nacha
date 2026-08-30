@@ -14,6 +14,7 @@ An enterprise-grade B2B payment generation, validation, and security management 
 - **Spreadsheet Ingestion**:
   - Parses Excel (`.xlsx`) and CSV payment files, plus grouped QuickBooks report exports, with per-row validation (ABA routing check digit, SEC code whitelisting, account type validation).
   - Vendor names resolve by exact match → curated alias map → punctuation-insensitive match → scored word overlap. Genuinely ambiguous names are reported as row errors rather than guessed, because guessing means paying the wrong bank account.
+  - **One vendor per name.** Vendor identity uses a single normal form (`app/core/vendor_identity.py`): case, punctuation and whitespace are ignored, so `KIRAN GEMS USA INC.` cannot be created alongside `KIRAN GEMS USA INC`. Vendor names are stored in full — the 22-character NACHA receiver name limit is applied only when the file is written, because truncating on save merged distinct companies sharing a 22-character prefix into one record with one bank account.
   - Multiple invoices per vendor are merged into one entry. The database keeps a readable reference (`UDI261954/65/55`); the 15-character NACHA ID field is derived from it by `app/nacha/id_field.py`, which strips to alphanumerics because **all 97 ID fields in AMIPI's real transmit files are purely alphanumeric**. With no invoice reference the field falls back to the last 5 digits of the account, the dominant convention in those files (26 of 46 numeric cases; 12 use the last 4).
   - Invoice numbers that are really the vendor's account number are detected and discarded, `Advance` entries carry no invoice reference, and rows with an amount but no vendor are reported rather than silently dropped.
 - **Duplicate Transaction Defense**:
@@ -31,7 +32,7 @@ An enterprise-grade B2B payment generation, validation, and security management 
   - Roles are server-assigned; self-registration cannot grant administrator access.
   - Login throttling, CORS allowlist, CSP and related response headers, and HTML escaping on all rendered database values — including audit log detail values, which are user-influenced and are read by administrators.
 - **Automated Testing Suite**:
-  - **191 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
+  - **207 Pytest backend test cases** covering DB schema, security/pentests (SQLi, XSS, path traversal, JWT tampering, Unicode homograph spoofing), NACHA generation parity, and business logic.
   - **41 Playwright E2E test cases** in `frontend/tests/` validating user journeys, admin approvals, and file downloads.
   - **5 live browser verification tests** in `backend/tests_live/` (opt-in; excluded from the default run).
 
@@ -49,7 +50,7 @@ FirstProject/
 │   │   ├── db/               # Async Engine & Session management
 │   │   ├── models/           # SQLAlchemy ORM models (User, Vendor, Payment, NachaFile, AuditLog)
 │   │   └── services/         # NACHA generation, spreadsheet parsing, email remittance
-│   ├── tests/                # 191 hermetic Pytest cases (run by default)
+│   ├── tests/                # 207 hermetic Pytest cases (run by default)
 │   ├── tests_live/           # Opt-in browser tests against a running server
 │   ├── alembic.ini
 │   ├── pytest.ini
@@ -139,7 +140,7 @@ When served separately, add its origin to `ALLOWED_ORIGINS`.
 
 ## 🧪 Running Automated Tests
 
-### Backend (191 tests)
+### Backend (207 tests)
 ```bash
 cd backend
 export DATABASE_URL="postgresql+asyncpg://amipi:amipipass@localhost:5432/amipi_ach_test"

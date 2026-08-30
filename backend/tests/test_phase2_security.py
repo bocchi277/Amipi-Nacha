@@ -346,9 +346,28 @@ class TestBoundaryValues:
 
     @pytest.mark.asyncio
     async def test_vendor_name_exceeds_max_length(self, db_session):
-        """Vendor name exceeding 22 chars must be rejected at DB level."""
+        """
+        Vendor name longer than the column must be rejected at DB level.
+
+        The limit is no longer 22. Names were previously truncated to the NACHA receiver
+        name field width ON WRITE, which merged distinct companies sharing a 22-character
+        prefix into one record. The column now holds the full name and the field width is
+        applied only when the NACHA line is written.
+        """
+        from app.core.vendor_identity import VENDOR_NAME_MAX_LENGTH
+
+        # A name at the limit is accepted.
+        ok = Vendor(
+            name="A" * VENDOR_NAME_MAX_LENGTH,
+            routing_number="021000021",
+            account_number="123",
+        )
+        db_session.add(ok)
+        await db_session.commit()
+
+        # One character over is rejected.
         vendor = Vendor(
-            name="A" * 23,  # 23 chars > VARCHAR(22)
+            name="B" * (VENDOR_NAME_MAX_LENGTH + 1),
             routing_number="021000021",
             account_number="123",
         )

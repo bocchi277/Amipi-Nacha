@@ -16,6 +16,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
+from app.core.vendor_identity import clean_vendor_name, normalize_vendor_name
 from app.db.session import get_async_db
 from app.models import (
     AccountType,
@@ -260,7 +261,7 @@ async def seed_sample_vendors(
                 existing_v.default_id_number = def_id
             continue
         vendor = Vendor(
-            name=name_clean[:22],
+            name=name_clean,
             routing_number=rt,
             account_number=acc,
             account_type=AccountType.CHECKING,
@@ -394,7 +395,7 @@ async def create_vendor(
     - If differences: returns 409 Conflict with diff details if allow_update=False
     - If allow_update=True: updates existing vendor (admin permission required for bank details).
     """
-    name_clean = " ".join(payload.name.strip().split())[:22]
+    name_clean = clean_vendor_name(payload.name)
     rt = "".join(filter(str.isdigit, payload.routing_number.strip()))
     acc = payload.account_number.strip()
 
@@ -404,9 +405,20 @@ async def create_vendor(
     if not acc:
         raise HTTPException(status_code=400, detail="Account number is required.")
 
-    # Look for an existing vendor by name (safe to do in SQL) ...
+    # Look for an existing vendor by NORMALISED name.
+    #
+    # This was `upper(trim(vendors.name)) == name_clean.upper()`, comparing a stored
+    # value that SQL had trimmed against a parameter that had been truncated with
+    # `[:22]` after whitespace normalisation. When character 22 fell on a space the
+    # parameter kept a trailing space the stored side no longer had, the two never
+    # compared equal, and the duplicate was created. Both sides now go through the same
+    # normal form, which also collapses punctuation variants such as
+    # 'KIRAN GEMS USA INC.' against 'KIRAN GEMS USA INC'.
+    normalized = normalize_vendor_name(name_clean)
     res = await db.execute(
-        select(Vendor).where(func.upper(func.trim(Vendor.name)) == name_clean.upper())
+        select(Vendor).where(
+            func.upper(func.regexp_replace(Vendor.name, r"[^0-9A-Za-z]+", "", "g")) == normalized
+        )
     )
     existing = res.scalars().first()
 
@@ -433,7 +445,7 @@ async def create_vendor(
             changes["email"] = {"old": existing.email or "None", "new": new_email or "None"}
         if (existing.default_id_number or None) != new_ref:
             changes["default_id_number"] = {"old": existing.default_id_number or "None", "new": new_ref or "None"}
-        if existing.name.upper() != name_clean.upper():
+        if normalize_vendor_name(existing.name) != normalized:
             changes["name"] = {"old": existing.name, "new": name_clean}
 
         has_bank_change = False
@@ -460,7 +472,7 @@ async def create_vendor(
             )
 
         is_same_bank = (existing.routing_number == rt and existing.account_number == acc)
-        is_diff_name = (existing.name.strip().upper() != name_clean.upper())
+        is_diff_name = (normalize_vendor_name(existing.name) != normalized)
         same_bank_diff_name = is_same_bank and is_diff_name
 
         if not payload.allow_update:
@@ -657,7 +669,10 @@ async def bulk_preview_vendors(
     # Fetch existing vendors
     res = await db.execute(select(Vendor))
     existing_vendors = res.scalars().all()
-    existing_by_name = {" ".join(v.name.strip().upper().split()): v for v in existing_vendors}
+    # Keyed by the shared normal form, not by upper()+whitespace alone. The old key
+    # treated 'KIRAN GEMS USA INC.' and 'KIRAN GEMS USA INC' as different vendors, so a
+    # bulk upload created a second record for a vendor that already existed.
+    existing_by_name = {normalize_vendor_name(v.name): v for v in existing_vendors}
     existing_by_bank = {(v.routing_number.strip(), v.account_number.strip()): v for v in existing_vendors}
 
     new_vendors = []
@@ -675,7 +690,7 @@ async def bulk_preview_vendors(
         default_ref = r.get("invoice ref") or r.get("invoice_ref") or r.get("default_id_number") or r.get("ref") or None
         email = r.get("email") or r.get("vendor email") or r.get("vendor_email") or None
 
-        name_clean = " ".join(name.strip().split())[:22]
+        name_clean = clean_vendor_name(name)
         routing_clean = "".join(filter(str.isdigit, routing.strip()))
         account_clean = account.strip()
 
@@ -691,7 +706,7 @@ async def bulk_preview_vendors(
             errors.append({"row": row_idx, "error": f"Account number is required for '{name_clean}'."})
             continue
 
-        batch_key = name_clean.upper()
+        batch_key = normalize_vendor_name(name_clean)
         if batch_key in seen_in_batch:
             # Duplicate inside same upload batch
             continue
@@ -700,7 +715,7 @@ async def bulk_preview_vendors(
         acct_type = AccountType.SAVINGS if "sav" in acct_type_str.lower() else AccountType.CHECKING
         acct_type_val = acct_type.value
 
-        existing = existing_by_name.get(name_clean.upper()) or existing_by_bank.get((routing_clean, account_clean))
+        existing = existing_by_name.get(normalize_vendor_name(name_clean)) or existing_by_bank.get((routing_clean, account_clean))
 
         if existing:
             # Check differences
@@ -713,7 +728,7 @@ async def bulk_preview_vendors(
                 changes["email"] = {"old": existing.email or "None", "new": new_email_clean or "None"}
             if (existing.default_id_number or None) != new_ref_clean:
                 changes["default_id_number"] = {"old": existing.default_id_number or "None", "new": new_ref_clean or "None"}
-            if existing.name.upper() != name_clean.upper():
+            if normalize_vendor_name(existing.name) != normalize_vendor_name(name_clean):
                 changes["name"] = {"old": existing.name, "new": name_clean}
 
             has_bank_change = False
@@ -730,7 +745,7 @@ async def bulk_preview_vendors(
             same_bank_diff_name = (
                 existing.routing_number == routing_clean
                 and existing.account_number == account_clean
-                and existing.name.strip().upper() != name_clean.upper()
+                and normalize_vendor_name(existing.name) != normalize_vendor_name(name_clean)
             )
 
             if changes:
@@ -799,7 +814,7 @@ async def bulk_confirm_vendors(
     # Fetch all existing vendors from database to prevent duplicate inserts
     res = await db.execute(select(Vendor))
     db_vendors = list(res.scalars().all())
-    existing_by_name = {" ".join(v.name.strip().upper().split()): v for v in db_vendors}
+    existing_by_name = {normalize_vendor_name(v.name): v for v in db_vendors}
     existing_by_bank = {(v.routing_number.strip(), v.account_number.strip()): v for v in db_vendors}
 
     seen_in_batch = set()
@@ -809,7 +824,7 @@ async def bulk_confirm_vendors(
     for nv in payload.new_vendors:
         rt = "".join(filter(str.isdigit, str(nv.get("routing_number", "")).strip()))
         acc = str(nv.get("account_number", "")).strip()
-        name_clean = " ".join(str(nv.get("name", "")).strip().split())[:22]
+        name_clean = clean_vendor_name(str(nv.get("name", "")))
         if not name_clean or not rt or not acc:
             rejected.append({
                 "name": name_clean or str(nv.get("name", "")),
@@ -839,7 +854,7 @@ async def bulk_confirm_vendors(
             skipped_count += 1
             continue
 
-        norm_key = name_clean.upper()
+        norm_key = normalize_vendor_name(name_clean)
         if norm_key in seen_in_batch or (rt, acc) in seen_in_batch_bank:
             # Intra-batch duplicate in payload: skip to prevent duplicate insert/count
             skipped_count += 1
@@ -898,7 +913,7 @@ async def bulk_confirm_vendors(
             new_data = uv.get("new_data", {})
 
             if "name" in changes and new_data.get("name"):
-                vendor.name = " ".join(str(new_data["name"]).strip().split())[:22]
+                vendor.name = clean_vendor_name(str(new_data["name"]))
             if "email" in changes:
                 vendor.email = str(new_data["email"]).strip() if new_data.get("email") else None
             if "default_id_number" in changes:
@@ -1020,7 +1035,10 @@ async def deduplicate_vendors(
     by_name: dict[str, uuid.UUID] = {}
     by_bank: dict[tuple[str, str], uuid.UUID] = {}
     for v in all_vendors:
-        name_key = " ".join((v.name or "").strip().upper().split())
+        # Must use the same normal form the duplicate checks reject on, or "Merge
+        # Duplicates" would fail to offer exactly the pairs those checks now consider
+        # duplicates -- for instance a trailing period.
+        name_key = normalize_vendor_name(v.name)
         if name_key:
             if name_key in by_name:
                 union(by_name[name_key], v.id)
@@ -1141,7 +1159,9 @@ async def bulk_upload_vendors(
 
     res = await db.execute(select(Vendor))
     existing_vendors = res.scalars().all()
-    existing_names = {v.name.strip().upper() for v in existing_vendors}
+    # Normal form, so a punctuation variant of an existing name is recognised as the
+    # same vendor rather than inserted as a second record.
+    existing_names = {normalize_vendor_name(v.name) for v in existing_vendors}
     existing_routing_acct = {(v.routing_number.strip(), v.account_number.strip()) for v in existing_vendors}
 
     imported_count = 0
@@ -1155,7 +1175,7 @@ async def bulk_upload_vendors(
         default_ref = r.get("invoice ref") or r.get("invoice_ref") or r.get("default_id_number") or r.get("ref") or None
         email = r.get("email") or r.get("vendor email") or r.get("vendor_email") or None
 
-        name_clean = name.strip()[:22]
+        name_clean = clean_vendor_name(name)
         routing_clean = "".join(filter(str.isdigit, routing.strip()))
         account_clean = account.strip()
 
@@ -1171,7 +1191,7 @@ async def bulk_upload_vendors(
             errors.append({"row": row_idx, "error": f"Account number is required for '{name_clean}'."})
             continue
 
-        if name_clean.upper() in existing_names or (routing_clean, account_clean) in existing_routing_acct:
+        if normalize_vendor_name(name_clean) in existing_names or (routing_clean, account_clean) in existing_routing_acct:
             skipped_count += 1
             continue
 
@@ -1187,7 +1207,7 @@ async def bulk_upload_vendors(
             is_active=True,
         )
         db.add(vendor)
-        existing_names.add(name_clean.upper())
+        existing_names.add(normalize_vendor_name(name_clean))
         existing_routing_acct.add((routing_clean, account_clean))
         imported_count += 1
 
@@ -1273,7 +1293,7 @@ async def update_vendor(
         raise HTTPException(status_code=404, detail="Vendor not found.")
 
     if payload.name is not None and payload.name.strip():
-        vendor.name = payload.name.strip()[:22]
+        vendor.name = clean_vendor_name(payload.name)
     if payload.email is not None:
         vendor.email = payload.email.strip() if payload.email.strip() else None
     if payload.default_id_number is not None:

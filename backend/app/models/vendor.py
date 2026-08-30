@@ -28,7 +28,11 @@ class Vendor(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(String(22), nullable=False, index=True)
+    # Full vendor name. NOT truncated to the 22-character NACHA receiver name field:
+    # this is the vendor's identity, which spreadsheet rows are matched against, and
+    # truncating it merged distinct companies sharing a 22-character prefix.
+    # app.core.vendor_identity.nacha_receiver_name applies the field width at write time.
+    name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     routing_number: Mapped[str] = mapped_column(EncryptedBankDetailType, nullable=False)
     account_number: Mapped[str] = mapped_column(EncryptedBankDetailType, nullable=False)
     account_type: Mapped[AccountType] = mapped_column(
