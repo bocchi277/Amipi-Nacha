@@ -1248,12 +1248,16 @@ const GenerateScreen = (() => {
     const card = document.createElement('div');
     card.className = 'card';
     card.id = `card_batch_${nextNum}`;
-    card.style.cssText = 'margin-top: var(--space-xl); margin-bottom: var(--space-lg);';
+    // Set explicitly rather than via a `.card + .card` sibling rule: cards also appear
+    // as grid items elsewhere (the vendor directory), where a sibling margin breaks row
+    // alignment by offsetting every card after the first.
+    card.style.marginTop = 'var(--space-xl)';
+    card.style.marginBottom = 'var(--space-lg)';
 
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
         <div class="card-title" style="margin: 0;">Manual Payment Entry (Batch ${nextNum})</div>
-        <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeBatch(${nextNum})" style="padding: 2px 8px; font-size: 11px;">× Remove Batch</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="GenerateScreen.removeBatch(${nextNum})">× Remove Batch</button>
       </div>
       <p class="text-xs text-muted" style="margin-bottom: var(--space-md);">Enter payment rows below. Click <strong>+ Add Row</strong> to add more. All rows in this batch share the same effective date.</p>
 
@@ -1300,12 +1304,11 @@ const GenerateScreen = (() => {
       </div>
 
       <!-- Action Buttons -->
-      <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
+      <div class="action-row">
         <button type="button" class="btn btn-secondary btn-sm" onclick="GenerateScreen.addManualRow(${nextNum})">
           + Add Row
         </button>
-        <button type="button" class="btn btn-sm" onclick="GenerateScreen.validateBatch(${nextNum})"
-          style="font-weight: 600; padding: 4px 14px; font-size: 12px; border: 1.5px solid var(--color-primary); color: var(--color-primary); background: transparent;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="GenerateScreen.validateBatch(${nextNum})">
           Validate Batch
         </button>
       </div>

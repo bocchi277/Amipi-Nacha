@@ -427,15 +427,11 @@
             </div>
 
             <!-- Action Buttons -->
-            <div style="margin-top: var(--space-md); display: flex; gap: var(--space-md); align-items: center; flex-wrap: wrap;">
+            <div class="action-row">
               <button type="button" class="btn btn-secondary btn-sm" id="addManualRowBtn">
                 + Add Row
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="addBatchBtn" onclick="GenerateScreen.addBatch()">
-                + Add Batch
-              </button>
-              <button type="button" class="btn btn-sm" id="validateBatch2Btn" onclick="GenerateScreen.validateBatch(2)"
-                style="font-weight: 600; padding: 4px 14px; font-size: 12px; border: 1.5px solid var(--color-primary); color: var(--color-primary); background: transparent;">
+              <button type="button" class="btn btn-outline btn-sm" id="validateBatch2Btn" onclick="GenerateScreen.validateBatch(2)">
                 Validate Batch
               </button>
               <button type="button" id="submitManualBatchBtn" style="display: none;"></button>
@@ -464,6 +460,19 @@
 
           <!-- Dynamic Container for Additional Batches (Batch 3, Batch 4, etc.) -->
           <div id="additionalBatchesContainer"></div>
+
+          <!--
+            "+ Add Batch" sits AFTER the container the new batches are appended to, so it
+            always follows the last batch and moves down as batches are added. It used to
+            live inside the Batch 2 card's action row, which meant new batches appeared
+            below it while the button itself stayed stuck in Batch 2.
+          -->
+          <div class="action-row action-row-standalone" id="addBatchRow">
+            <button type="button" class="btn btn-secondary btn-sm" id="addBatchBtn" onclick="GenerateScreen.addBatch()">
+              + Add Batch
+            </button>
+            <span class="text-xs text-muted">Adds another manual entry batch below.</span>
+          </div>
 
           <!-- Combined NACHA File Generation Card -->
           <div class="card" id="combinedGenerateSection" style="margin-top: var(--space-xl); margin-bottom: var(--space-lg); border-top: 3px solid var(--color-primary);">

@@ -1105,8 +1105,8 @@ const VendorsScreen = (() => {
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
-          <div style="display: flex; align-items: center; gap: var(--space-xs);">
-            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px;" />` : ''}
+          <div style="display: flex; align-items: center; gap: var(--space-md);">
+            ${isAdmin() ? `<input type="checkbox" class="vendor-select-cb" data-vendor-id="${v.id}" ${isChecked ? 'checked' : ''} onchange="VendorsScreen.toggleVendorSelection('${v.id}', this.checked)" style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;" />` : ''}
             <div>
               <h4 style="margin: 0; font-size: var(--text-md); color: var(--color-primary);">${escapeHtml(v.name)}</h4>
               <div class="text-xs text-muted font-mono" style="margin-top: 2px;">ID: <strong>${vendorIdDisplay}</strong></div>
@@ -1115,7 +1115,7 @@ const VendorsScreen = (() => {
           ${statusBadge}
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs); font-size: var(--text-xs); margin-bottom: var(--space-md);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm) var(--space-md); font-size: var(--text-xs); margin-bottom: var(--space-base);">
           <div>
             <span class="text-muted">Routing Number:</span><br/>
             <strong class="font-mono vendor-routing-display">${v.routing_number}</strong>

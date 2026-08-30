@@ -286,9 +286,51 @@ code, pre {
 }
 
 .btn-sm {
-  padding: var(--space-xs) var(--space-md);
+  /* 4px of vertical padding left small buttons feeling cramped next to 44px inputs
+     and gave them a touch target below the ~32px minimum. */
+  padding: var(--space-sm) var(--space-base);
   font-size: var(--text-sm);
   border-radius: var(--radius-sm);
+}
+
+/*
+ * Outlined button.
+ *
+ * The "Validate Batch" buttons each carried the same five hardcoded inline
+ * declarations, repeated in the markup and again in the JS that builds additional
+ * batches, so they drifted from the token scale. This is that treatment as one class.
+ */
+.btn-outline {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1.5px solid var(--color-primary);
+  box-shadow: none;
+}
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.btn-outline:active:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/*
+ * A row of buttons beneath a form or table. Replaces the inline
+ * `display:flex; gap:...; margin-top:...` repeated at every such row.
+ */
+.action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+/* Separates a trailing "add another" control from the block it appends to. */
+.action-row-standalone {
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
 
 .btn-lg {
@@ -321,7 +363,8 @@ code, pre {
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  /* 4px put the label almost touching its input. */
+  gap: var(--space-sm);
 }
 
 .form-label {
