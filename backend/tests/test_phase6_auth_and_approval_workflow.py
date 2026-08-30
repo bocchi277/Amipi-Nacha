@@ -15,8 +15,10 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models import AuditLog, ChangeRequestStatus, User, UserRole, Vendor, VendorChangeRequest
+from tests._helpers import create_admin_user
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_auth_registration_and_login(db_session):
     """Test user registration, role assignment, and JWT login."""
@@ -30,26 +32,39 @@ async def test_auth_registration_and_login(db_session):
                 "email": "user1@amipi.com",
                 "username": "stduser1",
                 "password": "SecretPassword123!",
-                "role": "user",
             },
         )
         assert res_u.status_code == 201
         data_u = res_u.json()
         assert data_u["role"] == "user"
 
-        # Register Admin User
+        # Self-registration must ALWAYS produce a standard user, never an admin.
         res_a = await client.post(
             "/api/v1/auth/register",
             json={
                 "email": "admin1@amipi.com",
                 "username": "adminuser1",
                 "password": "AdminPassword123!",
-                "role": "admin",
             },
         )
         assert res_a.status_code == 201
         data_a = res_a.json()
-        assert data_a["role"] == "admin"
+        assert data_a["role"] == "user"
+
+        # Attempting to smuggle an elevated role must be rejected outright rather
+        # than silently ignored (privilege-escalation regression guard).
+        res_esc = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "escalate@amipi.com",
+                "username": "escalate1",
+                "password": "AdminPassword123!",
+                "role": "admin",
+            },
+        )
+        assert res_esc.status_code == 422, (
+            f"Expected 422 for role smuggling, got {res_esc.status_code}: {res_esc.text}"
+        )
 
         # Login Standard User
         res_l1 = await client.post(
@@ -68,6 +83,7 @@ async def test_auth_registration_and_login(db_session):
         assert res_me.json()["username"] == "stduser1"
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_standard_user_cannot_bypass_approval(db_session):
     """
@@ -89,7 +105,6 @@ async def test_standard_user_cannot_bypass_approval(db_session):
                 "email": "standard@amipi.com",
                 "username": "std_actor",
                 "password": "Password123!",
-                "role": "user",
             },
         )
         res_l = await client.post(
@@ -134,6 +149,7 @@ async def test_standard_user_cannot_bypass_approval(db_session):
         assert v_db1.routing_number == "021000021"
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_admin_approval_updates_vendor_and_logs_audit(db_session):
     """
@@ -152,12 +168,9 @@ async def test_admin_approval_updates_vendor_and_logs_audit(db_session):
         # Register User and Admin
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "requester@amipi.com", "username": "requester1", "password": "Pass123!", "role": "user"},
+            json={"email": "requester@amipi.com", "username": "requester1", "password": "Pass123!"},
         )
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "approver@amipi.com", "username": "admin_boss", "password": "Pass123!", "role": "admin"},
-        )
+        await create_admin_user(db_session, username="admin_boss", email="approver@amipi.com", password="Pass123!")
 
         # Login Requester & Admin
         res_lr = await client.post("/api/v1/auth/login", data={"username": "requester1", "password": "Pass123!"})
@@ -207,6 +220,7 @@ async def test_admin_approval_updates_vendor_and_logs_audit(db_session):
     assert details["approved_by_admin"] == "admin_boss"
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_admin_rejection_workflow(db_session):
     """
@@ -223,10 +237,7 @@ async def test_admin_rejection_workflow(db_session):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         # Register & Login Admin
-        await client.post(
-            "/api/v1/auth/register",
-            json={"email": "admin_rejector@amipi.com", "username": "admin_rej", "password": "Pass123!", "role": "admin"},
-        )
+        await create_admin_user(db_session, username="admin_rej", email="admin_rejector@amipi.com", password="Pass123!")
         res_la = await client.post("/api/v1/auth/login", data={"username": "admin_rej", "password": "Pass123!"})
         admin_headers = {"Authorization": f"Bearer {res_la.json()['access_token']}"}
 

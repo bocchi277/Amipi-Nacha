@@ -7,6 +7,7 @@ Returns valid payment items and explicit per-row errors for malformed entries.
 from __future__ import annotations
 
 import io
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -84,22 +85,64 @@ def _parse_date(value: Any) -> Optional[date]:
     return None
 
 
+# NACHA Entry Detail "Individual Identification Number" field width (positions 40-54).
+_ID_FIELD_WIDTH = 15
+
+
 def _compress_invoices(invoice_list: list[str]) -> str:
     """
-    Compress multiple invoice numbers into a single ID reference field.
-    e.g. ['875886', '2425708', '876153'] -> '875886/2425708/876153' (max 15 chars if needed).
+    Compress multiple invoice numbers into the 15-character NACHA ID field.
+
+    The previous implementation joined with '/' and hard-truncated, so
+    ``['UDI261954', 'UDI261965', 'UDI261955']`` became ``'UDI261954/UDI26'`` and two
+    invoice numbers were silently lost -- the vendor could not tell which invoices the
+    payment covered.
+
+    Strategy (ported from the v7 prototype's ``compressInvoiceNums``):
+
+    1. A single invoice is passed through unchanged.
+    2. Otherwise factor out the longest common prefix and list only the differing
+       suffixes, e.g. ``UDI261954 / UDI261965 / UDI261955`` -> ``UDI261954/65/55``,
+       which keeps every invoice identifiable inside 15 characters.
+    3. If the plain '/'-joined form already fits, use it.
+    4. If nothing fits (unrelated long invoice numbers), keep the first invoice and
+       append a ``+N`` marker so it is EXPLICIT that more invoices are covered rather
+       than appearing to be a single-invoice payment. The complete list always remains
+       available in the payment's ``invoice_breakdown`` JSON and on the remittance
+       advice, so no data is lost -- only the fixed-width bank field is abbreviated.
     """
     cleaned = [str(n).strip() for n in invoice_list if str(n).strip()]
     if not cleaned:
         return "EPAY"
-    if len(cleaned) == 1:
-        return cleaned[0][:15]
-    
-    joined = "/".join(cleaned)
-    if len(joined) <= 15:
-        return joined
-    # If longer than 15, take first invoice or slice
-    return joined[:15]
+
+    # De-duplicate while preserving order (QB exports repeat invoice numbers).
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in cleaned:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+
+    if len(unique) == 1:
+        return unique[0][:_ID_FIELD_WIDTH]
+
+    # 2. Common-prefix compression.
+    prefix = os.path.commonprefix(unique)
+    if len(prefix) >= 3:
+        suffixes = [s[len(prefix):] for s in unique]
+        if all(suffixes):
+            candidate = prefix + "/".join(suffixes)
+            if len(candidate) <= _ID_FIELD_WIDTH:
+                return candidate
+
+    # 3. Plain join when it fits.
+    plain = "/".join(unique)
+    if len(plain) <= _ID_FIELD_WIDTH:
+        return plain
+
+    # 4. Explicit "first + N more" marker.
+    marker = f"+{len(unique) - 1}"
+    return unique[0][: _ID_FIELD_WIDTH - len(marker)] + marker
 
 
 async def parse_payment_spreadsheet(

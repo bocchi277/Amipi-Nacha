@@ -36,13 +36,14 @@ async def _get_auth_token(client: AsyncClient, username: str, password: str) -> 
     return res.json()["access_token"]
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_user_management_access_control(db_session):
     """Verify standard user and unauthenticated access to /users is blocked."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         # Register admin & standard user
-        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD, "role": "admin"})
-        await client.post("/api/v1/auth/register", json={"email": STD_EMAIL, "username": STD_USER, "password": STD_PASSWORD, "role": "user"})
+        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD})
+        await client.post("/api/v1/auth/register", json={"email": STD_EMAIL, "username": STD_USER, "password": STD_PASSWORD})
 
         # 1. Unauthenticated request -> 401
         res = await client.get("/api/v1/users")
@@ -58,7 +59,7 @@ async def test_user_management_access_control(db_session):
 async def test_admin_user_crud_and_status(db_session):
     """Verify admin user listing, creation, status toggle, and password reset."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD, "role": "admin"})
+        await client.post("/api/v1/auth/register", json={"email": ADMIN_EMAIL, "username": ADMIN_USER, "password": ADMIN_PASSWORD})
         admin_token = await _get_auth_token(client, ADMIN_USER, ADMIN_PASSWORD)
         headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -78,7 +79,7 @@ async def test_admin_user_crud_and_status(db_session):
         res = await client.post(
             "/api/v1/users",
             headers=headers,
-            json={"email": new_user_email, "username": new_user_name, "password": new_user_pass, "role": "user"},
+            json={"email": new_user_email, "username": new_user_name, "password": new_user_pass},
         )
         assert res.status_code == 201
         created = res.json()

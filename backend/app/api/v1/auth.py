@@ -4,10 +4,11 @@ Authentication FastAPI Router.
 Provides registration, login (JWT generation), and user profile endpoints.
 """
 from typing import Optional
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,12 +19,51 @@ from app.models import User, UserRole
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Pragmatic email shape check: local-part@domain.tld with no whitespace.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
 
 class RegisterUserSchema(BaseModel):
+    """
+    Public self-registration payload.
+
+    Deliberately has NO `role` field. Accepting a caller-supplied role here allowed
+    anyone to self-register as an administrator. Roles are assigned server-side only:
+    self-registration always yields the standard user role, and elevation happens via
+    the admin-only ``POST /api/v1/users`` endpoint or ``scripts/create_user.py``.
+
+    ``extra="forbid"`` makes an attempt to smuggle a role an explicit 422 rather than
+    a silently ignored field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     email: str
     username: str
     password: str
-    role: Optional[UserRole] = None
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: str) -> str:
+        """
+        Basic RFC-pragmatic email check.
+
+        Implemented with a regex rather than pydantic's ``EmailStr`` so the app keeps
+        working without the optional ``email-validator`` dependency. Previously this
+        field accepted any string at all.
+        """
+        v = (v or "").strip()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("A valid email address is required.")
+        return v
+
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Username is required.")
+        return v
 
 
 class TokenResponseSchema(BaseModel):
@@ -65,7 +105,8 @@ async def register_user(
         email=payload.email.strip().lower(),
         username=payload.username.strip(),
         password_hash=pw_hash,
-        role=payload.role or UserRole.USER,
+        # Role is server-assigned. Self-registration NEVER grants elevated privileges.
+        role=UserRole.USER,
         is_active=True,
     )
     db.add(user)

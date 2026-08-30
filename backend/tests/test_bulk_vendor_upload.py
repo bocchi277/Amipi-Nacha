@@ -56,6 +56,7 @@ async def test_download_vendor_sample_template():
     assert "Vendor Name,Routing Number" in response.text
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_single_and_bulk_vendor_deletion(db_session):
     # Setup admin user

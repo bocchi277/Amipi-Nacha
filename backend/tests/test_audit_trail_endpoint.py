@@ -26,7 +26,6 @@ async def test_admin_can_fetch_audit_logs(db_session):
                 "email": "audit_admin@amipi.com",
                 "username": "audit_admin",
                 "password": "Password123!",
-                "role": "admin",
             },
         )
         res_login = await client.post(

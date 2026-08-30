@@ -35,7 +35,7 @@ async def test_auto_remittance_creation_and_send(db_session):
         # Register and Login User
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "remit_user@amipi.com", "username": "remit_user", "password": "Password123!", "role": "user"},
+            json={"email": "remit_user@amipi.com", "username": "remit_user", "password": "Password123!"},
         )
         res_l = await client.post("/api/v1/auth/login", data={"username": "remit_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
@@ -99,7 +99,7 @@ async def test_remittance_table_filtering(db_session):
     ) as client:
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "filter_user@amipi.com", "username": "filter_user", "password": "Password123!", "role": "user"},
+            json={"email": "filter_user@amipi.com", "username": "filter_user", "password": "Password123!"},
         )
         res_l = await client.post("/api/v1/auth/login", data={"username": "filter_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
@@ -145,7 +145,7 @@ async def test_bulk_resend_on_filtered_selection(db_session):
     ) as client:
         await client.post(
             "/api/v1/auth/register",
-            json={"email": "bulk_user@amipi.com", "username": "bulk_user", "password": "Password123!", "role": "user"},
+            json={"email": "bulk_user@amipi.com", "username": "bulk_user", "password": "Password123!"},
         )
         res_l = await client.post("/api/v1/auth/login", data={"username": "bulk_user", "password": "Password123!"})
         headers = {"Authorization": f"Bearer {res_l.json()['access_token']}"}
@@ -213,7 +213,7 @@ async def test_update_remittance_email_endpoint(db_session):
     await db_session.refresh(remit)
 
     from app.core.security import create_access_token
-    token = create_access_token(data={"sub": str(u.id), "role": "user"})
+    token = create_access_token(data={"sub": str(u.id)})
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.patch(
@@ -235,6 +235,7 @@ async def test_update_remittance_email_endpoint(db_session):
     assert v_db.email == "new_manager_approved@test.com"
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_single_and_bulk_remittance_deletion(db_session):
     """Test single and bulk deletion of remittance transaction records by Admin."""

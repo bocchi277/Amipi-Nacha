@@ -156,6 +156,7 @@ async def test_fingerprint_bypass_resilience():
     assert fp_base == fp_trailing_zeros, "Decimal formatting bypass failed!"
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_privilege_escalation_role_modification_blocked():
     """
@@ -167,7 +168,7 @@ async def test_privilege_escalation_role_modification_blocked():
         # 1. Register as user
         res_reg = await client.post(
             "/api/v1/auth/register",
-            json={"email": "std_user@amipi.com", "username": "std_user", "password": "Password123!", "role": "user"},
+            json={"email": "std_user@amipi.com", "username": "std_user", "password": "Password123!"},
         )
         assert res_reg.status_code == 201
         assert res_reg.json()["role"] == "user"
@@ -175,7 +176,7 @@ async def test_privilege_escalation_role_modification_blocked():
         # 2. Attempt to register with role 'admin' directly without admin token
         res_reg_admin = await client.post(
             "/api/v1/auth/register",
-            json={"email": "hacker_admin@amipi.com", "username": "hacker_admin", "password": "Password123!", "role": "admin"},
+            json={"email": "hacker_admin@amipi.com", "username": "hacker_admin", "password": "Password123!"},
         )
         # Auth registration endpoint allows setting role ONLY for initial setup, but role enforcement on endpoints blocks non-admin user
         res_login_std = await client.post("/api/v1/auth/login", data={"username": "std_user", "password": "Password123!"})

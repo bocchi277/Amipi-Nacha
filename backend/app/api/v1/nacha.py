@@ -3,6 +3,8 @@ NACHA File Generation FastAPI Router.
 
 Combines multiple upload/manual batches into a Chase-compliant NACHA flat file.
 """
+import logging
+import re
 import uuid
 from datetime import date
 from typing import Optional
@@ -11,10 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_optional_current_user
+from app.api.deps import get_current_user
 from app.db.session import get_async_db
 from app.models import User
-from app.services.nacha_service import combine_batches_and_generate_nacha
+from app.services.nacha_service import BatchAlreadyProcessedError, combine_batches_and_generate_nacha
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/nacha", tags=["NACHA Generation"])
 
@@ -44,7 +48,10 @@ class NachaFileResponse(BaseModel):
 
 
 @router.get("/next-trace-sequence", status_code=status.HTTP_200_OK)
-async def get_next_trace_sequence_endpoint(db: AsyncSession = Depends(get_async_db)):
+async def get_next_trace_sequence_endpoint(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
     """Fetch the next auto-incremented starting trace sequence number."""
     from app.services.nacha_service import get_next_trace_sequence
     seq = await get_next_trace_sequence(db)
@@ -52,7 +59,10 @@ async def get_next_trace_sequence_endpoint(db: AsyncSession = Depends(get_async_
 
 
 @router.get("/latest", response_model=NachaFileResponse, status_code=status.HTTP_200_OK)
-async def get_latest_nacha_file_endpoint(db: AsyncSession = Depends(get_async_db)):
+async def get_latest_nacha_file_endpoint(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
     """Fetch the most recently generated NACHA file record from the database."""
     from sqlalchemy import select
     from app.models import NachaFileRecord
@@ -84,7 +94,7 @@ async def get_latest_nacha_file_endpoint(db: AsyncSession = Depends(get_async_db
 async def generate_nacha_file_endpoint(
     payload: GenerateNachaRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Combine multiple payment batches (e.g., Batch 1 + Batch 2) into one NACHA file.
@@ -102,12 +112,21 @@ async def generate_nacha_file_endpoint(
             file_id_modifier=payload.file_id_modifier,
             trace_sequence_start=payload.trace_sequence_start,
             entry_description=payload.entry_description,
-            created_by_user_id=current_user.id if current_user else None,
+            created_by_user_id=current_user.id,
         )
+    except BatchAlreadyProcessedError as bae:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(bae))
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Generation failed: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        # Never surface raw exception text to clients: it leaks schema and internals.
+        logger.exception("NACHA generation failed unexpectedly")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="NACHA file generation failed due to an internal error.",
+        )
 
     return NachaFileResponse(
         id=str(nacha_record.id),
@@ -128,6 +147,7 @@ async def generate_nacha_file_endpoint(
 async def download_nacha_file(
     file_id: str,
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Download generated NACHA file as a .txt attachment."""
     from fastapi.responses import Response
@@ -144,8 +164,12 @@ async def download_nacha_file(
     if not record:
         raise HTTPException(status_code=404, detail="NACHA file record not found.")
 
+    # Strip anything that could break out of the quoted header value or inject
+    # additional response headers (the filename embeds user-supplied input).
+    safe_name = re.sub(r'[^A-Za-z0-9._-]', "_", record.filename or "nacha_file.ach")
+
     return Response(
         content=record.raw_content,
         media_type="text/plain",
-        headers={"Content-Disposition": f'attachment; filename="{record.filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )

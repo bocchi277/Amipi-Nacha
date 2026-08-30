@@ -27,6 +27,7 @@ from app.models import (
     Payment, PaymentStatus, RemittanceStatus, UploadBatch, User, UserRole, Vendor, VendorChangeRequest, VendorRemittance
 )
 from app.services.nacha_service import combine_batches_and_generate_nacha, get_next_trace_sequence
+from tests._helpers import create_admin_user
 
 
 @pytest.mark.asyncio
@@ -212,6 +213,7 @@ async def test_vendor_profile_email_update_endpoint(db_session: AsyncSession):
         assert res_reactivate.json()["is_active"] is True
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
     """Test 6: Verify bank change request flow: standard user requests, admin approves -> updates vendor bank details."""
@@ -235,7 +237,7 @@ async def test_admin_bank_change_approval_workflow(db_session: AsyncSession):
         res_forbidden = await client.post(f"/api/v1/vendors/change-requests/{req_id}/approve", headers=std_headers)
         assert res_forbidden.status_code == 403
 
-        await client.post("/api/v1/auth/register", json={"email": "admin_flow@amipi.com", "username": "admin_flow", "password": "Password123!", "role": "admin"})
+        await create_admin_user(db_session, username="admin_flow", email="admin_flow@amipi.com", password="Password123!")
         res_admin = await client.post("/api/v1/auth/login", data={"username": "admin_flow", "password": "Password123!"})
         admin_headers = {"Authorization": f"Bearer {res_admin.json()['access_token']}"}
 
@@ -289,6 +291,7 @@ async def test_remittance_advice_template_and_dispatch(db_session: AsyncSession)
         assert res_resend.json()["success_count"] == 1
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_admin_security_audit_trail_query(db_session: AsyncSession):
     """Test 8: Verify GET /api/v1/audit-logs fetches filterable security logs for Admin."""
@@ -309,7 +312,7 @@ async def test_admin_security_audit_trail_query(db_session: AsyncSession):
         res_std_audit = await client.get("/api/v1/audit-logs", headers=std_headers)
         assert res_std_audit.status_code == 403
 
-        await client.post("/api/v1/auth/register", json={"email": "admin_audit@amipi.com", "username": "admin_audit", "password": "Password123!", "role": "admin"})
+        await create_admin_user(db_session, username="admin_audit", email="admin_audit@amipi.com", password="Password123!")
         res_admin = await client.post("/api/v1/auth/login", data={"username": "admin_audit", "password": "Password123!"})
         admin_headers = {"Authorization": f"Bearer {res_admin.json()['access_token']}"}
 

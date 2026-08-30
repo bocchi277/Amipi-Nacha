@@ -19,6 +19,10 @@ from app.nacha.generator import generate_nacha_file, GenerationResult
 from app.nacha.models import Batch, EntryDetail, FileHeaderConfig, NachaFileInput
 
 
+class BatchAlreadyProcessedError(Exception):
+    """Raised when a batch already committed to a NACHA file is submitted again."""
+
+
 async def get_next_trace_sequence(db_session: AsyncSession) -> int:
     """Fetch the auto-incremented starting trace sequence for the next NACHA file."""
     res = await db_session.execute(
@@ -70,6 +74,26 @@ async def combine_batches_and_generate_nacha(
 
     ordered_batches = [fetched_batches[bid] for bid in batch_ids]
 
+    # Guard against paying the same batch twice. Once a batch has been written into a
+    # NACHA file it is marked PROCESSED; regenerating it would produce a second set of
+    # credits for the same invoices.
+    already_processed = [
+        f"Batch {b.batch_number} ({b.id})"
+        for b in ordered_batches
+        if b.status == BatchStatus.PROCESSED
+    ]
+    if already_processed:
+        raise BatchAlreadyProcessedError(
+            "The following batch(es) have already been included in a generated NACHA "
+            "file and cannot be reused: "
+            + "; ".join(already_processed)
+            + ". Create a new batch instead."
+        )
+
+    # Reject duplicate batch ids in a single request for the same reason.
+    if len(set(batch_ids)) != len(batch_ids):
+        raise ValueError("The same batch was supplied more than once in batch_ids.")
+
     # Format dates
     now = datetime.datetime.now(datetime.timezone.utc)
     file_date_yymmdd = now.strftime("%y%m%d")
@@ -108,19 +132,44 @@ async def combine_batches_and_generate_nacha(
     nacha_batches: list[Batch] = []
     payments_to_update: list[Payment] = []
 
+    # Resolve every vendor needed by this file in ONE query instead of one query per
+    # payment (previously two per payment: once for the entry, once for the remittance).
+    all_payments_by_batch: dict[uuid.UUID, list[Payment]] = {}
+    needed_vendor_ids: set[uuid.UUID] = set()
     for b in ordered_batches:
         res_payments = await db_session.execute(
-            select(Payment).where(Payment.batch_id == b.id)
+            select(Payment).where(Payment.batch_id == b.id).order_by(Payment.created_at.asc())
         )
-        batch_payments = res_payments.scalars().all()
-        if not batch_payments:
+        bp = list(res_payments.scalars().all())
+        if not bp:
             raise ValueError(f"Batch {b.batch_number} ({b.id}) contains no payments.")
+        all_payments_by_batch[b.id] = bp
+        needed_vendor_ids.update(p.vendor_id for p in bp if p.vendor_id)
+
+    vendor_by_id: dict[uuid.UUID, Vendor] = {}
+    if needed_vendor_ids:
+        res_v = await db_session.execute(select(Vendor).where(Vendor.id.in_(needed_vendor_ids)))
+        vendor_by_id = {v.id: v for v in res_v.scalars().all()}
+
+    for b in ordered_batches:
+        batch_payments = all_payments_by_batch[b.id]
 
         entries: list[EntryDetail] = []
         for p in batch_payments:
-            # Fetch vendor
-            res_v = await db_session.execute(select(Vendor).where(Vendor.id == p.vendor_id))
-            vendor = res_v.scalar_one()
+            # Previously `scalar_one()`, which raised (HTTP 500) for a payment whose
+            # vendor row was missing or whose vendor_id was NULL. Fail with a clear,
+            # actionable message instead.
+            if not p.vendor_id:
+                raise ValueError(
+                    f"Payment {p.id} in batch {b.batch_number} has no vendor assigned "
+                    f"and cannot be included in a NACHA file."
+                )
+            vendor = vendor_by_id.get(p.vendor_id)
+            if vendor is None:
+                raise ValueError(
+                    f"Payment {p.id} in batch {b.batch_number} references vendor "
+                    f"{p.vendor_id}, which no longer exists."
+                )
 
             # Transaction code: 22 = checking credit, 32 = savings credit
             txcode = "32" if vendor.account_type and vendor.account_type.value == "savings" else "22"
@@ -195,17 +244,26 @@ async def combine_batches_and_generate_nacha(
     # Extract entry detail trace numbers from generated file
     entry_lines = [l for l in lines if l.startswith("6")]
 
+    # Vendors with no email on file get no remittance advice; we record who was skipped
+    # rather than inventing an address for them.
+    skipped_remittances: list[str] = []
+
     for idx, p in enumerate(payments_to_update):
         trace_str = entry_lines[idx][79:94] if idx < len(entry_lines) else None
         p.nacha_file_id = nacha_record.id
         p.status = PaymentStatus.PROCESSING
         p.trace_number = trace_str
 
-        # Fetch vendor email
-        res_v = await db_session.execute(select(Vendor).where(Vendor.id == p.vendor_id))
-        vendor_obj = res_v.scalar_one()
+        vendor_obj = vendor_by_id[p.vendor_id]
 
-        v_email = vendor_obj.email or f"remittance@{vendor_obj.name.lower().replace(' ', '')[:15]}.com"
+        # Only create a remittance when we have a REAL vendor email. The previous
+        # fallback invented an address like remittance@<vendorname>.com, which points
+        # at a third-party domain AMIPI does not control — sending payment details
+        # there would leak data to an unrelated party.
+        v_email = (vendor_obj.email or "").strip()
+        if not v_email:
+            skipped_remittances.append(vendor_obj.name)
+            continue
 
         from app.core.email_templates import ACTIVE_TEMPLATE, render_email_template
 
@@ -257,6 +315,7 @@ async def combine_batches_and_generate_nacha(
             "total_batch_count": nacha_record.total_batch_count,
             "total_credit_amount": str(nacha_record.total_credit_amount),
             "entry_hash": nacha_record.entry_hash,
+            "remittances_skipped_no_email": skipped_remittances,
         },
     )
     db_session.add(audit)

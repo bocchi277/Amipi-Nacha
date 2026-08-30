@@ -75,6 +75,9 @@ class BulkVendorConfirmResponseSchema(BaseModel):
     updated_count: int
     skipped_count: int
     message: str
+    # Rows rejected by validation (invalid routing number, over-long account, or a
+    # bank change the caller was not authorised to make).
+    rejected: list[dict[str, Any]] = []
 
 
 class BulkDeleteVendorsSchema(BaseModel):
@@ -206,8 +209,14 @@ async def seed_sample_vendors(
 async def list_vendors(
     include_inactive: bool = Query(True, description="Include inactive vendors in the list"),
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List all vendors with optional inactive filtering."""
+    """
+    List all vendors with optional inactive filtering.
+
+    Requires authentication: the response contains decrypted bank routing and
+    account numbers, which must never be exposed to anonymous callers.
+    """
     query = select(Vendor)
     if not include_inactive:
         query = query.where(Vendor.is_active == True)
@@ -253,14 +262,23 @@ async def create_vendor(
     if not acc:
         raise HTTPException(status_code=400, detail="Account number is required.")
 
-    # Check for existing vendor by name or bank details with normalized trim/upper
+    # Look for an existing vendor by name (safe to do in SQL) ...
     res = await db.execute(
-        select(Vendor).where(
-            (func.upper(func.trim(Vendor.name)) == name_clean.upper()) |
-            ((Vendor.routing_number == rt) & (Vendor.account_number == acc))
-        )
+        select(Vendor).where(func.upper(func.trim(Vendor.name)) == name_clean.upper())
     )
-    existing = res.scalar_one_or_none()
+    existing = res.scalars().first()
+
+    # ... then by bank details, which CANNOT be matched in SQL. routing_number and
+    # account_number are stored as Fernet ciphertext with a random IV, so a freshly
+    # encrypted bind parameter never equals the stored ciphertext and the old
+    # `WHERE routing_number = :rt` silently matched nothing. Compare the decrypted
+    # values in Python instead (the TypeDecorator decrypts on load).
+    if existing is None:
+        res_all = await db.execute(select(Vendor))
+        for v in res_all.scalars().all():
+            if (v.routing_number or "").strip() == rt and (v.account_number or "").strip() == acc:
+                existing = v
+                break
 
     if existing:
         new_email = payload.email.strip() if payload.email and payload.email.strip() else None
@@ -628,6 +646,8 @@ async def bulk_confirm_vendors(
     inserted_count = 0
     updated_count = 0
     skipped_count = 0
+    # Rows refused by validation, surfaced to the caller instead of failing silently.
+    rejected: list[dict[str, Any]] = []
 
     # Fetch all existing vendors from database to prevent duplicate inserts
     res = await db.execute(select(Vendor))
@@ -644,6 +664,32 @@ async def bulk_confirm_vendors(
         acc = str(nv.get("account_number", "")).strip()
         name_clean = " ".join(str(nv.get("name", "")).strip().split())[:22]
         if not name_clean or not rt or not acc:
+            rejected.append({
+                "name": name_clean or str(nv.get("name", "")),
+                "error": "Vendor name, routing number and account number are all required.",
+            })
+            skipped_count += 1
+            continue
+
+        # This endpoint accepts a client-supplied payload, so it must re-validate
+        # everything /bulk-preview validated. Without this an invalid routing number
+        # (e.g. "123") could be written straight to the database, producing a
+        # malformed entry-detail record that the bank rejects.
+        if len(rt) != 9 or not validate_routing_checksum(rt):
+            rejected.append({
+                "name": name_clean,
+                "error": f"Invalid 9-digit ABA routing number '{nv.get('routing_number')}' "
+                         f"(failed check-digit validation).",
+            })
+            skipped_count += 1
+            continue
+
+        if len(acc) > 17:
+            rejected.append({
+                "name": name_clean,
+                "error": f"Account number exceeds the NACHA 17-character limit ({len(acc)} chars).",
+            })
+            skipped_count += 1
             continue
 
         norm_key = name_clean.upper()
@@ -711,13 +757,45 @@ async def bulk_confirm_vendors(
             if "default_id_number" in changes:
                 vendor.default_id_number = str(new_data["default_id_number"]).strip() if new_data.get("default_id_number") else None
 
-            if has_bank_change and payload.allow_bank_updates and is_admin:
-                if "routing_number" in changes and new_data.get("routing_number"):
-                    vendor.routing_number = "".join(filter(str.isdigit, str(new_data["routing_number"])))
-                if "account_number" in changes and new_data.get("account_number"):
-                    vendor.account_number = str(new_data["account_number"]).strip()
-                if "account_type" in changes and new_data.get("account_type"):
-                    vendor.account_type = AccountType.SAVINGS if "sav" in str(new_data["account_type"]).lower() else AccountType.CHECKING
+            if has_bank_change:
+                if not (payload.allow_bank_updates and is_admin):
+                    # Previously this silently dropped the bank change but still counted
+                    # the row as updated, so the UI reported success for a change that
+                    # never happened. Report it instead.
+                    rejected.append({
+                        "name": vendor.name,
+                        "error": (
+                            "Bank detail change was NOT applied: requires an administrator "
+                            "and allow_bank_updates=true."
+                        ),
+                    })
+                else:
+                    new_rt = "".join(filter(str.isdigit, str(new_data.get("routing_number", "") or "")))
+                    new_acc = str(new_data.get("account_number", "") or "").strip()
+                    if "routing_number" in changes:
+                        if len(new_rt) != 9 or not validate_routing_checksum(new_rt):
+                            rejected.append({
+                                "name": vendor.name,
+                                "error": f"Invalid ABA routing number '{new_data.get('routing_number')}' "
+                                         f"- bank details left unchanged.",
+                            })
+                            continue
+                        vendor.routing_number = new_rt
+                    if "account_number" in changes and new_acc:
+                        if len(new_acc) > 17:
+                            rejected.append({
+                                "name": vendor.name,
+                                "error": f"Account number exceeds 17 characters "
+                                         f"- bank details left unchanged.",
+                            })
+                            continue
+                        vendor.account_number = new_acc
+                    if "account_type" in changes and new_data.get("account_type"):
+                        vendor.account_type = (
+                            AccountType.SAVINGS
+                            if "sav" in str(new_data["account_type"]).lower()
+                            else AccountType.CHECKING
+                        )
 
             updated_count += 1
     else:
@@ -732,18 +810,24 @@ async def bulk_confirm_vendors(
                 "inserted_count": inserted_count,
                 "updated_count": updated_count,
                 "skipped_count": skipped_count,
+                "rejected_count": len(rejected),
                 "bank_updates_applied": bool(payload.allow_bank_updates and is_admin),
                 "admin_username": current_user.username,
             },
         )
         db.add(audit)
-        await db.commit()
+    await db.commit()
+
+    msg = f"Successfully added {inserted_count} new vendor(s) and updated {updated_count} existing vendor(s)."
+    if rejected:
+        msg += f" {len(rejected)} row(s) were rejected by validation."
 
     return BulkVendorConfirmResponseSchema(
         inserted_count=inserted_count,
         updated_count=updated_count,
         skipped_count=skipped_count,
-        message=f"Successfully added {inserted_count} new vendor(s) and updated {updated_count} existing vendor(s).",
+        message=msg,
+        rejected=rejected,
     )
 
 
@@ -767,11 +851,54 @@ async def deduplicate_vendors(
     res = await db.execute(select(Vendor).order_by(Vendor.created_at.asc()))
     all_vendors = list(res.scalars().all())
 
-    # Group vendors by normalized name
-    groups: dict[str, list[Vendor]] = {}
+    # Group vendors that are the same real-world payee. Two vendors belong together if
+    # they share a normalized name OR identical bank details. The previous version only
+    # grouped by name, so same-account/different-name duplicates -- exactly the case
+    # create_vendor warns about -- were never merged despite the docstring.
+    #
+    # Union-find so that A~B by name and B~C by bank collapses into one group.
+    parent: dict[uuid.UUID, uuid.UUID] = {v.id: v.id for v in all_vendors}
+
+    def find(x: uuid.UUID) -> uuid.UUID:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: uuid.UUID, b: uuid.UUID) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    by_name: dict[str, uuid.UUID] = {}
+    by_bank: dict[tuple[str, str], uuid.UUID] = {}
     for v in all_vendors:
-        key = " ".join(v.name.strip().upper().split())
-        groups.setdefault(key, []).append(v)
+        name_key = " ".join((v.name or "").strip().upper().split())
+        if name_key:
+            if name_key in by_name:
+                union(by_name[name_key], v.id)
+            else:
+                by_name[name_key] = v.id
+
+        # Comparison happens on DECRYPTED values held in memory; an equality query in
+        # SQL would never match because the columns hold randomized Fernet ciphertext.
+        bank_key = ((v.routing_number or "").strip(), (v.account_number or "").strip())
+        if all(bank_key):
+            if bank_key in by_bank:
+                union(by_bank[bank_key], v.id)
+            else:
+                by_bank[bank_key] = v.id
+
+    vendor_by_id = {v.id: v for v in all_vendors}
+    grouped: dict[uuid.UUID, list[Vendor]] = {}
+    for v in all_vendors:
+        grouped.setdefault(find(v.id), []).append(v)
+
+    # Preserve creation order within each group so the oldest record wins as primary.
+    groups: dict[str, list[Vendor]] = {
+        str(root): sorted(members, key=lambda x: x.created_at)
+        for root, members in grouped.items()
+    }
 
     merged_count = 0
     purged_ids: list[str] = []

@@ -26,6 +26,7 @@ from app.models import (
 from app.core.security import create_access_token
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_vendor_deduplicate_merges_records_and_relinks_history(db_session):
     """

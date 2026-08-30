@@ -17,15 +17,17 @@ import io
 import os
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text, select
+from sqlalchemy import select, text, update
 
 from app.main import app
 from app.models import AuditLog, Vendor, VendorChangeRequest, VendorRemittance
+from tests._helpers import create_admin_user
 
 
 from tests.test_spreadsheet_upload import _seed_sample_vendors
 
 
+@pytest.mark.real_auth
 @pytest.mark.asyncio
 async def test_phase8_full_end_to_end_workflow_and_security(db_session):
     """
@@ -54,15 +56,12 @@ async def test_phase8_full_end_to_end_workflow_and_security(db_session):
         # Step 1: Authentication & Role Setup
         res_u = await client.post(
             "/api/v1/auth/register",
-            json={"email": "e2e_user@amipi.com", "username": "e2e_user", "password": "Password123!", "role": "user"},
+            json={"email": "e2e_user@amipi.com", "username": "e2e_user", "password": "Password123!"},
         )
         assert res_u.status_code == 201
 
-        res_a = await client.post(
-            "/api/v1/auth/register",
-            json={"email": "e2e_admin@amipi.com", "username": "e2e_admin", "password": "Password123!", "role": "admin"},
-        )
-        assert res_a.status_code == 201
+        res_a = await create_admin_user(db_session, username="e2e_admin", email="e2e_admin@amipi.com", password="Password123!")
+        assert res_a.role.value == "admin"
 
         res_lu = await client.post("/api/v1/auth/login", data={"username": "e2e_user", "password": "Password123!"})
         res_la = await client.post("/api/v1/auth/login", data={"username": "e2e_admin", "password": "Password123!"})
@@ -123,6 +122,15 @@ async def test_phase8_full_end_to_end_workflow_and_security(db_session):
         assert res_app_ok.json()["status"] == "approved"
 
         # Step 6: Multi-Batch NACHA Generation (Batch 1 ground truth structural parity)
+        # Remittance advice is only generated for vendors that have a REAL email on
+        # file. (The previous fabricated fallback -- remittance@<vendorname>.com --
+        # was removed because it sent payment details to domains AMIPI does not own.)
+        # Vendors auto-created from the spreadsheet have no email, so set one here.
+        await db_session.execute(
+            update(Vendor).where(Vendor.email.is_(None)).values(email="ap@vendor-test.example")
+        )
+        await db_session.commit()
+
         res_gen = await client.post(
             "/api/v1/nacha/generate",
             headers=user_headers,

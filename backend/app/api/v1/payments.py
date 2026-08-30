@@ -81,7 +81,7 @@ async def upload_payment_spreadsheet(
     effective_date: Optional[str] = Form(None),
     allow_override: bool = Form(False),
     db: AsyncSession = Depends(get_async_db),
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload a payment spreadsheet (.xlsx, .xls, .csv).
@@ -263,7 +263,7 @@ async def upload_payment_spreadsheet(
 async def create_manual_payment_batch(
     payload: ManualBatchRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a manual payment batch (Batch 2).
@@ -417,7 +417,11 @@ async def create_manual_payment_batch(
 
 
 @router.get("/batches/{batch_id}", status_code=status.HTTP_200_OK)
-async def get_upload_batch(batch_id: str, db: AsyncSession = Depends(get_async_db)):
+async def get_upload_batch(
+    batch_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
     """Fetch an upload batch by ID along with its payments."""
     try:
         valid_uuid = uuid.UUID(batch_id.strip())
@@ -478,10 +482,10 @@ async def update_payment_item(
     payment_id: uuid.UUID,
     payload: UpdatePaymentRequest,
     db: AsyncSession = Depends(get_async_db),
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Update details of a parsed payment item before NACHA file generation.
+    Update details of a parsed payment item BEFORE NACHA file generation.
     Recalculates batch total amount and updates payment fields in PostgreSQL.
     """
     res = await db.execute(select(Payment).where(Payment.id == payment_id))
@@ -489,7 +493,35 @@ async def update_payment_item(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment record not found.")
 
+    # A payment already written into a generated NACHA file must stay immutable:
+    # the file has been (or may have been) transmitted to the bank, so editing the
+    # row here would silently desynchronise our records from what Chase received.
+    if payment.nacha_file_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This payment is already included in a generated NACHA file and can no "
+                "longer be edited. Void or reverse the payment instead."
+            ),
+        )
+    if payment.status != PaymentStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Only payments in PENDING status can be edited "
+                f"(this payment is {payment.status.value})."
+            ),
+        )
+
+    original = {
+        "amount": str(payment.amount),
+        "id_number": payment.id_number,
+        "effective_date": payment.effective_date.isoformat(),
+    }
+
     if payload.amount is not None:
+        if payload.amount <= Decimal("0"):
+            raise HTTPException(status_code=400, detail="Amount must be greater than zero.")
         payment.amount = payload.amount
     if payload.id_number is not None:
         payment.id_number = payload.id_number.strip()
@@ -511,6 +543,27 @@ async def update_payment_item(
     batch = res_b.scalar_one_or_none()
     if batch:
         batch.total_amount = new_total
+        batch.valid_rows_count = len(all_batch_payments)
+
+    # Editing a payment amount is a money-affecting action and must be attributable.
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="PAYMENT_ITEM_UPDATED",
+            entity_type="Payment",
+            entity_id=str(payment.id),
+            details={
+                "updated_by": current_user.username,
+                "before": original,
+                "after": {
+                    "amount": str(payment.amount),
+                    "id_number": payment.id_number,
+                    "effective_date": payment.effective_date.isoformat(),
+                },
+                "batch_total_amount": str(new_total),
+            },
+        )
+    )
 
     await db.commit()
 
