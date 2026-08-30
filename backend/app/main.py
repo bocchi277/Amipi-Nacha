@@ -51,14 +51,18 @@ async def lifespan(app: FastAPI):
             "environment variable: JWTs signed with a public default can be forged."
         )
 
-    import os
-    if not os.getenv("BANK_DETAILS_ENCRYPTION_KEY"):
-        logger.warning(
-            "BANK_DETAILS_ENCRYPTION_KEY is not set, so vendor bank details are "
-            "encrypted with the default key committed to source control. Set this "
-            "variable. NOTE: changing it makes EXISTING encrypted rows unreadable, "
-            "so rotate it with a re-encryption migration, not in place."
-        )
+    # Fail fast on a missing encryption key rather than letting the process serve
+    # traffic and error on the first vendor read. Without a usable key every
+    # bank-detail operation raises, so a running server would be misleading: /health
+    # would report "healthy" while the vendor book was entirely unusable.
+    from app.core.encryption import get_cipher
+
+    try:
+        get_cipher()
+        logger.info("Bank-detail encryption key loaded.")
+    except Exception as exc:
+        logger.critical("Refusing to start: %s", exc)
+        raise
 
     yield
 
