@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models import AccountType, Payment, User, UserRole, Vendor
-from app.services.spreadsheet_parser import _compress_invoices
+from app.services.spreadsheet_parser import _compress_invoices, match_vendor
 from tests._helpers import create_admin_user
 
 
@@ -281,6 +281,109 @@ async def test_deduplicate_merges_by_bank_details_not_only_name(db_session):
 # ---------------------------------------------------------------------------
 # Parser correctness
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Vendor name matching (misrouting)
+# ---------------------------------------------------------------------------
+
+class _FakeVendor:
+    """Minimal stand-in; match_vendor only reads .name."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def __repr__(self):
+        return f"<Vendor {self.name!r}>"
+
+
+def _book(*names: str) -> dict[str, _FakeVendor]:
+    return {n.strip().upper(): _FakeVendor(n) for n in names}
+
+
+def test_similar_vendor_prefix_does_not_misroute_payment():
+    """
+    Risk (money misrouting): matching accepted the FIRST substring hit with a >=4
+    character overlap while iterating vendors in database row order. Both 'KIRA' and
+    'KIRAN GEMS USA INC' are real AMIPI payees, so the common QuickBooks spelling
+    'KIRAN GEMS USA INC.' (trailing period) resolved to 'KIRA' and would have paid a
+    different company. The outcome also flipped with database row order.
+    """
+    names = ("KIRA", "KIRAN GEMS USA INC")
+    variants = [
+        "KIRAN GEMS USA INC.",
+        "KIRAN GEMS USA, INC",
+        "Kiran Gems USA Inc",
+        "KIRAN GEMS USA INC\n212-555-0100",
+    ]
+    for variant in variants:
+        for order in (names, tuple(reversed(names))):
+            vendor, how, ambiguous = match_vendor(variant, _book(*order))
+            assert vendor is not None, f"{variant!r} should match ({how})"
+            assert vendor.name == "KIRAN GEMS USA INC", (
+                f"{variant!r} misrouted to {vendor.name!r} via {how} "
+                f"with book order {order}"
+            )
+            assert not ambiguous
+
+    # The short name itself must still resolve to itself.
+    vendor, how, _ = match_vendor("KIRA", _book(*names))
+    assert vendor.name == "KIRA", how
+
+
+def test_vendor_matching_is_independent_of_database_row_order():
+    """The same input must never resolve differently based on vendor row order."""
+    variant = "KIRAN GEMS USA INC."
+    a, _, _ = match_vendor(variant, _book("KIRA", "KIRAN GEMS USA INC"))
+    b, _, _ = match_vendor(variant, _book("KIRAN GEMS USA INC", "KIRA"))
+    assert a.name == b.name == "KIRAN GEMS USA INC"
+
+
+def test_known_quickbooks_spelling_variants_resolve_via_alias_map():
+    """
+    'BRINKS GLOBLE SERVICES' and 'BRINKS GLOBAL SERVICES' both appear in AMIPI's real
+    transmit files; the misspelled QuickBooks form previously matched nothing.
+    """
+    book = _book("BRINKS GLOBAL SERVICES", "DIAMEX INC", "BELGIUM LGD LLC")
+    for incoming, expected in [
+        ("BRINKS GLOBLE SERVICES USA INC", "BRINKS GLOBAL SERVICES"),
+        ("DIAMEX INC.", "DIAMEX INC"),
+        ("BELGIUM LGD LLC.", "BELGIUM LGD LLC"),
+    ]:
+        vendor, how, ambiguous = match_vendor(incoming, book)
+        assert vendor is not None, f"{incoming!r} unmatched ({how})"
+        assert vendor.name == expected, f"{incoming!r} -> {vendor.name!r} via {how}"
+        assert not ambiguous
+
+
+def test_genuinely_ambiguous_vendor_name_is_flagged_not_guessed():
+    """
+    When two vendors are equally good candidates the parser must refuse to choose,
+    because guessing means paying the wrong bank account.
+    """
+    book = _book("ACME TRADING EAST", "ACME TRADING WEST")
+    vendor, how, ambiguous = match_vendor("ACME TRADING", book)
+    assert vendor is None, f"must not guess, picked {vendor!r} via {how}"
+    assert ambiguous, how
+
+
+def test_unicode_homograph_name_cannot_fuzzy_match_a_latin_vendor():
+    """
+    Risk (payment spoofing): scoring matched a Cyrillic lookalike to a Latin vendor
+    on a shared word alone. '\u0410DMIN VENDOR' (Cyrillic A) scored 0.50 against
+    'ADMIN VENDOR' via the common word 'VENDOR'. Non-ASCII names must match exactly.
+    """
+    book = _book("ADMIN VENDOR", "KIRAN GEMS USA INC")
+    vendor, how, ambiguous = match_vendor("\u0410DMIN VENDOR", book)
+    assert vendor is None, f"homograph must not match, got {vendor!r} via {how}"
+    assert not ambiguous
+
+
+def test_unrelated_vendor_name_does_not_match_anything():
+    book = _book("KIRA", "KIRAN GEMS USA INC", "DIAMEX INC")
+    vendor, how, ambiguous = match_vendor("COMPLETELY UNRELATED LLC", book)
+    assert vendor is None, f"unexpected match {vendor!r} via {how}"
+    assert not ambiguous
+
 
 def test_invoice_compression_retains_every_invoice_number():
     """

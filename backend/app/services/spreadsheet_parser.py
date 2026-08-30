@@ -145,6 +145,149 @@ def _compress_invoices(invoice_list: list[str]) -> str:
     return unique[0][: _ID_FIELD_WIDTH - len(marker)] + marker
 
 
+# ---------------------------------------------------------------------------
+# Vendor name matching
+# ---------------------------------------------------------------------------
+# QuickBooks exports spell vendor names inconsistently against the vendor book.
+# These aliases come from the v7 prototype and from names observed in AMIPI's real
+# Chase transmit files (e.g. "BRINKS GLOBLE" and "BRINKS GLOBAL" both occur).
+VENDOR_NAME_ALIASES: dict[str, str] = {
+    "BRINKS GLOBLE SERVICES USA INC": "BRINKS GLOBAL SERVICES",
+    "BRINKS GLOBAL SERVICES USA INC": "BRINKS GLOBAL SERVICES",
+    "BRINKS GLOBLE SERVICES": "BRINKS GLOBAL SERVICES",
+    "TWINKLEDIAM INC.": "TWINKELEDIAM, INC.",
+    "TWINKLEDIAM INC": "TWINKELEDIAM, INC.",
+    "LABELLE": "LA BELLE FINE JEWELRY",
+    "LA BELLE": "LA BELLE FINE JEWELRY",
+    "SUNSHINE DIAMOND CUTTER INC": "SUNSHINE DIAMOND CUTTE",
+    "DHARM INTERNATIONAL LLC": "DHARM INTERNATIONAL LL",
+    "SUNRISE JEWELRY MFG. CORP": "SUNRISE JEWELRY MFG. C",
+}
+
+# Minimum word-overlap score required to accept a non-exact vendor match.
+_MATCH_SCORE_THRESHOLD = 0.45
+
+
+def _normalize_vendor_name(value: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace."""
+    return " ".join(re.sub(r"[^a-z0-9]", " ", str(value or "").lower()).split())
+
+
+def match_vendor(
+    incoming_name: str,
+    vendor_map: dict[str, "Vendor"],
+) -> tuple[Optional["Vendor"], str, bool]:
+    """
+    Resolve a spreadsheet vendor name to a vendor record.
+
+    Returns ``(vendor, how, ambiguous)``.
+
+    The previous implementation walked the vendor dictionary and accepted the FIRST
+    substring hit with a >=4 character overlap. That misrouted payments: with both
+    "KIRA" and "KIRAN GEMS USA INC" in the book, the very common QuickBooks spelling
+    "KIRAN GEMS USA INC." (trailing period) matched "KIRA" and would have paid a
+    different company. Worse, the outcome depended on database row order, so the same
+    file could route differently between runs.
+
+    Resolution is strictly ordered by confidence:
+
+    1. Exact (case/whitespace-insensitive) name match.
+    2. Curated alias map for known QuickBooks spellings.
+    3. Punctuation-insensitive normalized exact match.
+    4. Best word-overlap score, accepted only when one vendor is the clear best.
+       Ties are reported ambiguous so a human decides instead of the code guessing.
+    """
+    raw = str(incoming_name or "")
+    # QB header cells often carry a second line (phone number); keep the first line.
+    first_line = raw.split("\n")[0].strip()
+
+    # 1. Exact match on the stored key.
+    exact = vendor_map.get(first_line.strip().upper())
+    if exact is not None:
+        return exact, "exact", False
+
+    # 2. Alias map.
+    alias_target = VENDOR_NAME_ALIASES.get(first_line.strip().upper())
+    if alias_target:
+        aliased = vendor_map.get(alias_target.strip().upper())
+        if aliased is not None:
+            return aliased, "alias", False
+
+    if not vendor_map:
+        return None, "no-vendors", False
+
+    # 3. Normalized exact match ("DIAMEX INC." == "DIAMEX INC").
+    incoming_norm = _normalize_vendor_name(first_line)
+    normalized_hits = [
+        v for name, v in vendor_map.items()
+        if _normalize_vendor_name(name) == incoming_norm
+    ]
+    if len(normalized_hits) == 1:
+        return normalized_hits[0], "normalized-exact", False
+    if len(normalized_hits) > 1:
+        return None, "ambiguous-normalized", True
+
+    # Homograph defence: a name containing non-ASCII characters must match EXACTLY or
+    # not at all. Normalization strips characters it cannot map, so a Cyrillic
+    # lookalike such as "\u0410DMIN VENDOR" would otherwise score against the Latin
+    # "ADMIN VENDOR" on the shared word alone and route a payment to a vendor the
+    # payer never named.
+    if any(ord(ch) > 127 for ch in first_line):
+        return None, "non-ascii-requires-exact-match", False
+
+    # 4. Word-overlap scoring; accept only a single clear best above threshold.
+    # Single-character tokens are KEPT: real payee names are initialisms such as
+    # "B. H. C. DIAMONDS", where dropping "B", "H" and "C" discards the only
+    # distinguishing information and leaves a tie against unrelated vendors that
+    # merely share the word "DIAMONDS" or "INC".
+    incoming_words = set(incoming_norm.split())
+    if not incoming_words:
+        return None, "unmatched", False
+
+    scored: list[tuple[float, "Vendor"]] = []
+    for name, v in vendor_map.items():
+        cand_words = set(_normalize_vendor_name(name).split())
+        if not cand_words:
+            continue
+        overlap = len(incoming_words & cand_words)
+        if not overlap:
+            continue
+        score = overlap / max(len(incoming_words), len(cand_words))
+        scored.append((score, v))
+
+    if not scored:
+        return None, "unmatched", False
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    best_score, best_vendor = scored[0]
+    if best_score < _MATCH_SCORE_THRESHOLD:
+        return None, f"below-threshold({best_score:.2f})", False
+
+    # Refuse to guess between equally good candidates. Break exact ties using the
+    # longest common prefix of the normalized names, which reliably separates
+    # "KIRA" from "KIRAN GEMS USA INC" style pairs; only a genuine tie is ambiguous.
+    joint_best = [v for s, v in scored if abs(s - best_score) < 1e-9]
+    if len(joint_best) > 1:
+        prefix_ranked = sorted(
+            joint_best,
+            key=lambda v: len(os.path.commonprefix([
+                _normalize_vendor_name(v.name), incoming_norm
+            ])),
+            reverse=True,
+        )
+        top_len = len(os.path.commonprefix([
+            _normalize_vendor_name(prefix_ranked[0].name), incoming_norm
+        ]))
+        runner_len = len(os.path.commonprefix([
+            _normalize_vendor_name(prefix_ranked[1].name), incoming_norm
+        ]))
+        if top_len == runner_len:
+            return None, f"ambiguous-score({best_score:.2f})", True
+        return prefix_ranked[0], f"scored({best_score:.2f})+prefix", False
+
+    return best_vendor, f"scored({best_score:.2f})", False
+
+
 async def parse_payment_spreadsheet(
     file_bytes: bytes,
     filename: str,
@@ -441,25 +584,19 @@ def _process_qb_vendor_block(
 
     eff_date = entry_date or default_effective_date or date.today()
 
-    v_upper = vendor_name.strip().upper()
-    v_obj = vendor_map.get(v_upper)
-    if not v_obj:
-        v_clean = re.sub(r'[^A-Z0-9]', '', v_upper)
-        # Check fuzzy / substring / normalized match
-        for db_name, db_v in vendor_map.items():
-            db_clean = re.sub(r'[^A-Z0-9]', '', db_name.strip().upper())
-            if (
-                (len(db_clean) >= 4 and db_clean in v_clean)
-                or (len(v_clean) >= 4 and v_clean in db_clean)
-                or (len(db_clean) >= 4 and v_clean.startswith(db_clean))
-                or db_name in v_upper
-            ):
-                v_obj = db_v
-                break
+    v_obj, match_how, ambiguous = match_vendor(vendor_name, vendor_map)
 
-
-    if not v_obj:
-        row_errors.append(f"Vendor '{vendor_name}' not found in database and no banking routing/account provided.")
+    if ambiguous:
+        row_errors.append(
+            f"Vendor '{vendor_name}' matches more than one vendor in the directory "
+            f"({match_how}). Refusing to guess which bank account to pay - please "
+            f"correct the vendor name or merge the duplicate vendor records."
+        )
+    elif not v_obj:
+        row_errors.append(
+            f"Vendor '{vendor_name}' not found in the vendor directory ({match_how}) "
+            f"and no banking routing/account provided."
+        )
 
     if row_errors:
         result.errors.append(ParsedRowError(row_number=row_idx, raw_data=raw_info, errors=row_errors))
@@ -519,10 +656,18 @@ def _parse_tabular_excel(
             row_errors.append(f"Amount must be a positive number.")
 
         eff_date = date_val or default_effective_date or date.today()
-        v_obj = vendor_map.get(name_val.upper())
+        v_obj, match_how, ambiguous = match_vendor(name_val, vendor_map)
 
-        if not v_obj and not (routing_val and acct_val):
-            row_errors.append(f"Vendor '{name_val}' not found in database and no routing/account provided in row.")
+        if ambiguous:
+            row_errors.append(
+                f"Vendor '{name_val}' matches multiple vendor records ({match_how}); "
+                f"refusing to guess which bank account to pay."
+            )
+        elif not v_obj and not (routing_val and acct_val):
+            row_errors.append(
+                f"Vendor '{name_val}' not found in the vendor directory ({match_how}) "
+                f"and no routing/account provided in row."
+            )
         elif routing_val:
             if len(routing_val) != 9 or not validate_routing_checksum(routing_val):
                 row_errors.append(f"Routing number '{routing_val}' is invalid.")
@@ -616,10 +761,18 @@ def _parse_csv(
             row_errors.append(f"Amount must be a positive number, got '{row.get('amount')}'.")
 
         eff_date = date_val or default_effective_date or date.today()
-        v_obj = vendor_map.get(name_val.upper())
+        v_obj, match_how, ambiguous = match_vendor(name_val, vendor_map)
 
-        if not v_obj and not (routing_val and acct_val):
-            row_errors.append(f"Vendor '{name_val}' not found in database and no routing/account provided.")
+        if ambiguous:
+            row_errors.append(
+                f"Vendor '{name_val}' matches multiple vendor records ({match_how}); "
+                f"refusing to guess which bank account to pay."
+            )
+        elif not v_obj and not (routing_val and acct_val):
+            row_errors.append(
+                f"Vendor '{name_val}' not found in the vendor directory ({match_how}) "
+                f"and no routing/account provided."
+            )
         elif routing_val:
             if len(routing_val) != 9 or not validate_routing_checksum(routing_val):
                 row_errors.append(f"Routing number '{routing_val}' is invalid.")
